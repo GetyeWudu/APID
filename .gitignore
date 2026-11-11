@@ -18,6 +18,7 @@ hs_err_pid*
 frontend/node_modules/
 frontend/dist/
 frontend/.vite/
+*.tsbuildinfo
 
 # IDE & OS
 .idea/
