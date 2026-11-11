@@ -60,8 +60,17 @@ apid:
   storage:
     path: ${APID_STORAGE_PATH:../uploads}
   jwt:
-    secret: ${JWT_SECRET:apid-local-dev-jwt-secret-key-change-in-production-2026}
-    expiration-ms: ${JWT_EXPIRATION_MS:86400000}
+    secret: ${JWT_SECRET:}
+    issuer: ${JWT_ISSUER:apid}
+    audience: ${JWT_AUDIENCE:apid-api}
+    expiration-ms: ${JWT_EXPIRATION_MS:900000}
+    refresh-expiration-ms: ${JWT_REFRESH_EXPIRATION_MS:604800000}
+  security:
+    cookie-secure: ${APID_COOKIE_SECURE:false}
+    bcrypt-strength: ${APID_BCRYPT_STRENGTH:12}
+  bootstrap:
+    admin-username: ${APID_BOOTSTRAP_ADMIN_USERNAME:admin}
+    admin-password: ${APID_BOOTSTRAP_ADMIN_PASSWORD:}
   daily:
     api-base-url: ${DAILY_API_BASE_URL:https://api.daily.co/v1}
     api-key: ${DAILY_API_KEY:}

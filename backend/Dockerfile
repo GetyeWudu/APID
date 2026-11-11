@@ -4,13 +4,12 @@
 FROM maven:3.9-eclipse-temurin-17-alpine AS builder
 WORKDIR /build
 
-# Copy pom.xml first to cache Maven dependencies across builds
 COPY pom.xml .
-RUN mvn dependency:go-offline -B
-
-# Copy source code and build application JAR
 COPY src ./src
-RUN mvn clean package -DskipTests -B
+
+# Cache Maven repository across builds (including pom.xml updates) and skip bloated go-offline
+RUN --mount=type=cache,target=/root/.m2 \
+    mvn clean package -DskipTests -B
 
 # ---- Stage 2: Minimal Runtime Image ----
 FROM eclipse-temurin:17-jre-alpine
@@ -29,4 +28,3 @@ USER apid
 EXPOSE 8080
 
 ENTRYPOINT ["java", "-jar", "/app/app.jar"]
-

@@ -1,0 +1,27 @@
+spring:
+  datasource:
+    url: ${TEST_DB_URL:jdbc:postgresql://localhost:5432/apid_test_db}
+    username: ${POSTGRES_USER:apid_user}
+    password: ${POSTGRES_PASSWORD:apid_local_password}
+  jpa:
+    hibernate:
+      ddl-auto: validate
+  data:
+    redis:
+      host: ${TEST_REDIS_HOST:localhost}
+      port: ${TEST_REDIS_PORT:6380}
+
+apid:
+  jwt:
+    secret: test-jwt-secret-key-at-least-32-bytes-long-2026
+    issuer: apid
+    audience: apid-api
+    expiration-ms: 900000
+    refresh-expiration-ms: 604800000
+  security:
+    cookie-secure: false
+    bcrypt-strength: 4
+  bootstrap:
+    admin-username: admin
+    admin-password: TestBootstrap@2026
+
