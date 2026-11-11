@@ -1,0 +1,69 @@
+server:
+  port: ${BACKEND_PORT:8080}
+
+spring:
+  application:
+    name: apid-backend
+
+  datasource:
+    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5432/apid_db}
+    username: ${SPRING_DATASOURCE_USERNAME:apid_user}
+    password: ${SPRING_DATASOURCE_PASSWORD:apid_local_password}
+    driver-class-name: org.postgresql.Driver
+
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: validate
+    properties:
+      hibernate:
+        format_sql: true
+
+  flyway:
+    enabled: true
+    schemas: core,coaching,mentoring
+    default-schema: core
+    locations: classpath:db/migration
+
+  data:
+    redis:
+      host: ${SPRING_DATA_REDIS_HOST:localhost}
+      port: ${SPRING_DATA_REDIS_PORT:6379}
+
+  cache:
+    type: redis
+    redis:
+      time-to-live: 3600000
+
+  jackson:
+    serialization:
+      write-dates-as-timestamps: false
+
+  servlet:
+    multipart:
+      max-file-size: 25MB
+      max-request-size: 25MB
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+
+springdoc:
+  swagger-ui:
+    path: /swagger-ui.html
+
+apid:
+  cors:
+    allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:5173}
+  storage:
+    path: ${APID_STORAGE_PATH:../uploads}
+  jwt:
+    secret: ${JWT_SECRET:apid-local-dev-jwt-secret-key-change-in-production-2026}
+    expiration-ms: ${JWT_EXPIRATION_MS:86400000}
+  daily:
+    api-base-url: ${DAILY_API_BASE_URL:https://api.daily.co/v1}
+    api-key: ${DAILY_API_KEY:}
+    webhook-secret: ${DAILY_WEBHOOK_SECRET:}
+

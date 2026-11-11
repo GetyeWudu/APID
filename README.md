@@ -45,7 +45,7 @@ APID/
    ```bash
    docker compose up -d postgres redis
    ```
-3. **Full containerized backend** (once Spring Boot `pom.xml` and source files are scaffolded):
+3. **Full containerized backend** (PostgreSQL + Redis + Spring Boot API):
    ```bash
    docker compose up --build -d
    ```
