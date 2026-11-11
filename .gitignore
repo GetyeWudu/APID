@@ -1,0 +1,29 @@
+# Environment & secrets
+.env
+.env.local
+
+# Uploaded files (mounted into Docker backend)
+uploads/*
+!uploads/.gitkeep
+
+# Java / Maven
+backend/target/
+backend/.mvn/wrapper/maven-wrapper.jar
+*.class
+*.jar
+*.war
+hs_err_pid*
+
+# Node / React / Vite
+frontend/node_modules/
+frontend/dist/
+frontend/.vite/
+
+# IDE & OS
+.idea/
+*.iml
+.vscode/
+.DS_Store
+Thumbs.db
+*.log
+
