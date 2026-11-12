@@ -1,0 +1,52 @@
+:root {
+  /* Bank of Abyssinia Executive Palette */
+  --bg: #f5f7fb;
+  --surface: #ffffff;
+  --surface-subtle: #f8fafc;
+  --border: #e2e8f0;
+  --border-strong: #cbd5e1;
+
+  --obsidian: #0f172a;
+  --obsidian-elevated: #162038;
+  --obsidian-border: rgba(255, 255, 255, 0.08);
+
+  --text: #0f172a;
+  --muted: #475569;
+  --muted-soft: #64748b;
+
+  /* Restrained Abyssinian Gold (primary CTAs, active rail, highlights only) */
+  --brand: #b45309;
+  --brand-primary: #c97a00;
+  --brand-primary-hover: #a96500;
+  --brand-gold-bright: #f5b700;
+  --brand-soft: #fef3c7;
+  --brand-soft-border: #fde68a;
+
+  /* Semantic Banking Status */
+  --ok: #15803d;
+  --ok-soft: #dcfce7;
+  --ok-border: #bbf7d0;
+  --err: #b91c1c;
+  --err-soft: #fee2e2;
+  --err-border: #fecaca;
+  --warn: #b45309;
+  --warn-soft: #fef3c7;
+  --info: #3730a3;
+  --info-soft: #eef2ff;
+  --info-border: #c7d2fe;
+
+  /* Elevation & Radii */
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 14px;
+  --shadow-xs: 0 1px 2px rgba(15, 23, 42, 0.04);
+  --shadow-card: 0 1px 3px rgba(15, 23, 42, 0.04), 0 8px 24px -14px rgba(15, 23, 42, 0.09);
+  --shadow-popover: 0 12px 32px -8px rgba(15, 23, 42, 0.18), 0 2px 8px rgba(15, 23, 42, 0.06);
+  --shadow-focus: 0 0 0 3px rgba(201, 122, 0, 0.22);
+
+  /* Layout Dimensions */
+  --sidebar-width: 264px;
+  --sidebar-collapsed: 74px;
+  --topbar-height: 64px;
+}
+

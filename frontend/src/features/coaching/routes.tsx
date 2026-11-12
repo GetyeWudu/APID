@@ -1,22 +1,23 @@
-import type { RouteObject } from 'react-router-dom';
+import { lazy } from 'react';
+import { Navigate, type RouteObject } from 'react-router-dom';
+import { PMS_MODULE_PERMISSIONS } from '../../shared/auth/workspaceResolver';
+import { ProtectedRoute } from '../../shared/components/ProtectedRoute';
 
-function CoachingPlaceholderPage() {
-  return (
-    <div className="apid-card">
-      <h2>Coaching Module (PMS &amp; Performance Development)</h2>
-      <p>
-        Owned by Developer 1: PMS Excel uploads, automatic mandatory assignments
-        (&lt; 3.0), Coach/Talent views, Skill-Development requests, Daily.co sessions,
-        and per-session PMS reports.
-      </p>
-    </div>
-  );
-}
+const PmsAdminDashboardPage = lazy(() =>
+  import('./pages/PmsAdminDashboardPage').then((m) => ({ default: m.PmsAdminDashboardPage }))
+);
 
 export const coachingRoutes: RouteObject[] = [
   {
     path: '/coaching',
-    element: <CoachingPlaceholderPage />,
+    element: <Navigate to="/coaching/pms" replace />,
+  },
+  {
+    path: '/coaching/pms',
+    element: (
+      <ProtectedRoute requiredAnyPermissions={PMS_MODULE_PERMISSIONS}>
+        <PmsAdminDashboardPage />
+      </ProtectedRoute>
+    ),
   },
 ];
-

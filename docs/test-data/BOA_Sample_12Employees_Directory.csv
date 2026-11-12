@@ -1,0 +1,13 @@
+EmployeeNumber,FullName,Email,Gender,ParentDepartment,Department,Job,Position,ManagerEmployeeNumber
+00010001,Abebe Bikila,abebe.bikila@bankofabyssinia.com,Male,Executive Office,Office of the Chief Executive,Executive Leadership,Chief Executive Officer,
+00010003,Bekele Tesfaye,bekele.tesfaye@bankofabyssinia.com,Male,Retail & Branch Banking,Retail Banking Directorate,Retail Executive,VP Retail & Branch Banking,00010001
+00010004,Mekdes Alemu,mekdes.alemu.004@bankofabyssinia.com,Female,Retail & Branch Banking,Bole Branch Operations,Branch Management,Branch Manager,00010003
+00010005,Lidia Girma,lidia.girma.005@bankofabyssinia.com,Female,Retail & Branch Banking,Bole Branch Operations,Branch Banking Officer,Senior Customer Service Officer,00010004
+00010006,Azeb Fekadu,azeb.fekadu.006@bankofabyssinia.com,Female,Retail & Branch Banking,Bole Branch Operations,Branch Banking Officer,Personal Banker,00010004
+00010007,Rahel Tsegaye,rahel.tsegaye.007@bankofabyssinia.com,Female,Retail & Branch Banking,Bole Branch Operations,Branch Banking Officer,Cash Teller Officer,00010004
+00010008,Hanna Tadesse,hanna.tadesse.008@bankofabyssinia.com,Female,Retail & Branch Banking,Bole Branch Operations,Branch Banking Officer,Senior Customer Service Officer,00010004
+00010009,Eden Negash,eden.negash.009@bankofabyssinia.com,Female,Retail & Branch Banking,Bole Branch Operations,Branch Banking Officer,Personal Banker,00010004
+00010029,Meron Kebede,meron.kebede.029@bankofabyssinia.com,Female,Technology & Digital Banking,Application Development & API,Software Engineering,Engineering Manager,00010001
+00010030,Dereje Kebede,dereje.kebede.030@bankofabyssinia.com,Male,Technology & Digital Banking,Application Development & API,Developer,Senior Software Developer,00010029
+00010052,Sara Belay,sara.belay.052@bankofabyssinia.com,Female,Credit & Risk Management,Corporate Credit Appraisal,Corporate Credit,Corporate Credit Manager,00010001
+00010053,Lidia Belay,lidia.belay.053@bankofabyssinia.com,Female,Credit & Risk Management,Corporate Credit Appraisal,Credit Analyst,Senior Credit Analyst,00010052

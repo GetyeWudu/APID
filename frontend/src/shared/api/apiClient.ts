@@ -45,9 +45,14 @@ apiClient.interceptors.request.use((config) => {
 
 let refreshInFlight: Promise<string | null> | null = null;
 let onUnauthorizedCallback: (() => void) | null = null;
+let onForbiddenCallback: (() => void) | null = null;
 
 export function registerUnauthorizedHandler(cb: () => void): void {
   onUnauthorizedCallback = cb;
+}
+
+export function registerForbiddenHandler(cb: () => void): void {
+  onForbiddenCallback = cb;
 }
 
 async function performSilentRefresh(): Promise<string | null> {
@@ -75,6 +80,9 @@ async function performSilentRefresh(): Promise<string | null> {
 apiClient.interceptors.response.use(
   (response) => response,
   async (error: AxiosError) => {
+    if (error.response?.status === 403 && onForbiddenCallback) {
+      onForbiddenCallback();
+    }
     const originalRequest = error.config as (InternalAxiosRequestConfig & { _retry?: boolean }) | undefined;
     if (!originalRequest || error.response?.status !== 401 || originalRequest._retry) {
       return Promise.reject(error);

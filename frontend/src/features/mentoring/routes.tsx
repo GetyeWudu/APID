@@ -1,22 +1,23 @@
-import type { RouteObject } from 'react-router-dom';
+import { lazy } from 'react';
+import { Navigate, type RouteObject } from 'react-router-dom';
+import { HR_MODULE_PERMISSIONS } from '../../shared/auth/workspaceResolver';
+import { ProtectedRoute } from '../../shared/components/ProtectedRoute';
 
-function MentoringPlaceholderPage() {
-  return (
-    <div className="apid-card">
-      <h2>Mentoring Module (HR &amp; Knowledge Sharing)</h2>
-      <p>
-        Owned by Developer 2: Trainer applications, HR review &amp; direct appointments,
-        Suspend/Revoke controls, Trainer discovery &amp; matching, and Mentoring
-        collaboration rooms.
-      </p>
-    </div>
-  );
-}
+const HrMentoringDashboardPage = lazy(() =>
+  import('./pages/HrMentoringDashboardPage').then((m) => ({ default: m.HrMentoringDashboardPage }))
+);
 
 export const mentoringRoutes: RouteObject[] = [
   {
     path: '/mentoring',
-    element: <MentoringPlaceholderPage />,
+    element: <Navigate to="/mentoring/hr" replace />,
+  },
+  {
+    path: '/mentoring/hr',
+    element: (
+      <ProtectedRoute requiredAnyPermissions={HR_MODULE_PERMISSIONS}>
+        <HrMentoringDashboardPage />
+      </ProtectedRoute>
+    ),
   },
 ];
-

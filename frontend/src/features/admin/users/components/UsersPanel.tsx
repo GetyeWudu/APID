@@ -2,13 +2,21 @@ import { useCallback, useEffect, useState, type FormEvent } from 'react';
 import type { AxiosError } from 'axios';
 import { useAuth } from '../../../../app/AuthContext';
 import type { ApiErrorPayload } from '../../../../shared/api/apiClient';
+import { ConfirmDialog, useToast } from '../../../../shared/components/ui';
 import { rolesApi } from '../../roles/api/rolesApi';
 import type { RoleItem } from '../../roles/types/roles.types';
 import { usersApi } from '../api/usersApi';
 import type { AdminUser, PageResponse, UserStatus } from '../types/users.types';
 
+interface CredentialModalState {
+  username: string;
+  temporaryPassword: string;
+  mode: 'created' | 'reset';
+}
+
 export function UsersPanel() {
   const { user: currentUser } = useAuth();
+  const { pushToast } = useToast();
   const [data, setData] = useState<PageResponse<AdminUser> | null>(null);
   const [roles, setRoles] = useState<RoleItem[]>([]);
   const [search, setSearch] = useState('');
@@ -22,11 +30,33 @@ export function UsersPanel() {
   const [showCreate, setShowCreate] = useState(false);
   const [newUsername, setNewUsername] = useState('');
   const [selectedRoleIds, setSelectedRoleIds] = useState<number[]>([]);
-  const [oneTimeSecret, setOneTimeSecret] = useState<string | null>(null);
+
+  // Masked-by-default single-display credential modal (never copies to clipboard or persists)
+  const [credentialModal, setCredentialModal] = useState<CredentialModalState | null>(null);
+  const [showSecret, setShowSecret] = useState(false);
+
+  // Confirmations
+  const [pendingStatusAction, setPendingStatusAction] = useState<{
+    target: AdminUser;
+    nextStatus: UserStatus;
+  } | null>(null);
+  const [pendingResetTarget, setPendingResetTarget] = useState<AdminUser | null>(null);
 
   // Edit Roles modal state
   const [editingRolesUser, setEditingRolesUser] = useState<AdminUser | null>(null);
   const [editRoleIds, setEditRoleIds] = useState<number[]>([]);
+
+  useEffect(() => {
+    return () => {
+      setCredentialModal(null);
+      setShowSecret(false);
+    };
+  }, []);
+
+  const closeCredentialModal = () => {
+    setShowSecret(false);
+    setCredentialModal(null);
+  };
 
   const loadData = useCallback(async () => {
     setLoading(true);
@@ -59,12 +89,16 @@ export function UsersPanel() {
     setBanner(null);
     try {
       const res = await usersApi.create({ username: newUsername.trim(), roleIds: selectedRoleIds });
-      setOneTimeSecret(
-        `User "${res.user.username}" created. One-time temporary password (copy now, shown once): ${res.temporaryPassword}`
-      );
+      setShowSecret(false);
+      setCredentialModal({
+        username: res.user.username,
+        temporaryPassword: res.temporaryPassword,
+        mode: 'created',
+      });
       setShowCreate(false);
       setNewUsername('');
       setSelectedRoleIds([]);
+      pushToast({ title: 'User created', message: `Account "${res.user.username}" created.`, tone: 'ok' });
       await loadData();
     } catch (err) {
       const ax = err as AxiosError<ApiErrorPayload>;
@@ -74,16 +108,17 @@ export function UsersPanel() {
     }
   };
 
-  const handleStatusChange = async (target: AdminUser, nextStatus: UserStatus) => {
-    const actionLabel = nextStatus === 'ACTIVE' ? 're-activate' : nextStatus.toLowerCase();
-    if (!window.confirm(`Are you sure you want to set "${target.username}" to ${actionLabel}?`)) {
-      return;
-    }
+  const confirmStatusChange = async () => {
+    if (!pendingStatusAction) return;
+    const { target, nextStatus } = pendingStatusAction;
     setBusy(true);
     setBanner(null);
     try {
       await usersApi.updateStatus(target.id, nextStatus, `Changed by ${currentUser?.username}`);
-      setBanner({ type: 'ok', text: `Updated status for "${target.username}" to ${nextStatus}.` });
+      const message = `Updated status for "${target.username}" to ${nextStatus}.`;
+      setBanner({ type: 'ok', text: message });
+      pushToast({ title: 'User status updated', message, tone: 'ok' });
+      setPendingStatusAction(null);
       await loadData();
     } catch (err) {
       const ax = err as AxiosError<ApiErrorPayload>;
@@ -98,7 +133,9 @@ export function UsersPanel() {
     setBanner(null);
     try {
       await usersApi.unlock(target.id);
-      setBanner({ type: 'ok', text: `Temporary lockout cleared for "${target.username}".` });
+      const message = `Temporary lockout cleared for "${target.username}".`;
+      setBanner({ type: 'ok', text: message });
+      pushToast({ title: 'Account unlocked', message, tone: 'ok' });
       await loadData();
     } catch (err) {
       const ax = err as AxiosError<ApiErrorPayload>;
@@ -108,17 +145,21 @@ export function UsersPanel() {
     }
   };
 
-  const handleResetPassword = async (target: AdminUser) => {
-    if (!window.confirm(`Reset password for "${target.username}" and revoke all active sessions?`)) {
-      return;
-    }
+  const confirmResetPassword = async () => {
+    if (!pendingResetTarget) return;
+    const target = pendingResetTarget;
     setBusy(true);
     setBanner(null);
     try {
       const res = await usersApi.resetPassword(target.id);
-      setOneTimeSecret(
-        `Temporary password for "${res.username}" (shown once, deliver securely): ${res.temporaryPassword}`
-      );
+      setPendingResetTarget(null);
+      setShowSecret(false);
+      setCredentialModal({
+        username: res.username,
+        temporaryPassword: res.temporaryPassword,
+        mode: 'reset',
+      });
+      pushToast({ title: 'Password reset', message: `Temporary password rotated for "${res.username}".`, tone: 'info' });
       await loadData();
     } catch (err) {
       const ax = err as AxiosError<ApiErrorPayload>;
@@ -135,7 +176,9 @@ export function UsersPanel() {
     setBanner(null);
     try {
       await usersApi.updateRoles(editingRolesUser.id, editRoleIds);
-      setBanner({ type: 'ok', text: `Roles updated for "${editingRolesUser.username}".` });
+      const message = `Roles updated for "${editingRolesUser.username}".`;
+      setBanner({ type: 'ok', text: message });
+      pushToast({ title: 'Roles saved', message, tone: 'ok' });
       setEditingRolesUser(null);
       await loadData();
     } catch (err) {
@@ -182,7 +225,7 @@ export function UsersPanel() {
           type="button"
           className="apid-btn apid-btn-primary"
           onClick={() => {
-            setOneTimeSecret(null);
+            closeCredentialModal();
             setShowCreate(true);
           }}
         >
@@ -193,12 +236,6 @@ export function UsersPanel() {
       {banner && (
         <div className={`apid-alert ${banner.type === 'ok' ? 'apid-alert-ok' : 'apid-alert-err'}`}>
           {banner.text}
-        </div>
-      )}
-
-      {oneTimeSecret && (
-        <div className="apid-alert apid-alert-ok" style={{ fontFamily: 'monospace', wordBreak: 'break-all' }}>
-          {oneTimeSecret}
         </div>
       )}
 
@@ -250,7 +287,7 @@ export function UsersPanel() {
                         type="button"
                         className="apid-btn apid-btn-sm"
                         disabled={busy}
-                        onClick={() => handleResetPassword(u)}
+                        onClick={() => setPendingResetTarget(u)}
                       >
                         Reset PW
                       </button>
@@ -270,7 +307,7 @@ export function UsersPanel() {
                           className="apid-btn apid-btn-sm apid-btn-danger"
                           disabled={busy || isSelf}
                           title={isSelf ? 'Cannot disable your own account' : 'Disable account'}
-                          onClick={() => handleStatusChange(u, 'DISABLED')}
+                          onClick={() => setPendingStatusAction({ target: u, nextStatus: 'DISABLED' })}
                         >
                           Disable
                         </button>
@@ -279,7 +316,7 @@ export function UsersPanel() {
                           type="button"
                           className="apid-btn apid-btn-sm"
                           disabled={busy}
-                          onClick={() => handleStatusChange(u, 'ACTIVE')}
+                          onClick={() => setPendingStatusAction({ target: u, nextStatus: 'ACTIVE' })}
                         >
                           Activate
                         </button>
@@ -323,8 +360,9 @@ export function UsersPanel() {
             <h3>Create User</h3>
             <form onSubmit={handleCreateUser} className="apid-form">
               <div className="apid-field">
-                <label>Username</label>
+                <label htmlFor="create-username">Username</label>
                 <input
+                  id="create-username"
                   type="text"
                   value={newUsername}
                   onChange={(e) => setNewUsername(e.target.value)}
@@ -395,6 +433,76 @@ export function UsersPanel() {
           </div>
         </div>
       )}
+
+      {credentialModal && (
+        <div
+          className="apid-modal-backdrop"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="credential-modal-title"
+        >
+          <div className="apid-card apid-modal">
+            <h3 id="credential-modal-title">
+              {credentialModal.mode === 'created' ? 'One-Time Account Credential' : 'One-Time Reset Credential'}
+            </h3>
+            <p className="boa-muted" style={{ fontSize: '0.84rem', marginTop: '0.25rem' }}>
+              Account: <strong>{credentialModal.username}</strong>. This temporary secret is shown once and
+              cleared from memory when closed. Deliver directly over an authorized channel; password change is
+              enforced on first sign-in.
+            </p>
+            <div className="boa-secret-box">
+              <div className="boa-secret-value" data-testid="masked-credential-value">
+                {showSecret ? credentialModal.temporaryPassword : '••••••••••••••••'}
+              </div>
+              <button
+                type="button"
+                className="apid-btn apid-btn-sm"
+                onClick={() => setShowSecret((prev) => !prev)}
+              >
+                {showSecret ? 'Hide password' : 'Reveal password'}
+              </button>
+            </div>
+            <div className="apid-alert apid-alert-info" style={{ marginTop: '0.75rem', fontSize: '0.8rem' }}>
+              Security Notice: Copy to clipboard is disabled for temporary passwords. Share this password directly with the user.
+            </div>
+            <div className="apid-modal-actions" style={{ marginTop: '1rem' }}>
+              <button type="button" className="apid-btn apid-btn-primary" onClick={closeCredentialModal}>
+                I Have Delivered This Securely
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <ConfirmDialog
+        open={Boolean(pendingStatusAction)}
+        title={pendingStatusAction?.nextStatus === 'ACTIVE' ? 'Re-activate Account' : 'Disable Account'}
+        message={
+          pendingStatusAction
+            ? `Are you sure you want to set "${pendingStatusAction.target.username}" to ${pendingStatusAction.nextStatus}?`
+            : ''
+        }
+        confirmLabel={pendingStatusAction?.nextStatus === 'ACTIVE' ? 'Activate' : 'Disable'}
+        danger={pendingStatusAction?.nextStatus !== 'ACTIVE'}
+        busy={busy}
+        onCancel={() => setPendingStatusAction(null)}
+        onConfirm={confirmStatusChange}
+      />
+
+      <ConfirmDialog
+        open={Boolean(pendingResetTarget)}
+        title="Reset Temporary Password"
+        message={
+          pendingResetTarget
+            ? `Generate a new temporary password for "${pendingResetTarget.username}" and revoke all active sessions?`
+            : ''
+        }
+        confirmLabel="Reset Password"
+        danger
+        busy={busy}
+        onCancel={() => setPendingResetTarget(null)}
+        onConfirm={confirmResetPassword}
+      />
     </div>
   );
 }

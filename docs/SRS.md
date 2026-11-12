@@ -43,9 +43,9 @@ This SRS provides the complete functional, data, integration, security, and oper
 - How the **Shared Core** unites users, dynamic permissions, organizational hierarchy, skills, Daily.co live video, chat, file storage, notifications, caching, and background workers into **one modular monolith**.
 
 ### 1.2 Objectives
-1. **Automatically identify performance gaps** from quarterly PMS Excel appraisal exports using exact unrounded grades (`OverallFinalRating < 3.0`).
-2. **Enforce structured managerial accountability** by automatically pairing underperforming employees (`Talent`) with their direct hierarchical manager (`Coach`), recursively up the reporting chain.
-3. **Support proactive skill development** for satisfactory performers (`>= 3.0`) through manager-requested, PMS-approved individual or group coaching.
+1. **Automatically identify performance gaps** from quarterly PMS Excel appraisal exports by consolidating repeated multi-goal rows per employee and evaluating **`RoundedOverallFinalRating < 3`** (`1` or `2`).
+2. **Enforce structured managerial accountability** by automatically pairing underperforming employees (`Talent`) with their direct hierarchical manager (`Coach`) from the pre-loaded `core.employees` + manager directory, recursively up the reporting chain.
+3. **Support proactive skill development** for satisfactory performers (`RoundedOverallFinalRating >= 3`) through manager-requested, PMS-approved individual or group coaching.
 4. **Provide transparent coaching oversight** to PMS via mandatory per-session Coach reports, optional Talent reflection reports, attendance tracking, and quarterly filters.
 5. **Unlock internal organizational expertise** through an HR-controlled Mentoring module allowing employees to apply as Trainers (or be directly appointed by HR) and connect with Trainees.
 6. **Eliminate fixed role rigidity** via a dynamic RBAC and contextual participation architecture where one employee can act concurrently as `Coach`, `Talent`, `Trainer`, and `Trainee`.
@@ -54,12 +54,12 @@ This SRS provides the complete functional, data, integration, security, and oper
 ### 1.3 System Scope
 
 #### In Scope (Version 1.0 Release)
-- Phase 1 local authentication (`username` + `password` with JWT), built behind an Active Directory–ready user schema.
+- Phase 1 local authentication (`username` + `password` with JWT), built behind an Active Directory–ready user schema (`core.users` linked explicitly or provisioned for `core.employees`).
 - System-Admin-managed dynamic Roles & granular Permissions.
-- Organizational hierarchy management (`Director -> Division -> Department -> Manager -> Employee`) with Phase 1 CSV/Excel bulk import.
+- Organizational hierarchy & user directory management (`core.departments`, `core.employees` with `manager_id` self-FK and `user_id` FK) via Phase 3 Standard CSV/Excel bulk import (managed independently from PMS reports).
 - Shared Master `Skill` catalog.
-- Quarterly PMS `.xlsx` appraisal import, schema/duplicate validation, preview-and-confirm pipeline, and immutable import audit logs.
-- Performance-based mandatory coaching (`< 3.0` entry, `> 3.0` exit) and mid-quarter Coach replacement.
+- Quarterly PMS multi-goal `.xlsx`/`.csv` appraisal import, goal-average & rounding verification, preview-and-confirm pipeline matched against pre-existing directory employees, and immutable import audit logs.
+- Performance-based mandatory coaching (`RoundedOverallFinalRating < 3` entry, `>= 3` exit) and mid-quarter Coach replacement.
 - Manager-initiated individual & group skill-development coaching requests, PMS review, and Coach-decided completion.
 - Trainer applications with certificate uploads, HR review/approval/rejection, direct HR Trainer appointments, and `Suspend`/`Revoke` lifecycle.
 - Three coexisting Mentoring discovery/matching modes: Trainer browsing, automated skill recommendations, and HR-assisted manual matching.
@@ -90,8 +90,8 @@ This SRS provides the complete functional, data, integration, security, and oper
 | **HR** | Human Resources department; owns and monitors the **Mentoring Module**. |
 | **Performance Quarter** | The completed appraisal period evaluated by PMS (e.g., Q1). |
 | **Coaching Quarter** | The subsequent ~3-month period during which assigned coaching occurs (e.g., Q1 results drive Q2 coaching). |
-| **OverallFinalRating** | Exact unrounded numeric grade out of `5.0` from the PMS Excel report (e.g., `2.233`). Authoritative for coaching eligibility. |
-| **RoundedOverallFinalRating** | Integer rounded grade in the PMS report (e.g., `2`). Stored for reference only; **never** used for eligibility decisions. |
+| **OverallFinalRating** | Average of an employee's `GoalScore` rows out of `5.0` in the PMS Excel export (e.g., `2.2325`, `2.9500`), repeated identically across each of that employee's goal rows. Stored for analytics and goal-average verification. |
+| **RoundedOverallFinalRating** | Integer rounded final grade (`1–5`) computed from `OverallFinalRating` (e.g., `2.9500 -> 3`, `2.2325 -> 2`). **AUTHORITATIVE** grade used for exact coaching comparison (`< 3` triggers Mandatory Coaching). |
 | **Coach** | Contextual participant assigned to guide a Talent in Coaching (default: direct manager for mandatory coaching). |
 | **Talent** | Contextual participant receiving mandatory or skill-development coaching. |
 | **Trainer** | Employee authorized by HR (via application approval or direct appointment) to teach specific skills in Mentoring. |
@@ -128,8 +128,8 @@ Director of Human Resource Development (Mr. Abebe)
 ```
 
 **Recursive Assignment Behavior:**
-- If **Mr. Alex** scores `< 3.0` (`2.233`), APID looks up Alex's direct manager (**Mr. Kebede**) -> **Kebede = Coach**, **Alex = Talent**.
-- If **Mr. Kebede** also scores `< 3.0` in the same or another quarter, APID looks up Kebede's direct manager (**Mr. Abebe**) -> **Abebe = Coach**, **Kebede = Talent**.
+- If **Mr. Alex** receives `RoundedOverallFinalRating < 3` (e.g., `2`), APID looks up Alex's direct manager (**Mr. Kebede**) in `core.employees` (`manager_id`) -> **Kebede = Coach**, **Alex = Talent**.
+- If **Mr. Kebede** also receives `RoundedOverallFinalRating < 3` in the same or another quarter, APID looks up Kebede's direct manager (**Mr. Abebe**) -> **Abebe = Coach**, **Kebede = Talent**.
 - **Result:** Mr. Kebede simultaneously participates as a **Coach** (to Alex) and a **Talent** (under Abebe).
 
 **Critical Rule (`BR-005`):** There are **NO fixed system roles called `Manager` or `Director`**. "Manager" and "Director" are organizational reporting relationships stored in the hierarchy data.
@@ -159,7 +159,7 @@ To satisfy dynamic multi-role participation (`BR-024`) without security leaks:
 - `Coach` + `Talent` (manager coaching subordinate while coached by director)
 - `Trainer` + `Trainee` (teaching Excel while learning Leadership)
 - `Coach` + `Trainee` (manager coaching staff while learning a technical skill)
-- `Trainer` + `Talent` (approved Excel trainer whose own KPI fell `< 3.0` requiring coaching)
+- `Trainer` + `Talent` (approved Excel trainer whose own `RoundedOverallFinalRating < 3` requires mandatory coaching)
 - `Coach` + `Talent` + `Trainer` + `Trainee` (all four at the same time in separate scoped workspaces)
 
 ### 2.4 Backend Permission Catalog (`FR-PERM`)
@@ -276,11 +276,11 @@ The React frontend renders a **single adaptive application shell** whose navigat
 *Module Owner: Developer 1 (You) · Controlling Authority: PMS Department*
 
 ### 4.1 Quarterly Performance Calendar & Period Distinction (`FR-COACH-01`)
-- Bank performance operates across four quarters (`Q1`, `Q2`, `Q3`, `Q4`) on a 5.0 performance scale:
-  - `< 3.0`: Below minimum requirement -> **Mandatory Coaching**
-  - `3.0`: Minimum requirement met
-  - `4.0`: Beyond expectation
-  - `5.0`: Exceptional
+- Bank performance operates across four quarters (`Q1`, `Q2`, `Q3`, `Q4`) using rounded 1–5 performance grades (`RoundedOverallFinalRating`):
+  - `1` or `2` (`RoundedOverallFinalRating < 3`): Below minimum requirement -> **Mandatory Coaching**
+  - `3`: Minimum requirement met (includes averaged grades `>= 2.5000` that round to `3`)
+  - `4`: Beyond expectation
+  - `5`: Exceptional
 - **Initial Calendar Baseline** *(stored dynamically in `core.fiscal_quarters` so exact boundary dates can be adjusted before go-live)*:
 
 | Quarter | Baseline Months | Typical PMS Upload Window | Resulting Coaching Quarter |
@@ -317,55 +317,59 @@ The React frontend renders a **single adaptive application shell** whose navigat
 | 13 | `GoalTrackingName` | `Coaching and Feedback development` | String | Appraisal context snapshot |
 | 14 | `Target` | `65.85119048` | Decimal | Appraisal context snapshot |
 | 15 | `Actual` | `71.5` | Decimal | Appraisal context snapshot |
-| 16 | `GoalScore` | `112.23` | Decimal | Appraisal context snapshot |
-| 17 | `Weight` | `19.42` | Decimal | Appraisal context snapshot |
-| 18 | `LineScore` | `23.56` | Decimal | Appraisal context snapshot |
-| 19 | `OverallFinalRating` | `2.233` | Decimal (`numeric(6,4)`) | **AUTHORITATIVE GRADE** (unrounded!) |
-| 20 | `RoundedOverallFinalRating` | `2` | Integer/Decimal | Reference only; **never** used for rules |
+| 16 | `GoalScore` | `2.35` | Decimal | Per-goal rating out of `5.0`; averaged per employee |
+| 17 | `Weight` | `25` | Decimal | Goal weight snapshot |
+| 18 | `LineScore` | `0.5875` | Decimal | Weighted goal contribution snapshot |
+| 19 | `OverallFinalRating` | `2.2325` | Decimal (`numeric(6,4)`) | Average of the employee's `GoalScore` rows (identical across repeated rows) |
+| 20 | `RoundedOverallFinalRating` | `2` | Integer (`1–5`) | **AUTHORITATIVE GRADE** (exact half-up rounded integer used for eligibility comparison) |
 | 21 | `Email` | `john.doe@email.com` | String | Snapshot & cross-check |
 
-#### Grade Eligibility Rule
-$$\text{Triggers Mandatory Performance Coaching} \iff \text{OverallFinalRating} < 3.0000$$
+#### Grade Eligibility & Multi-Goal Consolidation Rule
+- Each employee has multiple rows in the PMS extract (one row per goal/KPI). `OverallFinalRating` equals the arithmetic average of that employee's `GoalScore` values and is repeated identically across every row for that employee, along with `RoundedOverallFinalRating`.
+$$\text{Triggers Mandatory Performance Coaching} \iff \text{RoundedOverallFinalRating} < 3$$
 
-| `OverallFinalRating` | `RoundedOverallFinalRating` | New Entry? | Existing Talent Exits? |
+| Average `OverallFinalRating` | `RoundedOverallFinalRating` | New Entry? | Existing Talent Exits? |
 |---:|---:|---|---|
-| `2.233` | `2` | **Yes (Mandatory)** | No (continues/new assignment) |
-| `2.900` | `3` | **Yes (Mandatory)** | No |
-| `3.000` | `3` | **No** | **No** (must score `> 3.0` to exit!) |
-| `3.010` | `3` | No | **Yes (Cleared / Exits coaching)** |
-| `4.000` | `4` | No | **Yes (Cleared / Exits coaching)** |
+| `1.4500` | `1` | **Yes (Mandatory)** | No (continues/new assignment) |
+| `2.2325` | `2` | **Yes (Mandatory)** | No (continues/new assignment) |
+| `2.6250` | `3` | **No** | **Yes (Cleared / Exits coaching)** |
+| `2.9500` | `3` | **No** | **Yes (Cleared / Exits coaching)** |
+| `3.1250` | `3` | No | **Yes (Cleared / Exits coaching)** |
+| `4.5500` | `5` | No | **Yes (Cleared / Exits coaching)** |
 
 #### Two-Step Upload, Validation & Commit Pipeline
-1. **Step 1 — Upload & Parse Preview (`POST /api/v1/coaching/pms-reports/preview`):**
-   - Store original `.xlsx` file via `FileStorageService` and compute file SHA-256 hash.
+1. **Prerequisite — Pre-Loaded Users & Managers Directory (`core`):**
+   - PMS appraisal uploads **do not create departments, employees, or manager hierarchies**. Employees, direct managers (`core.employees.manager_id`), and login accounts (`core.users`) must already exist in the APID directory before uploading a PMS report.
+2. **Step 1 — Upload & Parse Preview (`POST /api/v1/coaching/pms-reports/preview`):**
+   - Store original `.xlsx`/`.csv` file via `FileStorageService` and compute file SHA-256 hash.
    - Verify all 21 required headers exist (case/trim-safe validation).
    - Verify every row's `(Year, Quarter)` matches the selected target period (or flag mismatched rows).
-   - Verify `OverallFinalRating` is a valid decimal between `0.0` and `5.0`.
-   - Enforce **single row per employee** per `(Year, Quarter)`—reject/flag duplicate `EmployeeNumber` entries inside the file.
+   - Verify `GoalScore` and `OverallFinalRating` are decimals between `0.0` and `5.0`, and `RoundedOverallFinalRating` is an integer `1..5`.
+   - **Consolidate repeated goal rows** per `(EmployeeNumber, Year, Quarter)`: verify `OverallFinalRating` & `RoundedOverallFinalRating` are identical across all goal rows of the same employee and cross-check that `OverallFinalRating` matches the average of that employee's `GoalScore` values.
    - Check `EvaluationStatus`: process `Completed` rows and flag any non-`Completed` rows as warnings/errors in the preview summary.
    - Check for **already-committed `(Year, Quarter)` batch** (idempotency guard prevents accidentally duplicating a quarter's assignments!).
-   - Match each `EmployeeNumber` against `core.employees` and, for every employee `< 3.0`, resolve their active direct manager (`Coach`) via `core` org hierarchy.
+   - Match each unique `EmployeeNumber` against pre-existing `core.employees` (unknown employees are flagged as errors/exceptions and cannot invent org structure) and, for every employee with `RoundedOverallFinalRating < 3`, resolve their active direct manager (`Coach`) via `core.employees.manager_id`.
    - Return a detailed **Validation Preview Report**:
-     - Total rows, Ready count, Mandatory Coaching count (`< 3.0`), Cleared count (`> 3.0` for active Talents), Unknown Employees, Non-Completed rows, Missing/Inactive Manager exceptions.
-2. **Step 2 — PMS Confirm & Commit (`POST /api/v1/coaching/pms-reports/{batchId}/commit`):**
+     - Total source goal rows, Consolidated unique employees, Mandatory Coaching count (`RoundedOverallFinalRating < 3`), Cleared count (`RoundedOverallFinalRating >= 3` for active Talents), Unknown Employees (not in directory), Non-Completed rows, Missing/Inactive Manager exceptions.
+3. **Step 2 — PMS Confirm & Commit (`POST /api/v1/coaching/pms-reports/{batchId}/commit`):**
    - Executed transactionally (`@Transactional`; uses `@Async` post-validation if row count is large).
-   - Saves immutable `coaching.pms_performance_records`.
+   - Saves consolidated employee ratings (`coaching.pms_performance_records`) and per-goal line snapshots (`coaching.pms_goal_lines`).
    - Evaluates active prior-quarter performance-based Talents:
-     - If new `OverallFinalRating > 3.0` -> updates prior assignment status to `CLEARED` and notifies Talent + prior Coach.
-     - If new `OverallFinalRating <= 3.0` -> closes/transitions prior cycle (`CONTINUED`) and generates the new quarter's assignment.
-   - Creates `PerformanceBasedCoachingAssignment` for all `< 3.0` employees (routing any employee without an active manager to `PENDING_COACH_ASSIGNMENT` exception queue instead of crashing).
+     - If new `RoundedOverallFinalRating >= 3` -> updates prior assignment status to `CLEARED` and notifies Talent + prior Coach.
+     - If new `RoundedOverallFinalRating < 3` -> closes/transitions prior cycle (`CONTINUED_NEXT_QUARTER`) and generates the new quarter's assignment.
+   - Creates `PerformanceBasedCoachingAssignment` for all `RoundedOverallFinalRating < 3` employees (routing any employee without an active manager to `PENDING_COACH_ASSIGNMENT` exception queue instead of crashing).
    - Fires async notifications to every assigned **Talent** and **Coach**.
 
 ### 4.3 Pathway A: Performance-Based Mandatory Coaching (`FR-COACH-03`)
 - **Assignment Creation & Snapshot:**
-  - Captures immutable snapshots of `talentDepartment`, `talentParentDepartment`, `coachEmployeeNumber`, `coachFullName`, `triggeringRating`, `performanceYear`, `performanceQuarter`, `coachingYear`, `coachingQuarter`.
+  - Captures immutable snapshots of `talentDepartment`, `talentParentDepartment`, `coachEmployeeNumber`, `coachFullName`, `triggeringRating`, `roundedRating`, `performanceYear`, `performanceQuarter`, `coachingYear`, `coachingQuarter`.
   - Future transfers or promotions never alter historical coaching records.
 - **Assignment Lifecycle Statuses:**
-  - `PENDING_COACH_ASSIGNMENT` (employee `< 3.0` has no active manager in hierarchy; awaits PMS manual assignment)
+  - `PENDING_COACH_ASSIGNMENT` (employee `RoundedOverallFinalRating < 3` has no active manager in `core.employees`; awaits PMS manual assignment)
   - `ACTIVE` (ongoing during the Coaching Quarter)
   - `AWAITING_NEXT_PMS_EVALUATION` (3-month coaching period finished; awaiting next quarterly PMS report)
-  - `CLEARED` (next quarterly PMS report shows `OverallFinalRating > 3.0`)
-  - `CONTINUED_NEXT_QUARTER` (next quarterly PMS report is still `<= 3.0`; replaced by a new quarterly assignment)
+  - `CLEARED` (next quarterly PMS report shows `RoundedOverallFinalRating >= 3`)
+  - `CONTINUED_NEXT_QUARTER` (next quarterly PMS report is still `RoundedOverallFinalRating < 3`; replaced by a new quarterly assignment)
   - `CANCELLED` (administrative cancellation with mandatory audit reason, e.g., employee left bank)
 - **Mid-Quarter Coach Replacement:**
   - If an assigned Coach leaves the bank, transfers out, or goes on long leave:
@@ -374,7 +378,7 @@ $$\text{Triggers Mandatory Performance Coaching} \iff \text{OverallFinalRating} 
   - Every replacement writes a `CoachingCoachHistory` record (`previousCoachId`, `newCoachId`, `changedBy`, `changedAt`, `reason`) and notifies Talent, old Coach (if active), and new Coach.
 
 ### 4.4 Pathway B: Skill-Development Coaching (`FR-COACH-04`)
-- **Purpose:** Allow managers (and optionally PMS) to develop new skills in employees whose overall rating is satisfactory (`>= 3.0`), without marking them as poor performers.
+- **Purpose:** Allow managers (and optionally PMS) to develop new skills in employees whose rounded overall rating is satisfactory (`RoundedOverallFinalRating >= 3`), without marking them as poor performers.
 - **Request Types:** Supports **Individual** (1 Talent) and **Group** (2+ Talents, e.g., 15 staff in Division One needing Advanced Excel).
 - **Request Fields:**
   - `skillId` (from `core.skills`)
@@ -392,7 +396,7 @@ $$\text{Triggers Mandatory Performance Coaching} \iff \text{OverallFinalRating} 
   - PMS Admin can modify `proposedCoachId`, adjust the employee list, or add reviewer notes before clicking **Approve**.
   - **Optional PMS-Initiated Skill Coaching:** PMS Admin can also create bank/division-wide Skill-Development assignments directly without waiting for a manager request.
 - **Completion Authority (`Coach Decides`):**
-  - Unlike Performance-Based Coaching (which exits only via `OverallFinalRating > 3.0`), **the assigned Coach decides when Skill-Development Coaching is completed**.
+  - Unlike Performance-Based Coaching (which exits via `RoundedOverallFinalRating >= 3`), **the assigned Coach decides when Skill-Development Coaching is completed**.
   - For **Group** assignments, the Coach can mark completion **per Talent** (`IN_PROGRESS` -> `COMPLETED`) with completion remarks, so one member falling behind does not block the rest of the group.
   - PMS Admin retains full visibility and audit control.
 
@@ -504,8 +508,8 @@ All notifications write immediately to `core.notifications` (displayed in the to
 | Event Trigger | Module | Recipients | Deep Link Target |
 |---|---|---|---|
 | PMS Excel report committed / failed | Coaching | Uploader PMS Admin | `/pms/imports/{batchId}` |
-| New mandatory coaching assigned (`< 3.0`) | Coaching | Talent + Assigned Coach | `/coaching/assignments/{id}` |
-| Mandatory coaching exited (`> 3.0`) | Coaching | Talent + Prior Coach | `/coaching/assignments/{id}` |
+| New mandatory coaching assigned (`RoundedOverallFinalRating < 3`) | Coaching | Talent + Assigned Coach | `/coaching/assignments/{id}` |
+| Mandatory coaching exited (`RoundedOverallFinalRating >= 3`) | Coaching | Talent + Prior Coach | `/coaching/assignments/{id}` |
 | Mid-quarter Coach replaced | Coaching | Talent + New Coach + Old Coach | `/coaching/assignments/{id}` |
 | Skill-Dev request submitted | Coaching | PMS Admins | `/pms/requests/{id}` |
 | Skill-Dev request approved / rejected / returned | Coaching | Requesting Manager (+ Coach & Talents if approved) | `/coaching/requests/{id}` |
@@ -535,7 +539,7 @@ Every PMS dashboard and report supports multi-dimensional filtering:
 - `assignmentStatus`
 
 ### 7.2 PMS Coaching Reports (`FR-RPT-COACH`)
-1. **Quarterly Coaching Summary Report:** Total evaluated employees, count `< 3.0`, mandatory assignments created, active vs. cleared vs. continued vs. pending-coach counts.
+1. **Quarterly Coaching Summary Report:** Total evaluated employees, count `RoundedOverallFinalRating < 3`, mandatory assignments created, active vs. cleared vs. continued vs. pending-coach counts.
 2. **Coach Activity & Workload Report:** Per-Coach table showing assigned Talents count, scheduled vs. completed vs. missed sessions, submitted Coach reports, and missing report count.
 3. **Talent Progress Report:** Per-Talent history showing triggering `OverallFinalRating`, Coach, session attendance rate, Coach & Talent report counts, and current status.
 4. **Department / Division Overview Report:** Performance breakdown and coaching completion/activity metrics grouped by `ParentDepartment` and `Department`.
@@ -575,7 +579,8 @@ APID uses **one PostgreSQL 16 database (`apid_db`)** divided into **3 isolated s
 
 ### 8.2 `coaching` Schema (Developer 1 Ownership)
 - `coaching.pms_report_batches` (`id`, `performance_document_name`, `year`, `quarter`, `file_id` FK->`core.stored_files`, `file_hash`, `status`, `total_rows`, `mandatory_count`, `error_count`, `uploaded_by`, `committed_at`)
-- `coaching.pms_performance_records` (`id`, `batch_id`, `employee_id` FK->`core.employees`, `employee_number`, `year`, `quarter`, `goal_name`, `evaluation_status`, `goal_tracking_name`, `target`, `actual`, `goal_score`, `weight`, `line_score`, `overall_final_rating`, `rounded_overall_final_rating`, `dept_snapshot`, `parent_dept_snapshot`, UNIQUE `(employee_id, year, quarter)`)
+- `coaching.pms_performance_records` (`id`, `batch_id`, `employee_id` FK->`core.employees`, `employee_number`, `year`, `quarter`, `overall_final_rating`, `rounded_overall_final_rating`, `dept_snapshot`, `parent_dept_snapshot`, UNIQUE `(employee_id, year, quarter)`)
+- `coaching.pms_goal_lines` (`id`, `performance_record_id` FK->`coaching.pms_performance_records`, `goal_name`, `evaluation_status`, `goal_tracking_name`, `target`, `actual`, `goal_score`, `weight`, `line_score`)
 - `coaching.skill_dev_requests` (`id`, `requested_by_user_id`, `skill_id` FK->`core.skills`, `request_type`, `proposed_coach_id`, `reason`, `expected_outcomes`, `proposed_start_date`, `proposed_end_date`, `priority`, `supporting_file_id`, `status`, `reviewed_by`, `review_notes`, `reviewed_at`)
 - `coaching.skill_dev_request_employees` (`request_id`, `employee_id`)
 - `coaching.coaching_assignments` (`id`, `assignment_type`, `source_pms_record_id`, `source_request_id`, `skill_id`, `coach_employee_id`, `performance_year`, `performance_quarter`, `coaching_year`, `coaching_quarter`, `status`, `is_at_risk`, `created_at`)
@@ -672,7 +677,7 @@ No Kafka or RabbitMQ is required. Background processing uses dedicated Spring th
 ### 10.3 Reliability, Performance & Maintainability (`NFR-QUAL`)
 - **Idempotency:** Duplicate PMS Excel uploads cannot generate duplicate coaching assignments; scheduled reminders cannot fire twice for the same threshold.
 - **Transactional Integrity:** Report commit + assignment creation + notification event publishing execute inside atomic transactions.
-- **Automated Testing:** JUnit 5 + Mockito + Spring Boot Test covering all critical business rules (`< 3.0`, `> 3.0`, duplicate Excel protection, hierarchy cycle guard, suspended Trainer rejection, cross-module boundary rules).
+- **Automated Testing:** JUnit 5 + Mockito + Spring Boot Test covering all critical business rules (`RoundedOverallFinalRating < 3` entry, `>= 3` exit, multi-goal averaging verification, duplicate Excel protection, pre-existing directory validation, hierarchy cycle guard, suspended Trainer rejection, cross-module boundary rules).
 - **Usability:** Responsive React + Vite + TypeScript UI supporting desktop & tablet/mobile viewports with clear validation feedback on Excel upload errors.
 
 ---
@@ -680,17 +685,17 @@ No Kafka or RabbitMQ is required. Background processing uses dedicated Spring th
 ## 11. End-to-End Business Scenarios & Acceptance Criteria
 
 - **`SC-01` Mandatory Coaching Cascade & Concurrent Participation:**
-  - Upload `Sample Performance Apresal Header.xlsx` pattern where **Alex** scores `2.233` (`< 3.0`) and his manager **Kebede** scores `2.850` (`< 3.0`), while Director **Abebe** scores `4.100`.
-  - **Expected:** System creates two Q2 mandatory assignments: `Kebede -> Alex` and `Abebe -> Kebede`. Kebede logs into one Employee Workspace and manages Alex under *My Coaching (As Coach)* while attending sessions under Abebe in *My Coaching (As Talent)*.
-- **`SC-02` Boundary Precision (`2.90` vs `3.00` vs `3.01`):**
-  - On initial upload: `2.90` (even though `RoundedOverallFinalRating = 3`) enters mandatory coaching; `3.00` does NOT enter.
-  - On next quarter upload for an active Talent: `3.00` keeps Talent in coaching (`CONTINUED_NEXT_QUARTER`); `3.01` sets prior assignment to `CLEARED` and removes Talent from mandatory coaching.
+  - Pre-load employees & manager hierarchy in `core.employees`, then upload a multi-goal 21-column PMS report where **Alex** averages `2.2325` (`RoundedOverallFinalRating = 2 < 3`) and his manager **Kebede** averages `2.4000` (`RoundedOverallFinalRating = 2 < 3`), while Director **Abebe** averages `4.8000` (`RoundedOverallFinalRating = 5`).
+  - **Expected:** System collapses repeated goal rows per employee and creates two Q2 mandatory assignments: `Kebede -> Alex` and `Abebe -> Kebede`. Kebede logs into one Employee Workspace and manages Alex under *My Coaching (As Coach)* while attending sessions under Abebe in *My Coaching (As Talent)*.
+- **`SC-02` Rounded Boundary Precision (`2.48 -> 2` vs `2.625 -> 3` vs `2.95 -> 3`):**
+  - On initial upload: employee with average `2.4800` (`RoundedOverallFinalRating = 2 < 3`) enters mandatory coaching; employees with average `2.6250` or `2.9500` (`RoundedOverallFinalRating = 3 >= 3`) do **NOT** enter mandatory coaching.
+  - On next quarter upload for an active Talent: `RoundedOverallFinalRating = 2` keeps Talent in coaching (`CONTINUED_NEXT_QUARTER`); `RoundedOverallFinalRating = 3` (or higher) sets prior assignment to `CLEARED` and removes Talent from mandatory coaching.
 - **`SC-03` Idempotent Re-Upload:**
   - Re-uploading the exact Q1 file is rejected/blocked from committing duplicate assignments.
 - **`SC-04` Mid-Quarter Coach Replacement:**
   - Kebede leaves Division One in November; PMS replaces Kebede with new Division Manager **Sara**. Existing Q2 session reports written by Kebede remain intact under Kebede's name, `coaching.coach_replacement_history` records the transfer, and Sara sees Alex immediately.
 - **`SC-05` Group Skill-Development Coaching & Coach Completion:**
-  - Manager submits a group request for 15 staff (`>= 3.0`) in `Advanced Excel` -> PMS approves -> Coach holds 4 Daily.co sessions, submits 1 Coach report per group session with individual attendance -> Coach marks 13 Talents `COMPLETED` while keeping 2 absentees `IN_PROGRESS`.
+  - Manager submits a group request for 15 staff (`RoundedOverallFinalRating >= 3`) in `Advanced Excel` -> PMS approves -> Coach holds 4 Daily.co sessions, submits 1 Coach report per group session with individual attendance -> Coach marks 13 Talents `COMPLETED` while keeping 2 absentees `IN_PROGRESS`.
 - **`SC-06` 12-Session Reporting & PMS Oversight:**
   - Coach and Talent conduct 12 sessions across Q2 -> 12 Coach reports + Talent reflections are recorded and filterable by Q1/Q2 under PMS Dashboard. If 3 consecutive sessions are missed, assignment flags `At Risk`.
 - **`SC-07` Trainer Application, Suspension & Revocation:**

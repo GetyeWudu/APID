@@ -4,6 +4,7 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type ReactNode,
 } from 'react';
@@ -14,6 +15,8 @@ import type {
   UserProfile,
 } from '../features/auth/types/auth.types';
 import {
+  getAccessToken,
+  registerForbiddenHandler,
   registerUnauthorizedHandler,
   setAccessToken,
 } from '../shared/api/apiClient';
@@ -25,6 +28,7 @@ interface AuthContextValue {
   login: (payload: LoginPayload) => Promise<UserProfile>;
   logout: () => Promise<void>;
   changePassword: (payload: ChangePasswordPayload) => Promise<string>;
+  refreshProfile: () => Promise<void>;
   hasPermission: (code: string) => boolean;
   hasAnyPermission: (codes: string[]) => boolean;
 }
@@ -34,16 +38,32 @@ const AuthContext = createContext<AuthContextValue | null>(null);
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
+  const lastSyncRef = useRef<number>(0);
 
   const clearSession = useCallback(() => {
     setAccessToken(null);
     setUser(null);
   }, []);
 
+  const refreshProfile = useCallback(async () => {
+    if (!getAccessToken()) return;
+    const now = Date.now();
+    if (now - lastSyncRef.current < 1500) return;
+    lastSyncRef.current = now;
+    try {
+      const latest = await authApi.me();
+      setUser(latest);
+    } catch {
+      // Unauthorized errors are handled by apiClient interceptor
+    }
+  }, []);
+
   useEffect(() => {
     registerUnauthorizedHandler(clearSession);
+    registerForbiddenHandler(() => {
+      void refreshProfile();
+    });
 
-    // Attempt silent session hydration via HttpOnly refresh cookie on initial page load
     authApi
       .refresh()
       .then((res) => {
@@ -56,7 +76,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       .finally(() => {
         setLoading(false);
       });
-  }, [clearSession]);
+  }, [clearSession, refreshProfile]);
 
   const login = useCallback(async (payload: LoginPayload) => {
     const res = await authApi.login(payload);
@@ -76,7 +96,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const changePassword = useCallback(
     async (payload: ChangePasswordPayload) => {
       const message = await authApi.changePassword(payload);
-      // Force reauthentication after password change
       clearSession();
       return message;
     },
@@ -107,10 +126,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       login,
       logout,
       changePassword,
+      refreshProfile,
       hasPermission,
       hasAnyPermission,
     }),
-    [user, loading, login, logout, changePassword, hasPermission, hasAnyPermission]
+    [user, loading, login, logout, changePassword, refreshProfile, hasPermission, hasAnyPermission]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
@@ -119,8 +139,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 export function useAuth(): AuthContextValue {
   const ctx = useContext(AuthContext);
   if (!ctx) {
-    throw new Error('useAuth must be used inside AuthProvider');
+    throw new Error('useAuth must be used within AuthProvider');
   }
   return ctx;
 }
-

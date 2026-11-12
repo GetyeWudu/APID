@@ -1,92 +1,60 @@
-import { useEffect, useState } from 'react';
-import { BrowserRouter, useRoutes, type RouteObject } from 'react-router-dom';
-import { AuthProvider, useAuth } from './AuthContext';
-import { apiClient, type ApiResponse } from '../shared/api/apiClient';
-import { AppLayout } from '../shared/components/AppLayout';
-import { ProtectedRoute } from '../shared/components/ProtectedRoute';
-import { LoginPage } from '../features/auth/pages/LoginPage';
-import { ChangePasswordPage } from '../features/auth/pages/ChangePasswordPage';
+import { Suspense } from 'react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { ShieldOff } from 'lucide-react';
+import { BrowserRouter, Navigate, useRoutes } from 'react-router-dom';
 import { adminRoutes } from '../features/admin/routes';
+import { ChangePasswordPage } from '../features/auth/pages/ChangePasswordPage';
+import { LoginPage } from '../features/auth/pages/LoginPage';
 import { coachingRoutes } from '../features/coaching/routes';
 import { mentoringRoutes } from '../features/mentoring/routes';
+import { workspaceRoutes } from '../features/workspace/routes';
+import { resolveLandingWorkspace } from '../shared/auth/workspaceResolver';
+import { AppLayout } from '../shared/components/AppLayout';
+import { ProtectedRoute } from '../shared/components/ProtectedRoute';
+import { EmptyState, LoadingSkeleton, ToastProvider } from '../shared/components/ui';
+import { AuthProvider, useAuth } from './AuthContext';
 
-interface HealthPayload {
-  service: string;
-  status: string;
-  modules: string[];
-}
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      retry: 1,
+      staleTime: 30_000,
+      refetchOnWindowFocus: false,
+    },
+  },
+});
 
-function HomePage() {
-  const { user, hasPermission } = useAuth();
-  const [statusText, setStatusText] = useState<string>('Checking backend...');
-  const [healthy, setHealthy] = useState<boolean | null>(null);
+export function AdaptiveHomeRouter() {
+  const { user, logout } = useAuth();
+  if (!user) return <Navigate to="/login" replace />;
 
-  useEffect(() => {
-    apiClient
-      .get<ApiResponse<HealthPayload>>('/core/health')
-      .then((res) => {
-        setHealthy(true);
-        setStatusText(`${res.data.data.service}: ${res.data.data.status}`);
-      })
-      .catch(() => {
-        setHealthy(false);
-        setStatusText('Backend unreachable');
-      });
-  }, []);
-
-  return (
-    <div>
-      <div className="apid-card">
-        <h2>Welcome, {user?.username}</h2>
-        <p>
-          Active Roles: <strong>{user?.roles.join(', ') || 'None'}</strong>
-        </p>
-        <p>
-          Backend API Status:{' '}
-          <strong
-            style={{
-              color: healthy === null ? 'inherit' : healthy ? 'var(--ok)' : 'var(--err)',
-            }}
-          >
-            {statusText}
-          </strong>
-        </p>
+  const target = resolveLandingWorkspace(user.permissions, user.id);
+  if (!target) {
+    return (
+      <div className="apid-card" data-testid="no-authorized-modules">
+        <EmptyState
+          title="No Authorized Modules"
+          description={`Account "${user.username}" is signed in, but currently has zero dashboard permissions assigned. Contact your Bank of Abyssinia System Administrator to grant workspace permissions.`}
+          icon={<ShieldOff size={34} />}
+          action={
+            <button
+              type="button"
+              className="apid-btn apid-btn-outline apid-btn-sm"
+              onClick={() => void logout()}
+            >
+              Sign Out
+            </button>
+          }
+        />
       </div>
+    );
+  }
 
-      <div className="apid-grid">
-        <div className="apid-card">
-          <h2>Active Permissions ({user?.permissions.length ?? 0})</h2>
-          <p style={{ fontSize: '0.85rem', wordBreak: 'break-word' }}>
-            {user?.permissions.join(', ') || 'None'}
-          </p>
-        </div>
-        {hasPermission('USER_MANAGE') && (
-          <div className="apid-card">
-            <h2>Admin Access Active</h2>
-            <p>You hold administrative governance permissions for Phase 2+ modules.</p>
-          </div>
-        )}
-      </div>
-    </div>
-  );
+  return <Navigate to={target.route} replace />;
 }
 
-function wrapRoutes(
-  routes: RouteObject[],
-  requiredAnyPermissions?: string[]
-): RouteObject[] {
-  return routes.map((r) => ({
-    ...r,
-    element: (
-      <ProtectedRoute requiredAnyPermissions={requiredAnyPermissions}>
-        {r.element}
-      </ProtectedRoute>
-    ),
-  }));
-}
-
-function AppRoutes() {
-  return useRoutes([
+export function AppRoutes() {
+  const element = useRoutes([
     { path: '/login', element: <LoginPage /> },
     {
       path: '/change-password',
@@ -100,31 +68,49 @@ function AppRoutes() {
       path: '/',
       element: (
         <ProtectedRoute>
-          <HomePage />
+          <AdaptiveHomeRouter />
         </ProtectedRoute>
       ),
     },
-    ...wrapRoutes(coachingRoutes),
-    ...wrapRoutes(mentoringRoutes),
-    ...wrapRoutes(adminRoutes, [
-      'USER_MANAGE',
-      'HIERARCHY_MANAGE',
-      'ROLE_PERMISSION_MANAGE',
-      'SYSTEM_CONFIG_MANAGE',
-      'AUDIT_LOG_VIEW',
-      'SKILL_MANAGE',
-    ]),
+    ...workspaceRoutes,
+    ...coachingRoutes,
+    ...mentoringRoutes,
+    ...adminRoutes,
+    {
+      path: '*',
+      element: (
+        <ProtectedRoute>
+          <AdaptiveHomeRouter />
+        </ProtectedRoute>
+      ),
+    },
   ]);
+
+  return (
+    <Suspense
+      fallback={
+        <div className="apid-card">
+          <LoadingSkeleton rows={6} height={26} />
+        </div>
+      }
+    >
+      {element}
+    </Suspense>
+  );
 }
 
 export function App() {
   return (
-    <BrowserRouter>
-      <AuthProvider>
-        <AppLayout>
-          <AppRoutes />
-        </AppLayout>
-      </AuthProvider>
-    </BrowserRouter>
+    <QueryClientProvider client={queryClient}>
+      <ToastProvider>
+        <BrowserRouter>
+          <AuthProvider>
+            <AppLayout>
+              <AppRoutes />
+            </AppLayout>
+          </AuthProvider>
+        </BrowserRouter>
+      </ToastProvider>
+    </QueryClientProvider>
   );
 }
