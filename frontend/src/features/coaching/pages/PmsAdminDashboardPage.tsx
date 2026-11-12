@@ -67,7 +67,7 @@ const PMS_TABS: PmsTabMeta[] = [
 
 export function PmsAdminDashboardPage() {
   const { hasAnyPermission } = useAuth();
-  const [searchParams, setSearchParams] = useSearchParams();
+  const [searchParams] = useSearchParams();
 
   const [filters, setFilters] = useState<PmsDashboardFilters>({
     performanceQuarter: 'FY26/27 Q1',
@@ -119,14 +119,6 @@ export function PmsAdminDashboardPage() {
       return patch ? { ...req, status: patch.status, reviewReason: patch.reviewReason } : req;
     });
   }, [overviewQuery.data, requestOverrides]);
-
-  const selectTab = (key: PmsTabKey) => {
-    if (key === 'overview') {
-      setSearchParams({});
-    } else {
-      setSearchParams({ tab: key });
-    }
-  };
 
   if (!hasAnyPermission(PMS_MODULE_PERMISSIONS) || !activeTab) {
     return (
@@ -220,25 +212,6 @@ export function PmsAdminDashboardPage() {
                 <option value="HR & Corporate Services">HR &amp; Corporate Services</option>
               </select>
             </div>
-          </div>
-
-          <div className="apid-tabs" role="tablist" aria-label="PMS Coaching sections" style={{ borderBottom: 'none', paddingBottom: 0 }}>
-            {visibleTabs.map((tab) => {
-              const active = tab.key === activeTab;
-              return (
-                <button
-                  key={tab.key}
-                  type="button"
-                  role="tab"
-                  aria-selected={active}
-                  className={`apid-tab ${active ? 'active' : ''}`}
-                  onClick={() => selectTab(tab.key)}
-                >
-                  {tab.label}
-                  {tab.key === 'approvals' && pendingApprovalsCount > 0 && ` (${pendingApprovalsCount})`}
-                </button>
-              );
-            })}
           </div>
         </div>
       </div>

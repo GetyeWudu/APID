@@ -1,8 +1,11 @@
 import { useMemo, useState, type ReactNode } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import {
   Activity,
+  ArrowLeft,
   Award,
   BarChart3,
+  BookOpen,
   Building2,
   ChevronLeft,
   ChevronRight,
@@ -14,22 +17,29 @@ import {
   LayoutDashboard,
   LogOut,
   Menu,
+  MessageSquare,
   RefreshCw,
   Settings2,
   ShieldCheck,
   SlidersHorizontal,
+  UserCheck,
   Users,
   X,
 } from 'lucide-react';
 import { NavLink, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../app/AuthContext';
 import {
+  EMPLOYEE_WORKSPACE_PERMISSIONS,
+  getActiveModuleFromPath,
   getSavedPreferredWorkspace,
+  resolveAuthorizedModules,
   resolveAuthorizedWorkspaces,
   savePreferredWorkspace,
+  type PortalModuleKey,
   type WorkspaceKey,
 } from '../auth/workspaceResolver';
-import { PREVIEW_NOTIFICATIONS } from '../mocks/boaPreviewFixtures';
+import { coreConfigApi } from '../../features/admin/config/api/coreConfigApi';
+import { workspaceLiveApi } from '../../features/workspace/api/workspaceDashboardApi';
 import { AvatarBadge, NotificationBellPopover, useToast } from './ui';
 
 interface NavEntry {
@@ -59,178 +69,261 @@ export function AppLayout({ children }: { children: ReactNode }) {
     getSavedPreferredWorkspace(user?.id)
   );
 
+  const activeConfigQuery = useQuery({
+    queryKey: ['core', 'active-config'],
+    queryFn: coreConfigApi.getActiveConfig,
+    enabled: Boolean(isAuthenticated && user && !user.mustChangePassword),
+    staleTime: 60_000,
+  });
+  const activeQuarterLabel = activeConfigQuery.data?.activeQuarter?.label ?? 'FY 2026/27 · Q2';
+
   const authorizedWorkspaces = useMemo(
     () => (user ? resolveAuthorizedWorkspaces(user.permissions) : []),
     [user]
   );
 
-  const navGroups: NavGroup[] = useMemo(
-    () => [
-      {
-        id: 'workspace',
-        label: 'My Workspace',
-        items: [
-          {
-            to: '/workspace',
-            label: 'Overview',
-            icon: <Home size={17} />,
-            requiredAnyPermissions: ['EMPLOYEE_PORTAL_ACCESS', 'COACHING_REQUEST_SUBMIT'],
-          },
-          {
-            to: '/workspace?tab=coaching',
-            label: 'My Coaching',
-            icon: <ClipboardCheck size={17} />,
-            requiredAnyPermissions: ['EMPLOYEE_PORTAL_ACCESS', 'COACHING_REQUEST_SUBMIT'],
-            matchSearch: '?tab=coaching',
-          },
-          {
-            to: '/workspace?tab=mentoring',
-            label: 'My Mentoring',
-            icon: <Award size={17} />,
-            requiredAnyPermissions: ['EMPLOYEE_PORTAL_ACCESS'],
-            matchSearch: '?tab=mentoring',
-          },
-        ],
-      },
-      {
-        id: 'pms',
-        label: 'PMS Administration',
-        items: [
-          {
-            to: '/coaching/pms',
-            label: 'Coaching Overview',
-            icon: <BarChart3 size={17} />,
-            requiredAnyPermissions: [
-              'COACHING_ASSIGNMENT_VIEW_ALL',
-              'COACHING_COACH_REPLACE',
-              'COACHING_INITIATIVE_CREATE',
-              'COACHING_REPORT_VIEW_ALL',
-            ],
-          },
-          {
-            to: '/coaching/pms?tab=uploads',
-            label: 'Appraisal Upload',
-            icon: <FileSpreadsheet size={17} />,
-            requiredAnyPermissions: ['PMS_REPORT_UPLOAD'],
-            matchSearch: '?tab=uploads',
-          },
-          {
-            to: '/coaching/pms?tab=approvals',
-            label: 'Skill Requests',
-            icon: <GitPullRequest size={17} />,
-            requiredAnyPermissions: ['COACHING_REQUEST_APPROVE'],
-            matchSearch: '?tab=approvals',
-          },
-        ],
-      },
-      {
-        id: 'hr',
-        label: 'HR Mentoring',
-        items: [
-          {
-            to: '/mentoring/hr',
-            label: 'Mentoring Overview',
-            icon: <LayoutDashboard size={17} />,
-            requiredAnyPermissions: ['MENTORING_REPORT_VIEW_ALL', 'TRAINER_APPLICATION_REVIEW', 'MENTORING_MATCH_MANAGE'],
-          },
-          {
-            to: '/mentoring/hr?tab=applications',
-            label: 'Trainer Applications',
-            icon: <ClipboardCheck size={17} />,
-            requiredAnyPermissions: ['TRAINER_APPLICATION_REVIEW'],
-            matchSearch: '?tab=applications',
-          },
-          {
-            to: '/mentoring/hr?tab=trainers',
-            label: 'Approved Trainers',
-            icon: <Award size={17} />,
-            requiredAnyPermissions: ['TRAINER_DIRECT_APPOINT', 'TRAINER_STATUS_MANAGE'],
-            matchSearch: '?tab=trainers',
-          },
-          {
-            to: '/mentoring/hr?tab=matching',
-            label: 'Match Requests',
-            icon: <GitPullRequest size={17} />,
-            requiredAnyPermissions: ['MENTORING_MATCH_MANAGE'],
-            matchSearch: '?tab=matching',
-          },
-        ],
-      },
-      {
-        id: 'admin',
-        label: 'System Administration',
-        items: [
-          {
-            to: '/admin',
-            label: 'Overview',
-            icon: <LayoutDashboard size={17} />,
-            requiredAnyPermissions: [
-              'USER_MANAGE',
-              'HIERARCHY_MANAGE',
-              'ROLE_PERMISSION_MANAGE',
-              'AUDIT_LOG_VIEW',
-              'SKILL_MANAGE',
-              'SYSTEM_CONFIG_MANAGE',
-            ],
-          },
-          {
-            to: '/admin?tab=users',
-            label: 'Users & Access',
-            icon: <Users size={17} />,
-            requiredAnyPermissions: ['USER_MANAGE'],
-            matchSearch: '?tab=users',
-          },
-          {
-            to: '/admin?tab=organization',
-            label: 'Employees & Org',
-            icon: <Building2 size={17} />,
-            requiredAnyPermissions: ['HIERARCHY_MANAGE'],
-            matchSearch: '?tab=organization',
-          },
-          {
-            to: '/admin?tab=roles',
-            label: 'Roles & Permissions',
-            icon: <ShieldCheck size={17} />,
-            requiredAnyPermissions: ['ROLE_PERMISSION_MANAGE'],
-            matchSearch: '?tab=roles',
-          },
-          {
-            to: '/admin?tab=skills',
-            label: 'Skills',
-            icon: <Settings2 size={17} />,
-            requiredAnyPermissions: ['SKILL_MANAGE'],
-            matchSearch: '?tab=skills',
-          },
-          {
-            to: '/admin?tab=audit',
-            label: 'Activity Log',
-            icon: <Activity size={17} />,
-            requiredAnyPermissions: ['AUDIT_LOG_VIEW'],
-            matchSearch: '?tab=audit',
-          },
-          {
-            to: '/admin?tab=config',
-            label: 'Quarter Settings',
-            icon: <SlidersHorizontal size={17} />,
-            requiredAnyPermissions: ['SYSTEM_CONFIG_MANAGE'],
-            matchSearch: '?tab=config',
-          },
-        ],
-      },
-    ],
-    []
+  const authorizedModules = useMemo(
+    () => (user ? resolveAuthorizedModules(user.permissions) : []),
+    [user]
   );
 
-  const visibleGroups = useMemo(
-    () =>
-      navGroups
-        .map((group) => ({
-          ...group,
-          items: group.items.filter((item) => hasAnyPermission(item.requiredAnyPermissions)),
-        }))
-        .filter((group) => group.items.length > 0),
-    [navGroups, hasAnyPermission]
+  const activeModule = getActiveModuleFromPath(location.pathname);
+
+  const hasEmployeeAccess = Boolean(
+    isAuthenticated && user && !user.mustChangePassword && hasAnyPermission(EMPLOYEE_WORKSPACE_PERMISSIONS)
   );
+
+  const identityQuery = useQuery({
+    queryKey: ['workspace', 'identity', user?.id],
+    queryFn: workspaceLiveApi.loadMyIdentity,
+    enabled: hasEmployeeAccess,
+    staleTime: 60_000,
+  });
+
+  const canCoachDirectReports =
+    (identityQuery.data?.directReports.length ?? 0) > 0 ||
+    Boolean(user?.permissions.includes('COACHING_REQUEST_SUBMIT'));
+
+  const moduleNavGroups = useMemo<Record<PortalModuleKey, NavGroup[]>>(
+    () => ({
+      coaching: [
+        {
+          id: 'coaching-personal',
+          label: 'My Coaching',
+          items: [
+            {
+              to: '/coaching',
+              label: 'My Coach & Plan',
+              icon: <ClipboardCheck size={17} />,
+              requiredAnyPermissions: EMPLOYEE_WORKSPACE_PERMISSIONS,
+            },
+            {
+              to: '/coaching?view=sessions',
+              label: 'Sessions & Channel',
+              icon: <MessageSquare size={17} />,
+              requiredAnyPermissions: EMPLOYEE_WORKSPACE_PERMISSIONS,
+              matchSearch: '?view=sessions',
+            },
+            ...(canCoachDirectReports
+              ? [
+                  {
+                    to: '/coaching?view=coachees',
+                    label: 'People I Coach',
+                    icon: <UserCheck size={17} />,
+                    requiredAnyPermissions: EMPLOYEE_WORKSPACE_PERMISSIONS,
+                    matchSearch: '?view=coachees',
+                  },
+                ]
+              : []),
+          ],
+        },
+        {
+          id: 'coaching-pms',
+          label: 'PMS Administration',
+          items: [
+            {
+              to: '/coaching/pms',
+              label: 'Coaching Overview',
+              icon: <BarChart3 size={17} />,
+              requiredAnyPermissions: [
+                'COACHING_ASSIGNMENT_VIEW_ALL',
+                'COACHING_COACH_REPLACE',
+                'COACHING_INITIATIVE_CREATE',
+                'COACHING_REPORT_VIEW_ALL',
+              ],
+            },
+            {
+              to: '/coaching/pms?tab=uploads',
+              label: 'Appraisal Upload',
+              icon: <FileSpreadsheet size={17} />,
+              requiredAnyPermissions: ['PMS_REPORT_UPLOAD'],
+              matchSearch: '?tab=uploads',
+            },
+            {
+              to: '/coaching/pms?tab=approvals',
+              label: 'Skill Requests',
+              icon: <GitPullRequest size={17} />,
+              requiredAnyPermissions: ['COACHING_REQUEST_APPROVE'],
+              matchSearch: '?tab=approvals',
+            },
+            {
+              to: '/coaching/pms?tab=reports',
+              label: 'Coaching Reports',
+              icon: <LayoutDashboard size={17} />,
+              requiredAnyPermissions: ['COACHING_REPORT_VIEW_ALL'],
+              matchSearch: '?tab=reports',
+            },
+          ],
+        },
+      ],
+      mentoring: [
+        {
+          id: 'mentoring-personal',
+          label: 'My Mentoring',
+          items: [
+            {
+              to: '/mentoring',
+              label: 'My Mentor & Progress',
+              icon: <Award size={17} />,
+              requiredAnyPermissions: EMPLOYEE_WORKSPACE_PERMISSIONS,
+            },
+            {
+              to: '/mentoring?view=directory',
+              label: 'Find Certified Trainer',
+              icon: <BookOpen size={17} />,
+              requiredAnyPermissions: EMPLOYEE_WORKSPACE_PERMISSIONS,
+              matchSearch: '?view=directory',
+            },
+            {
+              to: '/mentoring?view=trainer',
+              label: 'Trainer Workspace',
+              icon: <Users size={17} />,
+              requiredAnyPermissions: EMPLOYEE_WORKSPACE_PERMISSIONS,
+              matchSearch: '?view=trainer',
+            },
+          ],
+        },
+        {
+          id: 'mentoring-hr',
+          label: 'HR Administration',
+          items: [
+            {
+              to: '/mentoring/hr',
+              label: 'Mentoring Overview',
+              icon: <LayoutDashboard size={17} />,
+              requiredAnyPermissions: [
+                'MENTORING_REPORT_VIEW_ALL',
+                'TRAINER_APPLICATION_REVIEW',
+                'MENTORING_MATCH_MANAGE',
+              ],
+            },
+            {
+              to: '/mentoring/hr?tab=applications',
+              label: 'Trainer Applications',
+              icon: <ClipboardCheck size={17} />,
+              requiredAnyPermissions: ['TRAINER_APPLICATION_REVIEW'],
+              matchSearch: '?tab=applications',
+            },
+            {
+              to: '/mentoring/hr?tab=trainers',
+              label: 'Approved Trainers',
+              icon: <Award size={17} />,
+              requiredAnyPermissions: ['TRAINER_DIRECT_APPOINT', 'TRAINER_STATUS_MANAGE'],
+              matchSearch: '?tab=trainers',
+            },
+            {
+              to: '/mentoring/hr?tab=matching',
+              label: 'Match Requests',
+              icon: <GitPullRequest size={17} />,
+              requiredAnyPermissions: ['MENTORING_MATCH_MANAGE'],
+              matchSearch: '?tab=matching',
+            },
+            {
+              to: '/mentoring/hr?tab=analytics',
+              label: 'Mentoring Reports',
+              icon: <BarChart3 size={17} />,
+              requiredAnyPermissions: ['MENTORING_REPORT_VIEW_ALL'],
+              matchSearch: '?tab=analytics',
+            },
+          ],
+        },
+      ],
+      admin: [
+        {
+          id: 'admin',
+          label: 'System Administration',
+          items: [
+            {
+              to: '/admin',
+              label: 'Overview',
+              icon: <LayoutDashboard size={17} />,
+              requiredAnyPermissions: [
+                'USER_MANAGE',
+                'HIERARCHY_MANAGE',
+                'ROLE_PERMISSION_MANAGE',
+                'AUDIT_LOG_VIEW',
+                'SKILL_MANAGE',
+                'SYSTEM_CONFIG_MANAGE',
+              ],
+            },
+            {
+              to: '/admin?tab=users',
+              label: 'Users & Access',
+              icon: <Users size={17} />,
+              requiredAnyPermissions: ['USER_MANAGE'],
+              matchSearch: '?tab=users',
+            },
+            {
+              to: '/admin?tab=organization',
+              label: 'Employees & Org',
+              icon: <Building2 size={17} />,
+              requiredAnyPermissions: ['HIERARCHY_MANAGE'],
+              matchSearch: '?tab=organization',
+            },
+            {
+              to: '/admin?tab=roles',
+              label: 'Roles & Permissions',
+              icon: <ShieldCheck size={17} />,
+              requiredAnyPermissions: ['ROLE_PERMISSION_MANAGE'],
+              matchSearch: '?tab=roles',
+            },
+            {
+              to: '/admin?tab=skills',
+              label: 'Skills',
+              icon: <Settings2 size={17} />,
+              requiredAnyPermissions: ['SKILL_MANAGE'],
+              matchSearch: '?tab=skills',
+            },
+            {
+              to: '/admin?tab=audit',
+              label: 'Activity Log',
+              icon: <Activity size={17} />,
+              requiredAnyPermissions: ['AUDIT_LOG_VIEW'],
+              matchSearch: '?tab=audit',
+            },
+            {
+              to: '/admin?tab=config',
+              label: 'Quarter Settings',
+              icon: <SlidersHorizontal size={17} />,
+              requiredAnyPermissions: ['SYSTEM_CONFIG_MANAGE'],
+              matchSearch: '?tab=config',
+            },
+          ],
+        },
+      ],
+    }),
+    [canCoachDirectReports]
+  );
+
+  const visibleGroups = useMemo(() => {
+    if (!activeModule) return [];
+    return moduleNavGroups[activeModule]
+      .map((group) => ({
+        ...group,
+        items: group.items.filter((item) => hasAnyPermission(item.requiredAnyPermissions)),
+      }))
+      .filter((group) => group.items.length > 0);
+  }, [activeModule, moduleNavGroups, hasAnyPermission]);
 
   // Full-bleed split auth layout without app chrome when unauthenticated or password-change-pending
   if (!isAuthenticated || !user || user.mustChangePassword) {
@@ -238,14 +331,23 @@ export function AppLayout({ children }: { children: ReactNode }) {
   }
 
   const pageMeta = (() => {
+    if (location.pathname === '/home') {
+      return { kicker: 'Bank of Abyssinia', title: 'APID Portal Home' };
+    }
     if (location.pathname.startsWith('/admin')) {
-      return { kicker: 'Bank of Abyssinia', title: 'System Administration' };
+      return { kicker: 'System Administration', title: 'Platform Governance & Settings' };
+    }
+    if (location.pathname.startsWith('/coaching/pms')) {
+      return { kicker: 'Performance Coaching', title: 'PMS Coaching Administration' };
     }
     if (location.pathname.startsWith('/coaching')) {
-      return { kicker: 'Bank of Abyssinia', title: 'PMS Coaching' };
+      return { kicker: 'Performance Coaching', title: 'Coaching Dashboard' };
+    }
+    if (location.pathname.startsWith('/mentoring/hr')) {
+      return { kicker: 'Mentoring & Trainers', title: 'HR Mentoring Administration' };
     }
     if (location.pathname.startsWith('/mentoring')) {
-      return { kicker: 'Bank of Abyssinia', title: 'HR Mentoring' };
+      return { kicker: 'Mentoring & Trainers', title: 'Mentoring Dashboard' };
     }
     if (location.pathname.startsWith('/workspace')) {
       return { kicker: 'Bank of Abyssinia', title: 'My Workspace' };
@@ -259,7 +361,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
     if (item.matchSearch) {
       return location.search === item.matchSearch;
     }
-    return location.search === '' || !location.search.includes('tab=');
+    return !location.search.includes('tab=') && !location.search.includes('view=');
   };
 
   const handleLogout = async () => {
@@ -287,9 +389,11 @@ export function AppLayout({ children }: { children: ReactNode }) {
     });
   };
 
+  const showSidebar = activeModule !== null;
+
   return (
     <div className="boa-shell">
-      {mobileOpen && (
+      {showSidebar && mobileOpen && (
         <div
           className="boa-sidebar-backdrop"
           onClick={() => setMobileOpen(false)}
@@ -297,96 +401,134 @@ export function AppLayout({ children }: { children: ReactNode }) {
         />
       )}
 
-      <aside className={`boa-sidebar ${collapsed ? 'collapsed' : ''} ${mobileOpen ? 'mobile-open' : ''}`}>
-        <div className="boa-sidebar-brand">
-          <div className="boa-brand-mark">
-            <span className="boa-brand-emblem">BoA</span>
-            {!collapsed && (
-              <div className="boa-brand-text">
-                <span className="boa-brand-title">APID Portal</span>
-                <span className="boa-brand-sub">Bank of Abyssinia</span>
-              </div>
-            )}
-          </div>
-          <button
-            type="button"
-            className="boa-icon-btn"
-            aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-            onClick={() => setCollapsed((c) => !c)}
-            title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-          >
-            {collapsed ? <ChevronRight size={16} /> : <ChevronLeft size={16} />}
-          </button>
-          {mobileOpen && (
+      {showSidebar && (
+        <aside className={`boa-sidebar ${collapsed ? 'collapsed' : ''} ${mobileOpen ? 'mobile-open' : ''}`}>
+          <div className="boa-sidebar-brand">
+            <div className="boa-brand-mark">
+              <span className="boa-brand-emblem">BoA</span>
+              {!collapsed && (
+                <div className="boa-brand-text">
+                  <span className="boa-brand-title">APID Portal</span>
+                  <span className="boa-brand-sub">Bank of Abyssinia</span>
+                </div>
+              )}
+            </div>
             <button
               type="button"
               className="boa-icon-btn"
-              aria-label="Close mobile menu"
-              onClick={() => setMobileOpen(false)}
+              aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+              onClick={() => setCollapsed((c) => !c)}
+              title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
             >
-              <X size={16} />
+              {collapsed ? <ChevronRight size={16} /> : <ChevronLeft size={16} />}
             </button>
-          )}
-        </div>
+            {mobileOpen && (
+              <button
+                type="button"
+                className="boa-icon-btn"
+                aria-label="Close mobile menu"
+                onClick={() => setMobileOpen(false)}
+              >
+                <X size={16} />
+              </button>
+            )}
+          </div>
 
-        <nav className="boa-sidebar-nav" aria-label="Main navigation">
-          {visibleGroups.map((group) => (
-            <div key={group.id}>
-              {!collapsed && <div className="boa-nav-group-label">{group.label}</div>}
-              <div className="boa-nav-items">
-                {group.items.map((item) => (
-                  <NavLink
-                    key={item.to}
-                    to={item.to}
-                    className={() => `boa-nav-link ${isNavItemActive(item) ? 'active' : ''}`}
-                    onClick={() => setMobileOpen(false)}
-                    title={collapsed ? item.label : undefined}
-                  >
-                    {item.icon}
-                    {!collapsed && <span>{item.label}</span>}
-                  </NavLink>
-                ))}
+          <nav className="boa-sidebar-nav" aria-label="Module navigation">
+            <NavLink
+              to="/home"
+              className="boa-sidebar-home-link"
+              onClick={() => setMobileOpen(false)}
+              title="Back to All Modules"
+            >
+              <ArrowLeft size={15} />
+              {!collapsed && <span>All Modules</span>}
+            </NavLink>
+
+            {visibleGroups.map((group) => (
+              <div key={group.id}>
+                {!collapsed && <div className="boa-nav-group-label">{group.label}</div>}
+                <div className="boa-nav-items">
+                  {group.items.map((item) => (
+                    <NavLink
+                      key={item.to}
+                      to={item.to}
+                      className={() => `boa-nav-link ${isNavItemActive(item) ? 'active' : ''}`}
+                      onClick={() => setMobileOpen(false)}
+                      title={collapsed ? item.label : undefined}
+                    >
+                      {item.icon}
+                      {!collapsed && <span>{item.label}</span>}
+                    </NavLink>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </nav>
+
+          {!collapsed && (
+            <div className="boa-sidebar-footer">
+              <div style={{ fontWeight: 600, color: '#e2e8f0' }}>{user.username}</div>
+              <div style={{ fontSize: '0.72rem', marginTop: '0.15rem' }}>
+                {user.roles.join(', ') || 'No Role'} · {user.permissions.length} perms
               </div>
             </div>
-          ))}
-        </nav>
-
-        {!collapsed && (
-          <div className="boa-sidebar-footer">
-            <div style={{ fontWeight: 600, color: '#e2e8f0' }}>{user.username}</div>
-            <div style={{ fontSize: '0.72rem', marginTop: '0.15rem' }}>
-              {user.roles.join(', ') || 'No Role'} · {user.permissions.length} perms
-            </div>
-          </div>
-        )}
-      </aside>
+          )}
+        </aside>
+      )}
 
       <div className="boa-main-column">
         <header className="boa-topbar">
           <div className="boa-topbar-left">
-            <button
-              type="button"
-              className="boa-mobile-menu-btn"
-              aria-label="Open navigation menu"
-              onClick={() => setMobileOpen(true)}
-            >
-              <Menu size={18} />
-            </button>
+            {showSidebar ? (
+              <button
+                type="button"
+                className="boa-mobile-menu-btn"
+                aria-label="Open navigation menu"
+                onClick={() => setMobileOpen(true)}
+              >
+                <Menu size={18} />
+              </button>
+            ) : (
+              <div className="boa-brand-mark boa-brand-mark--light" style={{ marginRight: '0.5rem' }}>
+                <span className="boa-brand-emblem">BoA</span>
+              </div>
+            )}
             <div className="boa-breadcrumb">
               <span className="boa-breadcrumb-kicker">{pageMeta.kicker}</span>
               <span className="boa-breadcrumb-title">{pageMeta.title}</span>
             </div>
+
+            {location.pathname !== '/home' && authorizedModules.length > 0 && (
+              <nav className="boa-module-switcher" aria-label="Module switcher">
+                <NavLink to="/home" className="boa-module-pill">
+                  <Home size={13} />
+                  <span>Home</span>
+                </NavLink>
+                {authorizedModules.map((mod) => (
+                  <NavLink
+                    key={mod.key}
+                    to={mod.route}
+                    className={() =>
+                      `boa-module-pill ${activeModule === mod.key ? 'active' : ''}`
+                    }
+                  >
+                    {mod.shortLabel}
+                  </NavLink>
+                ))}
+              </nav>
+            )}
           </div>
 
           <div className="boa-topbar-right">
             <span
               className="boa-quarter-pill"
-              title="Current fiscal quarter"
+              title="Active fiscal quarter"
             >
-              FY 2026/27 · Q1
+              {activeQuarterLabel}
             </span>
 
-            <NotificationBellPopover initialItems={PREVIEW_NOTIFICATIONS} />
+            <NotificationBellPopover />
 
             <div className="boa-popover-anchor">
               <button

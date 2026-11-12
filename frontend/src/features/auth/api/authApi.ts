@@ -1,4 +1,10 @@
-import { apiClient, type ApiResponse } from '../../../shared/api/apiClient';
+import {
+  apiClient,
+  clearRefreshSessionCache,
+  fetchCsrfToken,
+  performSingleFlightRefresh,
+  type ApiResponse,
+} from '../../../shared/api/apiClient';
 import type {
   AuthResponse,
   ChangePasswordPayload,
@@ -7,27 +13,32 @@ import type {
 } from '../types/auth.types';
 
 export const authApi = {
-  async initCsrf(): Promise<void> {
-    await apiClient.get('/core/auth/csrf');
+  async initCsrf(): Promise<string | undefined> {
+    return fetchCsrfToken();
   },
 
   async login(payload: LoginPayload): Promise<AuthResponse> {
+    clearRefreshSessionCache();
     const res = await apiClient.post<ApiResponse<AuthResponse>>('/core/auth/login', payload);
     return res.data.data;
   },
 
   async refresh(): Promise<AuthResponse> {
-    await authApi.initCsrf();
-    const res = await apiClient.post<ApiResponse<AuthResponse>>('/core/auth/refresh', {});
-    return res.data.data;
+    return performSingleFlightRefresh<AuthResponse>(true);
   },
 
   async logout(): Promise<void> {
-    await authApi.initCsrf();
-    await apiClient.post('/core/auth/logout', {});
+    clearRefreshSessionCache();
+    const csrfToken = await fetchCsrfToken();
+    await apiClient.post(
+      '/core/auth/logout',
+      {},
+      { headers: csrfToken ? { 'X-XSRF-TOKEN': csrfToken } : undefined }
+    );
   },
 
   async changePassword(payload: ChangePasswordPayload): Promise<string> {
+    clearRefreshSessionCache();
     const res = await apiClient.post<ApiResponse<null>>('/core/auth/change-password', payload);
     return res.data.message;
   },

@@ -15,6 +15,7 @@ import type {
   UserProfile,
 } from '../features/auth/types/auth.types';
 import {
+  clearRefreshSessionCache,
   getAccessToken,
   registerForbiddenHandler,
   registerUnauthorizedHandler,
@@ -41,6 +42,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const lastSyncRef = useRef<number>(0);
 
   const clearSession = useCallback(() => {
+    clearRefreshSessionCache();
     setAccessToken(null);
     setUser(null);
   }, []);
@@ -59,6 +61,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   useEffect(() => {
+    let active = true;
     registerUnauthorizedHandler(clearSession);
     registerForbiddenHandler(() => {
       void refreshProfile();
@@ -68,14 +71,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       .refresh()
       .then((res) => {
         setAccessToken(res.accessToken);
-        setUser(res.user);
+        if (active) {
+          setUser(res.user);
+        }
       })
       .catch(() => {
-        clearSession();
+        if (active) {
+          clearSession();
+        }
       })
       .finally(() => {
-        setLoading(false);
+        if (active) {
+          setLoading(false);
+        }
       });
+
+    return () => {
+      active = false;
+    };
   }, [clearSession, refreshProfile]);
 
   const login = useCallback(async (payload: LoginPayload) => {

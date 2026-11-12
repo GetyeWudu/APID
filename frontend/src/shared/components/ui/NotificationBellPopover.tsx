@@ -1,7 +1,9 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Bell, CheckCheck } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-import { DataSourceBadge } from './DataSourceBadge';
+import { useAuth } from '../../../app/AuthContext';
+import { notificationsApi, type NotificationItem } from '../../api/notificationsApi';
 
 export interface PreviewNotificationItem {
   id: string;
@@ -13,120 +15,162 @@ export interface PreviewNotificationItem {
   read: boolean;
 }
 
-/**
- * Persistent user-targeted notifications (strictly separate from Audit Logs and immediate Toasts).
- * Currently backed by preview items until Phase 4 core.notifications is implemented.
- */
-export function NotificationBellPopover({
-  initialItems,
-  onNavigate,
-}: {
-  initialItems: PreviewNotificationItem[];
-  onNavigate?: () => void;
-}) {
-  const [open, setOpen] = useState(false);
-  const [items, setItems] = useState<PreviewNotificationItem[]>(initialItems);
+function formatRelativeTime(isoDate: string): string {
+  const diffMs = Date.now() - new Date(isoDate).getTime();
+  const minutes = Math.max(0, Math.floor(diffMs / 60_000));
+  if (minutes < 1) return 'Just now';
+  if (minutes < 60) return `${minutes}m ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.floor(hours / 24);
+  return `${days}d ago`;
+}
+
+function moduleAccent(module: NotificationItem['module']): string {
+  if (module === 'COACHING') return '#1d4ed8';
+  if (module === 'MENTORING') return '#0f766e';
+  return '#475569';
+}
+
+export function NotificationBellPopover() {
+  const { isAuthenticated, user } = useAuth();
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
+  const [open, setOpen] = useState(false);
+  const rootRef = useRef<HTMLDivElement>(null);
 
-  const unreadCount = items.filter((i) => !i.read).length;
+  const notificationsQuery = useQuery({
+    queryKey: ['core', 'notifications', 'popover'],
+    queryFn: () => notificationsApi.list({ page: 0, size: 15 }),
+    enabled: Boolean(isAuthenticated && user && !user.mustChangePassword),
+    refetchInterval: 60_000,
+    refetchOnWindowFocus: true,
+  });
 
-  const markAllRead = () => {
-    setItems((prev) => prev.map((item) => ({ ...item, read: true })));
-  };
+  const markReadMutation = useMutation({
+    mutationFn: (id: number) => notificationsApi.markRead(id),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ['core', 'notifications'] });
+    },
+  });
 
-  const handleOpenItem = (item: PreviewNotificationItem) => {
-    setItems((prev) => prev.map((x) => (x.id === item.id ? { ...x, read: true } : x)));
+  const markAllReadMutation = useMutation({
+    mutationFn: () => notificationsApi.markAllRead(),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ['core', 'notifications'] });
+    },
+  });
+
+  useEffect(() => {
+    const handleOutsideClick = (event: MouseEvent) => {
+      if (rootRef.current && !rootRef.current.contains(event.target as Node)) {
+        setOpen(false);
+      }
+    };
+    const handleEsc = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setOpen(false);
+    };
+    if (open) {
+      document.addEventListener('mousedown', handleOutsideClick);
+      document.addEventListener('keydown', handleEsc);
+    }
+    return () => {
+      document.removeEventListener('mousedown', handleOutsideClick);
+      document.removeEventListener('keydown', handleEsc);
+    };
+  }, [open]);
+
+  const items = notificationsQuery.data?.items ?? [];
+  const unreadCount = notificationsQuery.data?.unreadCount ?? 0;
+
+  const handleSelectItem = async (item: NotificationItem) => {
+    if (!item.read) {
+      await markReadMutation.mutateAsync(item.id);
+    }
     setOpen(false);
-    navigate(item.targetRoute);
-    onNavigate?.();
+    if (item.deepLink) {
+      navigate(item.deepLink);
+    }
   };
 
   return (
-    <div className="boa-popover-anchor">
+    <div ref={rootRef} className="boa-popover-anchor">
       <button
         type="button"
-        className="apid-btn apid-btn-outline"
+        className="boa-icon-btn"
         aria-label={`Notifications (${unreadCount} unread)`}
         aria-expanded={open}
         onClick={() => setOpen((o) => !o)}
-        style={{ padding: '0.42rem 0.65rem', position: 'relative' }}
       >
-        <Bell size={17} />
-        {unreadCount > 0 && (
-          <span
-            className="tabular-nums"
-            style={{
-              background: '#b91c1c',
-              color: '#ffffff',
-              fontSize: '0.68rem',
-              fontWeight: 700,
-              borderRadius: 999,
-              padding: '0.05rem 0.38rem',
-              lineHeight: 1.3,
-            }}
-          >
-            {unreadCount}
-          </span>
-        )}
+        <Bell size={18} />
+        {unreadCount > 0 && <span className="boa-bell-badge">{unreadCount > 99 ? '99+' : unreadCount}</span>}
       </button>
 
       {open && (
-        <div className="boa-popover-panel" role="dialog" aria-label="User notifications">
-          <div
-            style={{
-              padding: '0.8rem 1rem',
-              borderBottom: '1px solid var(--border)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              gap: '0.5rem',
-            }}
-          >
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem' }}>
+        <div className="boa-popover-panel" role="dialog" aria-label="Notifications">
+          <div className="boa-popover-header">
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
               <strong style={{ fontSize: '0.9rem' }}>Notifications</strong>
-              <DataSourceBadge source="preview" />
+              {unreadCount > 0 && (
+                <span className="apid-badge apid-badge-warn" style={{ fontSize: '0.7rem' }}>
+                  {unreadCount} unread
+                </span>
+              )}
             </div>
             {unreadCount > 0 && (
-              <button type="button" className="apid-btn apid-btn-sm" onClick={markAllRead}>
-                <CheckCheck size={13} />
-                Mark read
+              <button
+                type="button"
+                className="boa-link-btn"
+                disabled={markAllReadMutation.isPending}
+                onClick={() => void markAllReadMutation.mutateAsync()}
+                style={{ fontSize: '0.76rem', display: 'inline-flex', alignItems: 'center', gap: '0.25rem' }}
+              >
+                <CheckCheck size={13} /> Mark all read
               </button>
             )}
           </div>
 
-          <div style={{ maxHeight: 320, overflowY: 'auto' }}>
-            {items.length === 0 ? (
-              <div style={{ padding: '1.5rem 1rem', textAlign: 'center', color: 'var(--muted)', fontSize: '0.85rem' }}>
-                No user notifications.
+          <div className="boa-popover-list">
+            {notificationsQuery.isLoading ? (
+              <div style={{ padding: '1rem', fontSize: '0.82rem', color: 'var(--muted)', textAlign: 'center' }}>
+                Loading alerts...
+              </div>
+            ) : notificationsQuery.isError ? (
+              <div style={{ padding: '1rem', fontSize: '0.82rem', color: 'var(--danger)', textAlign: 'center' }}>
+                Unable to load notifications.
+              </div>
+            ) : items.length === 0 ? (
+              <div style={{ padding: '1.25rem', fontSize: '0.84rem', color: 'var(--muted)', textAlign: 'center' }}>
+                All caught up — no notifications yet.
               </div>
             ) : (
               items.map((item) => (
                 <button
                   key={item.id}
                   type="button"
-                  onClick={() => handleOpenItem(item)}
-                  style={{
-                    width: '100%',
-                    textAlign: 'left',
-                    padding: '0.8rem 1rem',
-                    border: 'none',
-                    borderBottom: '1px solid var(--border)',
-                    background: item.read ? 'var(--surface)' : '#fffbeb',
-                    cursor: 'pointer',
-                    display: 'block',
-                  }}
+                  className={`boa-notif-item ${!item.read ? 'unread' : ''}`}
+                  onClick={() => void handleSelectItem(item)}
                 >
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '0.5rem' }}>
-                    <span style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--brand)' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', gap: '0.5rem' }}>
+                    <span
+                      style={{
+                        fontSize: '0.7rem',
+                        fontWeight: 700,
+                        letterSpacing: '0.04em',
+                        color: moduleAccent(item.module),
+                      }}
+                    >
                       {item.module}
                     </span>
-                    <span style={{ fontSize: '0.72rem', color: 'var(--muted-soft)' }}>{item.timeAgo}</span>
+                    <span style={{ fontSize: '0.72rem', color: 'var(--muted)' }}>
+                      {formatRelativeTime(item.createdAt)}
+                    </span>
                   </div>
-                  <div style={{ fontWeight: item.read ? 500 : 700, fontSize: '0.85rem', marginTop: '0.15rem', color: 'var(--text)' }}>
+                  <div style={{ fontWeight: 600, fontSize: '0.84rem', marginTop: '0.15rem' }}>
                     {item.title}
                   </div>
-                  <div style={{ fontSize: '0.79rem', color: 'var(--muted)', marginTop: '0.15rem', lineHeight: 1.35 }}>
-                    {item.body}
+                  <div style={{ fontSize: '0.79rem', color: 'var(--muted)', marginTop: '0.15rem' }}>
+                    {item.message}
                   </div>
                 </button>
               ))
@@ -137,4 +181,3 @@ export function NotificationBellPopover({
     </div>
   );
 }
-

@@ -1,9 +1,20 @@
 export type WorkspaceKey = 'admin' | 'pms' | 'hr' | 'workspace';
 
+export type PortalModuleKey = 'coaching' | 'mentoring' | 'admin';
+
 export interface WorkspaceDefinition {
   key: WorkspaceKey;
   label: string;
   description: string;
+  route: string;
+  requiredAnyPermissions: string[];
+}
+
+export interface PortalModuleDefinition {
+  key: PortalModuleKey;
+  title: string;
+  shortLabel: string;
+  tagline: string;
   route: string;
   requiredAnyPermissions: string[];
 }
@@ -74,8 +85,69 @@ export const WORKSPACE_DEFINITIONS: WorkspaceDefinition[] = [
   },
 ];
 
+export const COACHING_PORTAL_PERMISSIONS = [
+  ...EMPLOYEE_WORKSPACE_PERMISSIONS,
+  ...PMS_MODULE_PERMISSIONS,
+];
+
+export const MENTORING_PORTAL_PERMISSIONS = [
+  ...EMPLOYEE_WORKSPACE_PERMISSIONS,
+  ...HR_MODULE_PERMISSIONS,
+];
+
 function hasAny(permissions: string[], required: string[]): boolean {
   return required.some((code) => permissions.includes(code));
+}
+
+export function resolveAuthorizedModules(permissions: string[]): PortalModuleDefinition[] {
+  const modules: PortalModuleDefinition[] = [];
+
+  if (hasAny(permissions, COACHING_PORTAL_PERMISSIONS)) {
+    const hasEmployee = hasAny(permissions, EMPLOYEE_WORKSPACE_PERMISSIONS);
+    modules.push({
+      key: 'coaching',
+      title: 'Performance Coaching',
+      shortLabel: 'Coaching',
+      tagline:
+        'My coaching plan & sessions, coaching assigned team members, and PMS appraisal oversight.',
+      route: hasEmployee ? '/coaching' : '/coaching/pms',
+      requiredAnyPermissions: COACHING_PORTAL_PERMISSIONS,
+    });
+  }
+
+  if (hasAny(permissions, MENTORING_PORTAL_PERMISSIONS)) {
+    const hasEmployee = hasAny(permissions, EMPLOYEE_WORKSPACE_PERMISSIONS);
+    modules.push({
+      key: 'mentoring',
+      title: 'Mentoring & Trainers',
+      shortLabel: 'Mentoring',
+      tagline:
+        'Find certified trainers, track mentoring sessions, apply as a trainer, and HR matching.',
+      route: hasEmployee ? '/mentoring' : '/mentoring/hr',
+      requiredAnyPermissions: MENTORING_PORTAL_PERMISSIONS,
+    });
+  }
+
+  if (hasAny(permissions, ADMIN_MODULE_PERMISSIONS)) {
+    modules.push({
+      key: 'admin',
+      title: 'System Administration',
+      shortLabel: 'System Admin',
+      tagline:
+        'User accounts, organization directory & imports, roles & permissions, skills, activity log, and quarter settings.',
+      route: '/admin',
+      requiredAnyPermissions: ADMIN_MODULE_PERMISSIONS,
+    });
+  }
+
+  return modules;
+}
+
+export function getActiveModuleFromPath(pathname: string): PortalModuleKey | null {
+  if (pathname.startsWith('/admin')) return 'admin';
+  if (pathname.startsWith('/coaching')) return 'coaching';
+  if (pathname.startsWith('/mentoring')) return 'mentoring';
+  return null;
 }
 
 export function resolveAuthorizedWorkspaces(permissions: string[]): WorkspaceDefinition[] {

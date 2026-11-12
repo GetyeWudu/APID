@@ -63,7 +63,7 @@ const HR_TABS: HrTabMeta[] = [
 
 export function HrMentoringDashboardPage() {
   const { hasAnyPermission } = useAuth();
-  const [searchParams, setSearchParams] = useSearchParams();
+  const [searchParams] = useSearchParams();
 
   // Client-only preview session state overrides
   const [appOverrides, setAppOverrides] = useState<
@@ -115,14 +115,6 @@ export function HrMentoringDashboardPage() {
     [overviewQuery.data, matchedRequests]
   );
 
-  const selectTab = (key: HrTabKey) => {
-    if (key === 'overview') {
-      setSearchParams({});
-    } else {
-      setSearchParams({ tab: key });
-    }
-  };
-
   if (!hasAnyPermission(HR_MODULE_PERMISSIONS) || !activeTab) {
     return (
       <div className="apid-card">
@@ -139,6 +131,7 @@ export function HrMentoringDashboardPage() {
     (t) => t.employmentStatus === 'ACTIVE' && t.trainerAuthStatus === 'ACTIVE'
   ).length;
   const awaitingMatch = mergedRequests.filter((r) => r.status === 'AWAITING_HR_MATCH').length;
+
   const activeTabMeta = visibleTabs.find((t) => t.key === activeTab) ?? visibleTabs[0];
 
   return (
@@ -148,28 +141,6 @@ export function HrMentoringDashboardPage() {
         subtitle="Review trainer applications, manage trainer availability, and match trainees with approved trainers."
         source="preview"
       />
-
-      <div className="apid-card" style={{ padding: '0.75rem 1rem' }}>
-        <div className="apid-tabs" role="tablist" aria-label="HR Mentoring sections">
-          {visibleTabs.map((tab) => {
-            const active = tab.key === activeTab;
-            return (
-              <button
-                key={tab.key}
-                type="button"
-                role="tab"
-                aria-selected={active}
-                className={`apid-tab ${active ? 'active' : ''}`}
-                onClick={() => selectTab(tab.key)}
-              >
-                {tab.label}
-                {tab.key === 'applications' && pendingApps > 0 && ` (${pendingApps})`}
-                {tab.key === 'matching' && awaitingMatch > 0 && ` (${awaitingMatch})`}
-              </button>
-            );
-          })}
-        </div>
-      </div>
 
       {overviewQuery.isLoading ? (
         <LoadingSkeleton rows={6} height={28} />

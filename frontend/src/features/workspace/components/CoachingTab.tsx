@@ -20,12 +20,14 @@ export function CoachingTab({
   activeSkills,
   chatMessages,
   onAppendChat,
+  section = 'all',
 }: {
   workspace: PreviewWorkspaceData;
   directReports: EmployeeItem[];
   activeSkills: SkillItem[];
   chatMessages: ChatMessageItem[];
   onAppendChat: (body: string) => void;
+  section?: 'all' | 'talent' | 'coachees' | 'chat';
 }) {
   const { pushToast } = useToast();
   const [joinSession, setJoinSession] = useState<{ title: string; time: string } | null>(null);
@@ -66,11 +68,20 @@ export function CoachingTab({
     setReqJustification('');
   };
 
+  const showTalent = section === 'all' || section === 'talent';
+  const showCoachees = section === 'all' || section === 'coachees';
+  const showChat = section === 'all' || section === 'chat';
+
   return (
     <div className="boa-stack">
-      <div className="boa-grid-2" style={{ marginBottom: 0 }}>
-        {/* Talent Coaching View */}
-        <div className="apid-card">
+      {(showTalent || showCoachees) && (
+        <div
+          className={showTalent && showCoachees ? 'boa-grid-2' : 'boa-stack'}
+          style={{ marginBottom: 0 }}
+        >
+          {/* Talent Coaching View */}
+          {showTalent && (
+            <div className="apid-card">
           <div className="boa-card-header">
             <div>
               <h3 className="boa-card-title">My Active Coaching Plan (Talent)</h3>
@@ -137,11 +148,13 @@ export function CoachingTab({
                 </button>
               </div>
             </div>
+            )}
+          </div>
           )}
-        </div>
 
-        {/* Manager / Coach View */}
-        <div className="apid-card">
+          {/* Manager / Coach View */}
+          {showCoachees && (
+            <div className="apid-card">
           <div className="boa-card-header">
             <div>
               <h3 className="boa-card-title">Manager &amp; Coach View</h3>
@@ -215,17 +228,21 @@ export function CoachingTab({
                   </div>
                 );
               })}
-            </div>
+              </div>
+            )}
+          </div>
           )}
         </div>
-      </div>
+      )}
 
-      <IsolatedChatPanel
-        contextTitle="Coaching Channel (Talent ↔ Coach)"
-        contextKey="coaching"
-        messages={chatMessages}
-        onSendMessage={onAppendChat}
-      />
+      {showChat && (
+        <IsolatedChatPanel
+          contextTitle="Coaching Channel (Talent ↔ Coach)"
+          contextKey="coaching"
+          messages={chatMessages}
+          onSendMessage={onAppendChat}
+        />
+      )}
 
       <SessionJoinPreviewModal
         open={Boolean(joinSession)}

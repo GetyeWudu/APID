@@ -4,7 +4,7 @@ import { useAuth } from '../../../app/AuthContext';
 import { EmptyState, PageHeader, PermissionGate } from '../../../shared/components/ui';
 import { ADMIN_MODULE_PERMISSIONS } from '../../../shared/auth/workspaceResolver';
 import { AuditLogsPanel } from '../audit/components/AuditLogsPanel';
-import { SystemConfigPreviewPanel } from '../config/SystemConfigPreviewPanel';
+import { SystemConfigPanel } from '../config/SystemConfigPanel';
 import { OrganizationPanel } from '../organization/components/OrganizationPanel';
 import { AdminOverviewPanel } from '../overview/AdminOverviewPanel';
 import { RolesPanel } from '../roles/components/RolesPanel';
@@ -76,14 +76,14 @@ const ADMIN_TABS: AdminTabMeta[] = [
     key: 'config',
     label: 'Quarter Settings',
     anyPermissions: ['SYSTEM_CONFIG_MANAGE'],
-    source: 'preview',
-    subtitle: 'Configure fiscal quarter dates and missed-session alert thresholds.',
+    source: 'live',
+    subtitle: 'Configure fiscal quarter dates, active cycle, and system rules.',
   },
 ];
 
 export function AdminDashboardPage() {
   const { hasAnyPermission } = useAuth();
-  const [searchParams, setSearchParams] = useSearchParams();
+  const [searchParams] = useSearchParams();
 
   const visibleTabs = useMemo(
     () => ADMIN_TABS.filter((t) => hasAnyPermission(t.anyPermissions)),
@@ -93,14 +93,6 @@ export function AdminDashboardPage() {
   const requestedTab = searchParams.get('tab') as AdminTabKey | null;
   const activeTabMeta =
     visibleTabs.find((t) => t.key === requestedTab) ?? visibleTabs[0] ?? null;
-
-  const selectTab = (key: AdminTabKey) => {
-    if (key === 'overview') {
-      setSearchParams({});
-    } else {
-      setSearchParams({ tab: key });
-    }
-  };
 
   if (!activeTabMeta) {
     return (
@@ -121,26 +113,6 @@ export function AdminDashboardPage() {
         source={activeTabMeta.source}
         phaseLabel={activeTabMeta.phaseLabel}
       />
-
-      <div className="apid-card" style={{ padding: '0.75rem 1rem' }}>
-        <div className="apid-tabs" role="tablist" aria-label="System Admin sections">
-          {visibleTabs.map((tab) => {
-            const active = tab.key === activeTabMeta.key;
-            return (
-              <button
-                key={tab.key}
-                type="button"
-                role="tab"
-                aria-selected={active}
-                className={`apid-tab ${active ? 'active' : ''}`}
-                onClick={() => selectTab(tab.key)}
-              >
-                {tab.label}
-              </button>
-            );
-          })}
-        </div>
-      </div>
 
       {activeTabMeta.key === 'overview' && (
         <PermissionGate anyPermissions={ADMIN_MODULE_PERMISSIONS}>
@@ -174,7 +146,7 @@ export function AdminDashboardPage() {
       )}
       {activeTabMeta.key === 'config' && (
         <PermissionGate permission="SYSTEM_CONFIG_MANAGE">
-          <SystemConfigPreviewPanel />
+          <SystemConfigPanel />
         </PermissionGate>
       )}
     </div>

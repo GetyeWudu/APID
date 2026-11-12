@@ -6,9 +6,10 @@ import { adminRoutes } from '../features/admin/routes';
 import { ChangePasswordPage } from '../features/auth/pages/ChangePasswordPage';
 import { LoginPage } from '../features/auth/pages/LoginPage';
 import { coachingRoutes } from '../features/coaching/routes';
+import { PortalHomePage } from '../features/home/PortalHomePage';
 import { mentoringRoutes } from '../features/mentoring/routes';
 import { workspaceRoutes } from '../features/workspace/routes';
-import { resolveLandingWorkspace } from '../shared/auth/workspaceResolver';
+import { resolveAuthorizedModules } from '../shared/auth/workspaceResolver';
 import { AppLayout } from '../shared/components/AppLayout';
 import { ProtectedRoute } from '../shared/components/ProtectedRoute';
 import { EmptyState, LoadingSkeleton, ToastProvider } from '../shared/components/ui';
@@ -28,8 +29,8 @@ export function AdaptiveHomeRouter() {
   const { user, logout } = useAuth();
   if (!user) return <Navigate to="/login" replace />;
 
-  const target = resolveLandingWorkspace(user.permissions, user.id);
-  if (!target) {
+  const modules = resolveAuthorizedModules(user.permissions);
+  if (modules.length === 0) {
     return (
       <div className="apid-card" data-testid="no-authorized-modules">
         <EmptyState
@@ -50,7 +51,7 @@ export function AdaptiveHomeRouter() {
     );
   }
 
-  return <Navigate to={target.route} replace />;
+  return <Navigate to="/home" replace />;
 }
 
 export function AppRoutes() {
@@ -61,6 +62,14 @@ export function AppRoutes() {
       element: (
         <ProtectedRoute allowPasswordChangePending>
           <ChangePasswordPage />
+        </ProtectedRoute>
+      ),
+    },
+    {
+      path: '/home',
+      element: (
+        <ProtectedRoute>
+          <PortalHomePage />
         </ProtectedRoute>
       ),
     },

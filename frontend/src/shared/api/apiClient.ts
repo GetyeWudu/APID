@@ -43,9 +43,14 @@ apiClient.interceptors.request.use((config) => {
   return config;
 });
 
-let refreshInFlight: Promise<string | null> | null = null;
+let refreshInFlight: Promise<unknown> | null = null;
+let lastSilentRefresh: { payload: unknown; expiresAt: number } | null = null;
 let onUnauthorizedCallback: (() => void) | null = null;
 let onForbiddenCallback: (() => void) | null = null;
+
+export function clearRefreshSessionCache(): void {
+  lastSilentRefresh = null;
+}
 
 export function registerUnauthorizedHandler(cb: () => void): void {
   onUnauthorizedCallback = cb;
@@ -55,22 +60,63 @@ export function registerForbiddenHandler(cb: () => void): void {
   onForbiddenCallback = cb;
 }
 
-async function performSilentRefresh(): Promise<string | null> {
-  try {
-    // Ensure CSRF cookie is present before cookie-authenticated refresh POST
-    await axios.get('/api/v1/core/auth/csrf', { withCredentials: true });
-    const res = await axios.post<ApiResponse<{ accessToken: string }>>(
+export async function fetchCsrfToken(): Promise<string | undefined> {
+  const res = await axios.get<ApiResponse<string>>('/api/v1/core/auth/csrf', {
+    withCredentials: true,
+  });
+  return res.data?.data;
+}
+
+export async function performSingleFlightRefresh<T = { accessToken: string }>(
+  allowRecentReuse = false
+): Promise<T> {
+  if (allowRecentReuse && lastSilentRefresh && Date.now() < lastSilentRefresh.expiresAt) {
+    return lastSilentRefresh.payload as T;
+  }
+
+  if (refreshInFlight) {
+    return refreshInFlight as Promise<T>;
+  }
+
+  const run = (async () => {
+    const csrfToken = await fetchCsrfToken();
+    const res = await axios.post<ApiResponse<T>>(
       '/api/v1/core/auth/refresh',
       {},
       {
         withCredentials: true,
         xsrfCookieName: 'XSRF-TOKEN',
         xsrfHeaderName: 'X-XSRF-TOKEN',
+        headers: csrfToken ? { 'X-XSRF-TOKEN': csrfToken } : undefined,
       }
     );
-    const nextToken = res.data.data.accessToken;
-    setAccessToken(nextToken);
-    return nextToken;
+    const payload = res.data.data;
+    const token = (payload as { accessToken?: string })?.accessToken;
+    if (token) {
+      setAccessToken(token);
+    }
+    // Brief grace cache protects React 18 StrictMode double-mount from rotating the same cookie twice
+    lastSilentRefresh = { payload, expiresAt: Date.now() + 500 };
+    return payload;
+  })()
+    .catch((err) => {
+      lastSilentRefresh = null;
+      throw err;
+    })
+    .finally(() => {
+      if (refreshInFlight === run) {
+        refreshInFlight = null;
+      }
+    });
+
+  refreshInFlight = run;
+  return run;
+}
+
+async function performSilentRefresh(): Promise<string | null> {
+  try {
+    const payload = await performSingleFlightRefresh<{ accessToken: string }>(false);
+    return payload.accessToken ?? null;
   } catch {
     setAccessToken(null);
     return null;
@@ -94,13 +140,7 @@ apiClient.interceptors.response.use(
     }
 
     originalRequest._retry = true;
-    if (!refreshInFlight) {
-      refreshInFlight = performSilentRefresh().finally(() => {
-        refreshInFlight = null;
-      });
-    }
-
-    const refreshedToken = await refreshInFlight;
+    const refreshedToken = await performSilentRefresh();
     if (!refreshedToken) {
       if (onUnauthorizedCallback) {
         onUnauthorizedCallback();

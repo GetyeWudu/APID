@@ -15,12 +15,14 @@ export function MentoringTab({
   activeSkills,
   chatMessages,
   onAppendChat,
+  section = 'all',
 }: {
   workspace: PreviewWorkspaceData;
   availableTrainers: PreviewCertifiedTrainer[];
   activeSkills: SkillItem[];
   chatMessages: ChatMessageItem[];
   onAppendChat: (body: string) => void;
+  section?: 'all' | 'trainee' | 'trainer' | 'directory';
 }) {
   const { pushToast } = useToast();
   const [skillFilter, setSkillFilter] = useState('ALL');
@@ -63,11 +65,21 @@ export function MentoringTab({
     pushToast({ title: `Trainee Request ${decision} (Preview)`, message: res.message, tone: 'info' });
   };
 
+  const showTrainee = section === 'all' || section === 'trainee';
+  const showTrainer = section === 'all' || section === 'trainer';
+  const showDirectory = section === 'all' || section === 'directory';
+  const showChat = section === 'all' || section === 'trainee';
+
   return (
     <div className="boa-stack">
-      <div className="boa-grid-2" style={{ marginBottom: 0 }}>
-        {/* Trainee progress */}
-        <div className="apid-card">
+      {(showTrainee || showTrainer) && (
+        <div
+          className={showTrainee && showTrainer ? 'boa-grid-2' : 'boa-stack'}
+          style={{ marginBottom: 0 }}
+        >
+          {/* Trainee progress */}
+          {showTrainee && (
+            <div className="apid-card">
           <div className="boa-card-header">
             <div>
               <h3 className="boa-card-title">My Mentoring Progress (Trainee)</h3>
@@ -115,11 +127,13 @@ export function MentoringTab({
                 {workspace.mentoringAsTrainee.milestoneNote}
               </div>
             </div>
+            )}
+          </div>
           )}
-        </div>
 
-        {/* Apply / Trainer Role */}
-        <div className="apid-card">
+          {/* Apply / Trainer Role */}
+          {showTrainer && (
+            <div className="apid-card">
           <div className="boa-card-header">
             <div>
               <h3 className="boa-card-title">Trainer Certification &amp; Mentorship</h3>
@@ -206,12 +220,15 @@ export function MentoringTab({
                 );
               })}
             </div>
+            )}
+          </div>
           )}
         </div>
-      </div>
+      )}
 
       {/* Certified Trainer Browse Directory */}
-      <div className="apid-card">
+      {showDirectory && (
+        <div className="apid-card">
         <div className="boa-card-header">
           <div>
             <h3 className="boa-card-title">Certified Trainer Directory</h3>
@@ -284,13 +301,16 @@ export function MentoringTab({
           })}
         </div>
       </div>
+      )}
 
-      <IsolatedChatPanel
-        contextTitle="Mentoring Channel (Trainee ↔ Trainer)"
-        contextKey="mentoring"
-        messages={chatMessages}
-        onSendMessage={onAppendChat}
-      />
+      {showChat && (
+        <IsolatedChatPanel
+          contextTitle="Mentoring Channel (Trainee ↔ Trainer)"
+          contextKey="mentoring"
+          messages={chatMessages}
+          onSendMessage={onAppendChat}
+        />
+      )}
 
       {showApplyModal && (
         <div

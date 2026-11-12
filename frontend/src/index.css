@@ -1195,4 +1195,242 @@ textarea:focus-visible {
   .boa-quarter-pill {
     display: none;
   }
+
+  .boa-module-switcher {
+    display: none;
+  }
+}
+
+/* =========================================================
+   Portal Home (Module Cards) & Scoped Module Navigation
+   ========================================================= */
+
+.boa-portal-home {
+  display: flex;
+  flex-direction: column;
+  gap: 1.35rem;
+  max-width: 1220px;
+  margin: 0 auto;
+}
+
+.boa-home-hero {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1.25rem;
+  flex-wrap: wrap;
+  padding: 1.35rem 1.5rem;
+  background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%);
+  border-left: 4px solid var(--brand, #d97706);
+}
+
+.boa-home-hero-main {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.boa-home-kicker {
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--brand, #b45309);
+}
+
+.boa-home-title {
+  margin: 0.15rem 0 0.2rem;
+  font-size: 1.38rem;
+  font-weight: 800;
+  color: var(--text, #0f172a);
+}
+
+.boa-home-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem 1rem;
+  font-size: 0.84rem;
+  color: var(--muted, #475569);
+}
+
+.boa-home-hero-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+  align-items: center;
+}
+
+.boa-module-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 1.1rem;
+}
+
+.boa-module-card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.9rem;
+  padding: 1.35rem;
+  text-decoration: none;
+  color: inherit;
+  border: 1px solid var(--border, #e2e8f0);
+  border-top: 3px solid var(--brand, #d97706);
+  transition: transform 0.16s ease, box-shadow 0.16s ease, border-color 0.16s ease;
+}
+
+.boa-module-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 12px 26px rgba(15, 23, 42, 0.08);
+  border-color: #cbd5e1;
+}
+
+.boa-module-card--coaching {
+  border-top-color: #0284c7;
+}
+
+.boa-module-card--mentoring {
+  border-top-color: #059669;
+}
+
+.boa-module-card--admin {
+  border-top-color: #b45309;
+}
+
+.boa-module-card-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.boa-module-icon {
+  width: 44px;
+  height: 44px;
+  border-radius: 11px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: #eff6ff;
+  color: #0284c7;
+}
+
+.boa-module-icon--coaching {
+  background: #e0f2fe;
+  color: #0369a1;
+}
+
+.boa-module-icon--mentoring {
+  background: #d1fae5;
+  color: #047857;
+}
+
+.boa-module-icon--admin {
+  background: #fef3c7;
+  color: #b45309;
+}
+
+.boa-module-title {
+  margin: 0 0 0.35rem;
+  font-size: 1.08rem;
+  font-weight: 700;
+  color: var(--text, #0f172a);
+}
+
+.boa-module-tagline {
+  margin: 0;
+  font-size: 0.85rem;
+  color: var(--muted, #475569);
+  line-height: 1.5;
+}
+
+.boa-module-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin-top: auto;
+}
+
+.boa-module-chip {
+  font-size: 0.75rem;
+  font-weight: 600;
+  padding: 0.22rem 0.58rem;
+  border-radius: 999px;
+  background: #f1f5f9;
+  color: #334155;
+  border: 1px solid #e2e8f0;
+}
+
+.boa-module-cta {
+  display: inline-flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-top: 0.65rem;
+  border-top: 1px solid var(--border, #e2e8f0);
+  font-size: 0.86rem;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.boa-module-card:hover .boa-module-cta {
+  color: var(--brand, #b45309);
+}
+
+.boa-sidebar-home-link {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  margin: 0.25rem 0.55rem 0.75rem;
+  padding: 0.5rem 0.7rem;
+  border-radius: 8px;
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: #cbd5e1;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  text-decoration: none;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.boa-sidebar-home-link:hover {
+  background: rgba(255, 255, 255, 0.12);
+  color: #ffffff;
+}
+
+.boa-module-switcher {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  margin-left: 1rem;
+  padding: 0.22rem;
+  border-radius: 999px;
+  background: #f1f5f9;
+  border: 1px solid #e2e8f0;
+}
+
+.boa-module-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.32rem;
+  padding: 0.26rem 0.68rem;
+  border-radius: 999px;
+  font-size: 0.77rem;
+  font-weight: 600;
+  color: #475569;
+  text-decoration: none;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.boa-module-pill:hover {
+  color: #0f172a;
+  background: rgba(255, 255, 255, 0.7);
+}
+
+.boa-module-pill.active {
+  background: #0f172a;
+  color: #ffffff;
+}
+
+.boa-brand-mark--light .boa-brand-emblem {
+  box-shadow: 0 2px 6px rgba(15, 23, 42, 0.15);
 }

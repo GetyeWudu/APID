@@ -58,7 +58,9 @@ public class RedisCacheConfig implements CachingConfigurer {
                 .withInitialCacheConfigurations(Map.of(
                         "user_permissions", baseConfig.entryTtl(Duration.ofMinutes(5)),
                         "skills_catalog", baseConfig.entryTtl(Duration.ofMinutes(30)),
-                        "org_departments", baseConfig.entryTtl(Duration.ofMinutes(30))
+                        "org_departments", baseConfig.entryTtl(Duration.ofMinutes(30)),
+                        "fiscal_quarters", baseConfig.entryTtl(Duration.ofMinutes(30)),
+                        "system_configs", baseConfig.entryTtl(Duration.ofMinutes(30))
                 ))
                 .build();
     }

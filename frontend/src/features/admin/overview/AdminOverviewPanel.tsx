@@ -14,7 +14,8 @@ import {
 } from '../../../shared/components/ui';
 import { auditApi } from '../audit/api/auditApi';
 import type { AuditEvent } from '../audit/types/audit.types';
-import { adminSummaryLiveApi, systemConfigPreviewAdapter } from './api/adminSummaryApi';
+import { coreConfigApi } from '../config/api/coreConfigApi';
+import { adminSummaryLiveApi } from './api/adminSummaryApi';
 
 export function AdminOverviewPanel() {
   const { hasPermission, hasAnyPermission } = useAuth();
@@ -43,9 +44,9 @@ export function AdminOverviewPanel() {
     enabled: canAudit,
   });
 
-  const configPreviewQuery = useQuery({
-    queryKey: ['admin', 'config-preview'],
-    queryFn: systemConfigPreviewAdapter.getConfig,
+  const activeConfigQuery = useQuery({
+    queryKey: ['core', 'active-config'],
+    queryFn: coreConfigApi.getActiveConfig,
   });
 
   if (summaryQuery.isLoading) {
@@ -200,14 +201,14 @@ export function AdminOverviewPanel() {
             <div style={{ marginTop: '0.35rem', paddingTop: '0.65rem', borderTop: '1px dashed var(--border)' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
                 <strong style={{ fontSize: '0.84rem' }}>Fiscal Quarter &amp; Cutoffs</strong>
-                <DataSourceBadge source="preview" />
+                <DataSourceBadge source="live" />
               </div>
-              {configPreviewQuery.data && (
+              {activeConfigQuery.data && (
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem', fontSize: '0.8rem', color: 'var(--muted)' }}>
-                  <div>Active Cycle: <strong>{configPreviewQuery.data.activeFiscalYear} · {configPreviewQuery.data.activeQuarter}</strong></div>
-                  <div>Mandatory Cutoff: <strong className="tabular-nums">Rounded &lt; {configPreviewQuery.data.mandatoryCutoffRounded}</strong></div>
-                  <div>Missed-Session Alert: <strong className="tabular-nums">{configPreviewQuery.data.missedSessionAlertThreshold} missed</strong></div>
-                  <div>Max Upload Size: <strong className="tabular-nums">{configPreviewQuery.data.maxFileUploadMb} MB</strong></div>
+                  <div>Active Cycle: <strong>{activeConfigQuery.data.activeQuarter.label}</strong></div>
+                  <div>Mandatory Cutoff: <strong className="tabular-nums">Rounded &lt; {activeConfigQuery.data.publicConfig.mandatoryCutoffRounded}</strong></div>
+                  <div>Missed-Session Alert: <strong className="tabular-nums">{activeConfigQuery.data.publicConfig.missedSessionAlertThreshold} missed</strong></div>
+                  <div>Max Upload Size: <strong className="tabular-nums">{activeConfigQuery.data.publicConfig.maxFileUploadMb} MB</strong></div>
                 </div>
               )}
             </div>

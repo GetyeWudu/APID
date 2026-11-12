@@ -1,3 +1,5 @@
+import { StrictMode } from 'react';
+import axios from 'axios';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
@@ -20,13 +22,20 @@ import { mentoringPreviewAdapter } from '../features/mentoring/api/mentoringDash
 import { TrainerRosterTab } from '../features/mentoring/components/TrainerRosterTab';
 import { workspaceLiveApi } from '../features/workspace/api/workspaceDashboardApi';
 import { WorkspaceDashboardPage } from '../features/workspace/pages/WorkspaceDashboardPage';
-import { apiClient } from '../shared/api/apiClient';
+import { apiClient, clearRefreshSessionCache, getAccessToken } from '../shared/api/apiClient';
+import { AuthProvider } from '../app/AuthContext';
+import { ProtectedRoute } from '../shared/components/ProtectedRoute';
 import {
   resolveLandingWorkspace,
   savePreferredWorkspace,
 } from '../shared/auth/workspaceResolver';
 import { AppLayout } from '../shared/components/AppLayout';
-import { ToastProvider } from '../shared/components/ui';
+import { PortalHomePage } from '../features/home/PortalHomePage';
+import { AdminDashboardPage } from '../features/admin/pages/AdminDashboardPage';
+import { ToastProvider, NotificationBellPopover } from '../shared/components/ui';
+import { coreConfigApi } from '../features/admin/config/api/coreConfigApi';
+import { SystemConfigPanel } from '../features/admin/config/SystemConfigPanel';
+import { notificationsApi } from '../shared/api/notificationsApi';
 import { PREVIEW_CERTIFIED_TRAINERS } from '../shared/mocks/boaPreviewFixtures';
 
 function buildAuthMock(user: UserProfile | null) {
@@ -129,8 +138,71 @@ describe('Adaptive workspace resolver & RBAC multi-hat preferences', () => {
   });
 });
 
-describe('AppLayout permission-based sidebar isolation', () => {
-  it('hides unauthorized navigation groups completely for employee-only users', () => {
+describe('Portal Home module cards & scoped sidebar isolation', () => {
+  it('shows Coaching and Mentoring cards to employee-only users and strictly hides System Administration', async () => {
+    vi.spyOn(AuthContextModule, 'useAuth').mockReturnValue(
+      buildAuthMock({
+        id: 7,
+        username: 'abebe.bekele',
+        mustChangePassword: false,
+        roles: ['Employee'],
+        permissions: ['EMPLOYEE_PORTAL_ACCESS', 'COACHING_REQUEST_SUBMIT'],
+      })
+    );
+    vi.spyOn(workspaceLiveApi, 'loadMyIdentity').mockResolvedValue({
+      linkedEmployee: null,
+      directReports: [],
+      activeSkills: [],
+    });
+    vi.spyOn(coreConfigApi, 'getActiveConfig').mockResolvedValue({
+      activeQuarter: {
+        quarterId: 2,
+        fiscalYear: '2026/27',
+        quarter: 2,
+        label: 'FY 2026/27 · Q2',
+        startDate: '2026-10-01',
+        endDate: '2026-12-31',
+      },
+      calendarQuarterLabel: 'FY 2026/27 · Q2',
+      publicConfig: {
+        mandatoryCutoffRounded: 3,
+        missedSessionAlertThreshold: 2,
+        inactivityReminderDays: 14,
+        maxFileUploadMb: 25,
+      },
+    });
+
+    renderWithProviders(<PortalHomePage />, '/home');
+
+    expect(await screen.findByTestId('module-card-coaching')).toBeInTheDocument();
+    expect(screen.getByTestId('module-card-mentoring')).toBeInTheDocument();
+    expect(screen.queryByTestId('module-card-admin')).not.toBeInTheDocument();
+  });
+
+  it('shows all three module cards including System Administration for Super Admin', async () => {
+    vi.spyOn(AuthContextModule, 'useAuth').mockReturnValue(
+      buildAuthMock({
+        id: 1,
+        username: 'admin',
+        mustChangePassword: false,
+        roles: ['Super Admin'],
+        permissions: ['EMPLOYEE_PORTAL_ACCESS', 'USER_MANAGE', 'HIERARCHY_MANAGE', 'SYSTEM_CONFIG_MANAGE'],
+      })
+    );
+    vi.spyOn(workspaceLiveApi, 'loadMyIdentity').mockResolvedValue({
+      linkedEmployee: null,
+      directReports: [],
+      activeSkills: [],
+    });
+
+    renderWithProviders(<PortalHomePage />, '/home');
+
+    expect(await screen.findByTestId('module-card-coaching')).toBeInTheDocument();
+    expect(screen.getByTestId('module-card-mentoring')).toBeInTheDocument();
+    expect(screen.getByTestId('module-card-admin')).toBeInTheDocument();
+  });
+
+  it('scopes the Coaching sidebar strictly to coaching features and hides unauthorized modules', () => {
     vi.spyOn(AuthContextModule, 'useAuth').mockReturnValue(
       buildAuthMock({
         id: 7,
@@ -143,15 +215,74 @@ describe('AppLayout permission-based sidebar isolation', () => {
 
     renderWithProviders(
       <AppLayout>
-        <div>Workspace Content</div>
+        <div>Coaching Content</div>
       </AppLayout>,
-      '/workspace'
+      '/coaching'
     );
 
-    expect(screen.getAllByText('My Workspace').length).toBeGreaterThan(0);
+    expect(screen.getByText('My Coaching')).toBeInTheDocument();
+    expect(screen.getByText('My Coach & Plan')).toBeInTheDocument();
+    expect(screen.getByText('Sessions & Channel')).toBeInTheDocument();
+    expect(screen.getByText('People I Coach')).toBeInTheDocument();
+    expect(screen.getByText('All Modules')).toBeInTheDocument();
+
+    // Scoped away on Coaching page
+    expect(screen.queryByText('My Mentoring')).not.toBeInTheDocument();
+    expect(screen.queryByText('PMS Administration')).not.toBeInTheDocument();
+    expect(screen.queryByText('HR Administration')).not.toBeInTheDocument();
+    expect(screen.queryByText('System Administration')).not.toBeInTheDocument();
+  });
+
+  it('shows personal + HR Admin features inside Mentoring sidebar for HR Admin and excludes duplicate tabs in Admin', () => {
+    vi.spyOn(AuthContextModule, 'useAuth').mockReturnValue(
+      buildAuthMock({
+        id: 5,
+        username: 'hr.admin',
+        mustChangePassword: false,
+        roles: ['HR Admin'],
+        permissions: [
+          'EMPLOYEE_PORTAL_ACCESS',
+          'TRAINER_APPLICATION_REVIEW',
+          'MENTORING_MATCH_MANAGE',
+          'MENTORING_REPORT_VIEW_ALL',
+        ],
+      })
+    );
+
+    const { unmount } = renderWithProviders(
+      <AppLayout>
+        <div>Mentoring Content</div>
+      </AppLayout>,
+      '/mentoring'
+    );
+
+    expect(screen.getByText('My Mentoring')).toBeInTheDocument();
+    expect(screen.getByText('HR Administration')).toBeInTheDocument();
+    expect(screen.getByText('Trainer Applications')).toBeInTheDocument();
+    expect(screen.getByText('Match Requests')).toBeInTheDocument();
     expect(screen.queryByText('System Administration')).not.toBeInTheDocument();
     expect(screen.queryByText('PMS Administration')).not.toBeInTheDocument();
-    expect(screen.queryByText('HR Mentoring')).not.toBeInTheDocument();
+    unmount();
+
+    // System Admin renders left sidebar cleanly without duplicate horizontal tab strip
+    vi.spyOn(AuthContextModule, 'useAuth').mockReturnValue(
+      buildAuthMock({
+        id: 1,
+        username: 'admin',
+        mustChangePassword: false,
+        roles: ['Super Admin'],
+        permissions: ['EMPLOYEE_PORTAL_ACCESS', 'USER_MANAGE', 'SYSTEM_CONFIG_MANAGE'],
+      })
+    );
+    renderWithProviders(
+      <AppLayout>
+        <AdminDashboardPage />
+      </AppLayout>,
+      '/admin?tab=users'
+    );
+
+    expect(screen.getAllByText('System Administration').length).toBeGreaterThan(0);
+    expect(screen.queryByRole('tablist', { name: 'System Administration sections' })).not.toBeInTheDocument();
   });
 });
 
@@ -464,5 +595,201 @@ describe('LinkUserModal Create New User & Link', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Done & Close' }));
     await waitFor(() => expect(onUpdated).toHaveBeenCalledTimes(1));
     expect(onClose).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('Phase 4 live SystemConfigPanel, NotificationBellPopover & AppLayout quarter pill', () => {
+  it('renders live admin config + quarters, enforces locked quarter UI & confirms activation', async () => {
+    vi.spyOn(coreConfigApi, 'getActiveConfig').mockResolvedValue({
+      activeQuarter: {
+        quarterId: 2,
+        fiscalYear: '2026/27',
+        quarter: 2,
+        label: 'FY 2026/27 · Q2',
+        startDate: '2026-10-01',
+        endDate: '2026-12-31',
+      },
+      calendarQuarterLabel: 'FY 2026/27 · Q2',
+      publicConfig: {
+        mandatoryCutoffRounded: 3,
+        missedSessionAlertThreshold: 2,
+        inactivityReminderDays: 14,
+        maxFileUploadMb: 25,
+      },
+    });
+    vi.spyOn(coreConfigApi, 'getAdminConfig').mockResolvedValue({
+      configs: [
+        {
+          configKey: 'coaching.mandatory_cutoff_rounded',
+          configValue: '3',
+          valueType: 'INTEGER',
+          description: 'Mandatory cutoff',
+          publicVisible: true,
+          updatedByUserId: null,
+          createdAt: '2026-11-12T08:00:00Z',
+          updatedAt: '2026-11-12T08:00:00Z',
+        },
+      ],
+      quarters: [
+        {
+          id: 1,
+          fiscalYear: '2026/27',
+          quarter: 1,
+          label: 'FY 2026/27 · Q1',
+          startDate: '2026-06-01',
+          endDate: '2026-09-30',
+          active: false,
+          locked: true,
+          referencedByRecords: true,
+          createdAt: '2026-11-12T08:00:00Z',
+          updatedAt: '2026-11-12T08:00:00Z',
+        },
+        {
+          id: 2,
+          fiscalYear: '2026/27',
+          quarter: 2,
+          label: 'FY 2026/27 · Q2',
+          startDate: '2026-10-01',
+          endDate: '2026-12-31',
+          active: true,
+          locked: false,
+          referencedByRecords: false,
+          createdAt: '2026-11-12T08:00:00Z',
+          updatedAt: '2026-11-12T08:00:00Z',
+        },
+      ],
+    });
+    const updateSpy = vi.spyOn(coreConfigApi, 'updateConfigs').mockResolvedValue([]);
+    const activateSpy = vi.spyOn(coreConfigApi, 'activateQuarter').mockResolvedValue({
+      id: 1,
+      fiscalYear: '2026/27',
+      quarter: 1,
+      label: 'FY 2026/27 · Q1',
+      startDate: '2026-06-01',
+      endDate: '2026-09-30',
+      active: true,
+      locked: true,
+      referencedByRecords: true,
+      createdAt: '2026-11-12T08:00:00Z',
+      updatedAt: '2026-11-12T08:00:00Z',
+    });
+
+    renderWithProviders(<SystemConfigPanel />);
+
+    await waitFor(() => expect(screen.getByText('System Rules & Thresholds')).toBeInTheDocument());
+    expect(screen.queryByText('Sample Data')).not.toBeInTheDocument();
+
+    const cutoffInput = screen.getByLabelText(/Mandatory Coaching Cutoff/i) as HTMLInputElement;
+    fireEvent.change(cutoffInput, { target: { value: '2' } });
+    fireEvent.click(screen.getByRole('button', { name: /Save Changes \(1\)/i }));
+
+    await waitFor(() =>
+      expect(updateSpy).toHaveBeenCalledWith([
+        { configKey: 'coaching.mandatory_cutoff_rounded', configValue: '2' },
+      ])
+    );
+
+    // Locked quarter Edit button is disabled; Activate triggers confirmation modal
+    const editButtons = screen.getAllByRole('button', { name: /Edit/i });
+    expect(editButtons[0]).toBeDisabled();
+
+    fireEvent.click(screen.getByRole('button', { name: /Activate$/i }));
+    await waitFor(() =>
+      expect(screen.getByRole('dialog', { name: /Activate FY 2026\/27 · Q1\?/i })).toBeInTheDocument()
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Activate Quarter' }));
+    await waitFor(() => expect(activateSpy).toHaveBeenCalledWith(1));
+  });
+
+  it('renders live NotificationBellPopover without Sample Data badge and marks notifications read', async () => {
+    vi.spyOn(AuthContextModule, 'useAuth').mockReturnValue(
+      buildAuthMock({
+        id: 10,
+        username: 'abebe.emp',
+        mustChangePassword: false,
+        roles: ['Employee'],
+        permissions: ['EMPLOYEE_PORTAL_ACCESS'],
+      })
+    );
+    vi.spyOn(notificationsApi, 'list').mockResolvedValue({
+      items: [
+        {
+          id: 101,
+          module: 'COACHING',
+          eventType: 'PMS_COACHING_ASSIGNED',
+          title: 'Mandatory Coaching Plan Ready',
+          message: 'Please review Q2 action goals.',
+          deepLink: '/workspace?tab=coaching',
+          read: false,
+          readAt: null,
+          createdAt: new Date().toISOString(),
+        },
+      ],
+      page: 0,
+      size: 15,
+      totalElements: 1,
+      totalPages: 1,
+      unreadCount: 1,
+    });
+    const markAllSpy = vi.spyOn(notificationsApi, 'markAllRead').mockResolvedValue({ updatedCount: 1 });
+
+    renderWithProviders(<NotificationBellPopover />);
+
+    const bell = await screen.findByRole('button', { name: /Notifications \(1 unread\)/i });
+    fireEvent.click(bell);
+
+    await waitFor(() => expect(screen.getByText('Mandatory Coaching Plan Ready')).toBeInTheDocument());
+    expect(screen.queryByText('Sample Data')).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: /Mark all read/i }));
+    await waitFor(() => expect(markAllSpy).toHaveBeenCalledTimes(1));
+  });
+});
+
+describe('StrictMode page refresh session persistence', () => {
+  it('deduplicates refresh POST calls under React StrictMode and preserves session', async () => {
+    clearRefreshSessionCache();
+    const csrfSpy = vi.spyOn(axios, 'get').mockResolvedValue({
+      data: { success: true, message: 'CSRF token initialized', data: 'xsrf-123' },
+    });
+    const refreshSpy = vi.spyOn(axios, 'post').mockResolvedValue({
+      data: {
+        success: true,
+        message: 'Session refreshed',
+        data: {
+          accessToken: 'fresh-jwt-123',
+          user: {
+            id: 5,
+            username: 'employee.demo',
+            mustChangePassword: false,
+            roles: ['Employee'],
+            permissions: ['EMPLOYEE_PORTAL_ACCESS'],
+          },
+        },
+      },
+    });
+
+    renderWithProviders(
+      <StrictMode>
+        <AuthProvider>
+          <ProtectedRoute>
+            <div>Protected Dashboard</div>
+          </ProtectedRoute>
+        </AuthProvider>
+      </StrictMode>
+    );
+
+    await waitFor(() => expect(screen.getByText('Protected Dashboard')).toBeInTheDocument());
+    expect(csrfSpy).toHaveBeenCalledTimes(1);
+    expect(refreshSpy).toHaveBeenCalledTimes(1);
+    expect(refreshSpy).toHaveBeenCalledWith(
+      '/api/v1/core/auth/refresh',
+      {},
+      expect.objectContaining({
+        withCredentials: true,
+        headers: { 'X-XSRF-TOKEN': 'xsrf-123' },
+      })
+    );
+    expect(getAccessToken()).toBe('fresh-jwt-123');
   });
 });
