@@ -47,6 +47,15 @@ public interface EmployeeRepository extends JpaRepository<Employee, Long>, JpaSp
             """)
     Optional<Employee> findDetailedByEmployeeNumberIgnoreCase(@Param("employeeNumber") String employeeNumber);
 
+    @Query("""
+            SELECT e FROM Employee e
+            LEFT JOIN FETCH e.department d
+            LEFT JOIN FETCH d.parentDepartment
+            LEFT JOIN FETCH e.manager
+            WHERE LOWER(e.employeeNumber) IN :employeeNumbers
+            """)
+    List<Employee> findDetailedByEmployeeNumbersIgnoreCase(@Param("employeeNumbers") java.util.Collection<String> employeeNumbers);
+
     @Query("SELECT e FROM Employee e WHERE LOWER(e.employeeNumber) = LOWER(:employeeNumber)")
     Optional<Employee> findByEmployeeNumberIgnoreCase(@Param("employeeNumber") String employeeNumber);
 

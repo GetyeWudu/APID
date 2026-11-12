@@ -50,9 +50,15 @@ public class CoreConfigController {
         return ApiResponse.ok("System configuration updated", updated);
     }
 
+    @GetMapping("/fiscal-quarters")
+    @PreAuthorize("isAuthenticated()")
+    public ApiResponse<List<FiscalQuarterDto>> listQuarters() {
+        return ApiResponse.ok(coreConfigService.listAllQuarters());
+    }
+
     @GetMapping("/admin/fiscal-quarters")
     @PreAuthorize("hasAuthority('SYSTEM_CONFIG_MANAGE')")
-    public ApiResponse<List<FiscalQuarterDto>> listQuarters() {
+    public ApiResponse<List<FiscalQuarterDto>> listAdminQuarters() {
         return ApiResponse.ok(coreConfigService.listAllQuarters());
     }
 

@@ -99,6 +99,14 @@ public class CoreConfigService {
                 .toList();
     }
 
+    @Transactional(readOnly = true)
+    public FiscalQuarterDto getFiscalQuarterById(Long id) {
+        FiscalQuarter fq = fiscalQuarterRepository.findById(id)
+                .orElseThrow(() -> new com.boa.apid.common.exception.ResourceNotFoundException(
+                        "Fiscal quarter not found with id: " + id));
+        return FiscalQuarterDto.from(fq, isQuarterReferenced(fq));
+    }
+
     @Transactional
     public List<SystemConfigItemDto> updateConfigs(
             UpdateSystemConfigsRequest request,

@@ -17,6 +17,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.*;
+import java.util.stream.Collectors;
 
 /**
  * Shared read contract for Core, Coaching, and Mentoring modules to query employees and reporting lines.
@@ -70,6 +71,31 @@ public class EmployeeQueryService {
         }
         return employeeRepository.findDetailedByEmployeeNumberIgnoreCase(employeeNumber.trim())
                 .map(this::toDtoWithUsername);
+    }
+
+    public Map<String, EmployeeDto> findByEmployeeNumbers(Collection<String> employeeNumbers) {
+        if (employeeNumbers == null || employeeNumbers.isEmpty()) {
+            return Map.of();
+        }
+        Set<String> cleanKeys = employeeNumbers.stream()
+                .filter(Objects::nonNull)
+                .map(String::trim)
+                .filter(s -> !s.isEmpty())
+                .map(s -> s.toLowerCase(Locale.ROOT))
+                .collect(Collectors.toSet());
+        if (cleanKeys.isEmpty()) {
+            return Map.of();
+        }
+
+        List<Employee> employees = employeeRepository.findDetailedByEmployeeNumbersIgnoreCase(cleanKeys);
+        Map<Long, String> usernames = loadUsernames(employees);
+
+        Map<String, EmployeeDto> map = new LinkedHashMap<>();
+        for (Employee emp : employees) {
+            String username = emp.getUserId() != null ? usernames.get(emp.getUserId()) : null;
+            map.put(emp.getEmployeeNumber().toLowerCase(Locale.ROOT), EmployeeDto.from(emp, username));
+        }
+        return map;
     }
 
     public Optional<EmployeeDto> getDirectManager(Long employeeId) {
