@@ -125,7 +125,6 @@ export function WorkspaceDashboardPage() {
   }
 
   const workspaceData = effectiveWorkspace!;
-  const availableTrainers = previewQuery.data?.availableTrainers ?? [];
   const allCoachingMsgs = [...workspaceData.chatCoachingMessages, ...coachingChatExtra];
   const allMentoringMsgs = [...workspaceData.chatMentoringMessages, ...mentoringChatExtra];
 
@@ -386,7 +385,6 @@ export function WorkspaceDashboardPage() {
       {activeTab === 'mentoring' && (
         <MentoringTab
           workspace={workspaceData}
-          availableTrainers={availableTrainers}
           activeSkills={activeSkills}
           chatMessages={allMentoringMsgs}
           onAppendChat={(body) => appendMessage('mentoring', body)}

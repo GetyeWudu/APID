@@ -11,6 +11,7 @@ import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 
@@ -37,6 +38,15 @@ public interface EmployeeRepository extends JpaRepository<Employee, Long>, JpaSp
             WHERE e.userId = :userId
             """)
     Optional<Employee> findDetailedByUserId(@Param("userId") Long userId);
+
+    @Query("""
+            SELECT e FROM Employee e
+            LEFT JOIN FETCH e.department d
+            LEFT JOIN FETCH d.parentDepartment
+            LEFT JOIN FETCH e.manager
+            WHERE e.userId IN :userIds
+            """)
+    List<Employee> findDetailedByUserIdIn(@Param("userIds") Collection<Long> userIds);
 
     @Query("""
             SELECT e FROM Employee e

@@ -1,9 +1,7 @@
 import axios from 'axios';
 import { apiClient, type ApiResponse } from '../../../shared/api/apiClient';
 import {
-  PREVIEW_CERTIFIED_TRAINERS,
   PREVIEW_WORKSPACE_DATA,
-  type PreviewCertifiedTrainer,
   type PreviewWorkspaceData,
 } from '../../../shared/mocks/boaPreviewFixtures';
 import type { EmployeeItem } from '../../admin/organization/types/organization.types';
@@ -51,10 +49,7 @@ export const workspaceLiveApi = {
 };
 
 export const workspacePreviewAdapter = {
-  async getParticipationPreview(): Promise<{
-    workspace: PreviewWorkspaceData;
-    availableTrainers: PreviewCertifiedTrainer[];
-  }> {
+  async getParticipationPreview(): Promise<{ workspace: PreviewWorkspaceData }> {
     return {
       workspace: {
         ...PREVIEW_WORKSPACE_DATA,
@@ -62,9 +57,6 @@ export const workspacePreviewAdapter = {
         chatCoachingMessages: [...PREVIEW_WORKSPACE_DATA.chatCoachingMessages],
         chatMentoringMessages: [...PREVIEW_WORKSPACE_DATA.chatMentoringMessages],
       },
-      availableTrainers: PREVIEW_CERTIFIED_TRAINERS.filter(
-        (t) => t.employmentStatus === 'ACTIVE' && t.trainerAuthStatus === 'ACTIVE'
-      ),
     };
   },
 

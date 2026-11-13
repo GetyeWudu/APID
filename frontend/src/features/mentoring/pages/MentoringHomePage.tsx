@@ -13,6 +13,8 @@ import {
 import { workspaceLiveApi, workspacePreviewAdapter } from '../../workspace/api/workspaceDashboardApi';
 import type { ChatMessageItem } from '../../workspace/components/IsolatedChatPanel';
 import { MentoringTab } from '../../workspace/components/MentoringTab';
+import { mentorDirectoryApi } from '../api/mentorDirectoryApi';
+import { MentorDirectory } from '../components/MentorDirectory';
 
 type MentoringViewKey = 'overview' | 'directory' | 'trainer';
 
@@ -28,11 +30,19 @@ export function MentoringHomePage() {
   const identityQuery = useQuery({
     queryKey: ['workspace', 'identity', user?.id],
     queryFn: workspaceLiveApi.loadMyIdentity,
+    enabled: activeView !== 'directory',
   });
 
   const previewQuery = useQuery({
     queryKey: ['workspace', 'preview-participation'],
     queryFn: workspacePreviewAdapter.getParticipationPreview,
+    enabled: activeView !== 'directory',
+  });
+
+  const mentorsQuery = useQuery({
+    queryKey: ['mentoring', 'directory'],
+    queryFn: mentorDirectoryApi.listMentors,
+    enabled: activeView === 'directory' && hasAnyPermission(EMPLOYEE_WORKSPACE_PERMISSIONS),
   });
 
   if (!hasAnyPermission(EMPLOYEE_WORKSPACE_PERMISSIONS)) {
@@ -42,6 +52,32 @@ export function MentoringHomePage() {
           title="No Personal Mentoring Access"
           description="Your account does not hold EMPLOYEE_PORTAL_ACCESS."
         />
+      </div>
+    );
+  }
+
+  if (activeView === 'directory') {
+    if (mentorsQuery.isLoading) {
+      return <LoadingSkeleton rows={6} height={28} />;
+    }
+
+    if (mentorsQuery.isError) {
+      return (
+        <ErrorState
+          message="Unable to load mentors from the database."
+          onRetry={() => void mentorsQuery.refetch()}
+        />
+      );
+    }
+
+    return (
+      <div className="boa-stack">
+        <PageHeader
+          title="Certified Trainer Directory"
+          subtitle="Browse active users assigned the Mentor role and their linked skills."
+          source="live"
+        />
+        <MentorDirectory mentors={mentorsQuery.data ?? []} />
       </div>
     );
   }
@@ -87,7 +123,6 @@ export function MentoringHomePage() {
   }
 
   const workspaceData = previewQuery.data!.workspace;
-  const availableTrainers = previewQuery.data?.availableTrainers ?? [];
   const allMentoringMsgs = [...workspaceData.chatMentoringMessages, ...mentoringChatExtra];
 
   const appendMessage = (body: string) => {
@@ -98,23 +133,17 @@ export function MentoringHomePage() {
   };
 
   const viewMeta =
-    activeView === 'directory'
+    activeView === 'trainer'
       ? {
-          title: 'Certified Trainer Directory',
-          subtitle: 'Browse active Bank of Abyssinia internal trainers by skill and submit a request.',
+          title: 'Trainer Workspace & Certification',
+          subtitle: 'Manage incoming trainee requests or apply to become a certified internal trainer.',
         }
-      : activeView === 'trainer'
-        ? {
-            title: 'Trainer Workspace & Certification',
-            subtitle: 'Manage incoming trainee requests or apply to become a certified internal trainer.',
-          }
-        : {
-            title: 'My Mentor & Progress',
-            subtitle: 'Track your active mentoring match, completed sessions, and trainee ↔ trainer channel.',
-          };
+      : {
+          title: 'My Mentor & Progress',
+          subtitle: 'Track your active mentoring match, completed sessions, and trainee ↔ trainer channel.',
+        };
 
-  const section =
-    activeView === 'directory' ? 'directory' : activeView === 'trainer' ? 'trainer' : 'trainee';
+  const section = activeView === 'trainer' ? 'trainer' : 'trainee';
 
   return (
     <div className="boa-stack">
@@ -122,7 +151,6 @@ export function MentoringHomePage() {
 
       <MentoringTab
         workspace={workspaceData}
-        availableTrainers={availableTrainers}
         activeSkills={activeSkills}
         chatMessages={allMentoringMsgs}
         onAppendChat={appendMessage}

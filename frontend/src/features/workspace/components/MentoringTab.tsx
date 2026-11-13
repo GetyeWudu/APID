@@ -1,48 +1,32 @@
 import { useState, type FormEvent } from 'react';
 import { Award, BookOpen, CheckCircle2, UserPlus } from 'lucide-react';
+import { Link } from 'react-router-dom';
 import { DataSourceBadge, EmptyState, StatusPill, useToast } from '../../../shared/components/ui';
-import type {
-  PreviewCertifiedTrainer,
-  PreviewWorkspaceData,
-} from '../../../shared/mocks/boaPreviewFixtures';
+import type { PreviewWorkspaceData } from '../../../shared/mocks/boaPreviewFixtures';
 import type { SkillItem } from '../../admin/skills/types/skills.types';
 import { workspacePreviewAdapter } from '../api/workspaceDashboardApi';
 import { IsolatedChatPanel, type ChatMessageItem } from './IsolatedChatPanel';
 
 export function MentoringTab({
   workspace,
-  availableTrainers,
   activeSkills,
   chatMessages,
   onAppendChat,
   section = 'all',
 }: {
   workspace: PreviewWorkspaceData;
-  availableTrainers: PreviewCertifiedTrainer[];
   activeSkills: SkillItem[];
   chatMessages: ChatMessageItem[];
   onAppendChat: (body: string) => void;
   section?: 'all' | 'trainee' | 'trainer' | 'directory';
 }) {
   const { pushToast } = useToast();
-  const [skillFilter, setSkillFilter] = useState('ALL');
   const [showApplyModal, setShowApplyModal] = useState(false);
   const [applySkill, setApplySkill] = useState(
     activeSkills[0]?.name ?? 'Leadership & Performance Coaching'
   );
   const [applyEvidence, setApplyEvidence] = useState('');
   const [handledIncoming, setHandledIncoming] = useState<Record<string, 'ACCEPTED' | 'DECLINED'>>({});
-
-  const filteredTrainers = availableTrainers.filter(
-    (t) => skillFilter === 'ALL' || t.approvedSkills.includes(skillFilter)
-  );
-
-  const handleRequestTrainer = async (trainer: PreviewCertifiedTrainer) => {
-    const res = await workspacePreviewAdapter.simulateAction(
-      `Mentoring request to ${trainer.fullName}`
-    );
-    pushToast({ title: 'Mentoring Request Sent (Preview)', message: res.message, tone: 'ok' });
-  };
 
   const handleApplySubmit = async (e: FormEvent) => {
     e.preventDefault();
@@ -229,78 +213,22 @@ export function MentoringTab({
       {/* Certified Trainer Browse Directory */}
       {showDirectory && (
         <div className="apid-card">
-        <div className="boa-card-header">
-          <div>
-            <h3 className="boa-card-title">Certified Trainer Directory</h3>
-            <p className="boa-card-subtitle">
-              Shows active certified Trainers. Filter by skill.
-            </p>
+          <div className="boa-card-header">
+            <div>
+              <h3 className="boa-card-title">Certified Trainer Directory</h3>
+              <p className="boa-card-subtitle">Browse active users assigned the Mentor role.</p>
+            </div>
           </div>
-          <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
-            <select
-              className="apid-input"
-              aria-label="Filter trainers by skill"
-              value={skillFilter}
-              onChange={(e) => setSkillFilter(e.target.value)}
-            >
-              <option value="ALL">All Skills</option>
-              {activeSkills.map((s) => (
-                <option key={s.id} value={s.name}>
-                  {s.name}
-                </option>
-              ))}
-            </select>
-            <DataSourceBadge source="preview" />
-          </div>
+          <EmptyState
+            title="No Mentor Data Available"
+            description="Sample trainer profiles are not shown here."
+            action={
+              <Link to="/mentoring?view=directory" className="apid-btn apid-btn-primary apid-btn-sm">
+                Open Directory
+              </Link>
+            }
+          />
         </div>
-
-        <div className="boa-grid-2" style={{ marginBottom: 0 }}>
-          {filteredTrainers.map((tr) => {
-            const atCap = tr.activeTrainees >= tr.maxTrainees;
-            return (
-              <div
-                key={tr.id}
-                style={{
-                  border: '1px solid var(--border)',
-                  borderRadius: 10,
-                  padding: '0.85rem',
-                  display: 'flex',
-                  flexDirection: 'column',
-                  gap: '0.5rem',
-                }}
-              >
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                  <div>
-                    <div style={{ fontWeight: 700 }}>{tr.fullName}</div>
-                    <div className="boa-muted" style={{ fontSize: '0.78rem' }}>
-                      {tr.department} · {tr.avgRating.toFixed(1)}★
-                    </div>
-                  </div>
-                  <StatusPill
-                    label={`${tr.activeTrainees}/${tr.maxTrainees} trainees`}
-                    tone={atCap ? 'warn' : 'ok'}
-                  />
-                </div>
-                <div style={{ display: 'flex', gap: '0.3rem', flexWrap: 'wrap' }}>
-                  {tr.approvedSkills.map((sk) => (
-                    <StatusPill key={sk} label={sk} tone="neutral" />
-                  ))}
-                </div>
-                <div>
-                  <button
-                    type="button"
-                    className="apid-btn apid-btn-outline apid-btn-sm"
-                    disabled={atCap}
-                    onClick={() => void handleRequestTrainer(tr)}
-                  >
-                    {atCap ? 'At Capacity' : 'Request Mentorship (Preview)'}
-                  </button>
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      </div>
       )}
 
       {showChat && (

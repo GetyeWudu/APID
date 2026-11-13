@@ -1,8 +1,11 @@
 package com.boa.apid.core.authorization.entity;
 
+import com.boa.apid.core.skills.entity.Skill;
 import jakarta.persistence.*;
 import java.time.Instant;
+import java.util.HashSet;
 import java.util.Locale;
+import java.util.Set;
 
 @Entity
 @Table(name = "users", schema = "core")
@@ -46,6 +49,15 @@ public class User {
 
     @Column(name = "last_login_at")
     private Instant lastLoginAt;
+
+    @ManyToMany(fetch = FetchType.LAZY)
+    @JoinTable(
+            name = "user_skills",
+            schema = "core",
+            joinColumns = @JoinColumn(name = "user_id"),
+            inverseJoinColumns = @JoinColumn(name = "skill_id")
+    )
+    private Set<Skill> skills = new HashSet<>();
 
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
@@ -108,6 +120,20 @@ public class User {
 
     public Instant getLastLoginAt() { return lastLoginAt; }
     public void setLastLoginAt(Instant lastLoginAt) { this.lastLoginAt = lastLoginAt; }
+
+    public Set<Skill> getSkills() { return skills; }
+
+    public void addSkill(Skill skill) {
+        if (skills.add(skill)) {
+            skill.getUsers().add(this);
+        }
+    }
+
+    public void removeSkill(Skill skill) {
+        if (skills.remove(skill)) {
+            skill.getUsers().remove(this);
+        }
+    }
 
     public Instant getCreatedAt() { return createdAt; }
     public Instant getUpdatedAt() { return updatedAt; }
