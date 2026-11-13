@@ -75,4 +75,5 @@ apid:
     api-base-url: ${DAILY_API_BASE_URL:https://api.daily.co/v1}
     api-key: ${DAILY_API_KEY:}
     webhook-secret: ${DAILY_WEBHOOK_SECRET:}
+    domain-name: ${DAILY_DOMAIN_NAME:amakari}
 

@@ -62,6 +62,7 @@ export interface CoachReplacementHistoryItem {
 }
 
 export interface PmsGoalLineItem {
+  id?: number;
   sourceRowNumber: number;
   goalName: string;
   goalTrackingName: string | null;

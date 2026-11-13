@@ -206,6 +206,7 @@ public class CoachingAssignmentService {
             goalLines = goalLineRepository.findAllByPerformanceRecordIdOrderBySourceRowNumberAsc(assignment.getPerformanceRecordId())
                     .stream()
                     .map(g -> new PmsGoalLineDto(
+                            g.getId(),
                             g.getSourceRowNumber(),
                             g.getGoalName(),
                             g.getGoalTrackingName(),
@@ -330,6 +331,7 @@ public class CoachingAssignmentService {
             goalLines = goalLineRepository.findAllByPerformanceRecordIdOrderBySourceRowNumberAsc(record.getId())
                     .stream()
                     .map(g -> new PmsGoalLineDto(
+                            g.getId(),
                             g.getSourceRowNumber(),
                             g.getGoalName(),
                             g.getGoalTrackingName(),
@@ -682,6 +684,7 @@ public class CoachingAssignmentService {
                 goalLines = goalLineRepository.findAllByPerformanceRecordIdOrderBySourceRowNumberAsc(rec.getId())
                         .stream()
                         .map(g -> new PmsGoalLineDto(
+                                g.getId(),
                                 g.getSourceRowNumber(),
                                 g.getGoalName(),
                                 g.getGoalTrackingName(),

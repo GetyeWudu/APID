@@ -64,7 +64,7 @@ export function CoachingHomePage() {
   const myCoacheesQuery = useQuery({
     queryKey: ['coaching', 'my-coachees'],
     queryFn: coachingAssignmentApi.getMyCoachees,
-    enabled: activeView === 'coachees' || activeView === 'skills',
+    enabled: activeView === 'coachees' || activeView === 'skills' || activeView === 'sessions',
     retry: false,
   });
 

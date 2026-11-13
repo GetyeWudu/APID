@@ -2,6 +2,7 @@ package com.boa.apid.coaching.session.video;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import jakarta.annotation.PostConstruct;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -23,6 +24,7 @@ public class DailyVideoMeetingProvider implements VideoMeetingProvider {
 
     private final String apiBaseUrl;
     private final String apiKey;
+    private String domainName;
     private final MockVideoMeetingProvider mockProvider;
     private final RestTemplate restTemplate;
     private final ObjectMapper objectMapper;
@@ -30,13 +32,37 @@ public class DailyVideoMeetingProvider implements VideoMeetingProvider {
     public DailyVideoMeetingProvider(
             @Value("${daily.api-base-url:https://api.daily.co/v1}") String apiBaseUrl,
             @Value("${daily.api-key:}") String apiKey,
+            @Value("${daily.domain-name:amakari}") String domainName,
             MockVideoMeetingProvider mockProvider
     ) {
         this.apiBaseUrl = apiBaseUrl;
         this.apiKey = apiKey != null ? apiKey.trim() : "";
+        this.domainName = domainName != null && !domainName.isBlank() ? domainName.trim() : "amakari";
         this.mockProvider = mockProvider;
         this.restTemplate = new RestTemplate();
         this.objectMapper = new ObjectMapper();
+    }
+
+    @PostConstruct
+    public void discoverDomain() {
+        if (isConfigured()) {
+            try {
+                HttpHeaders headers = new HttpHeaders();
+                headers.setBearerAuth(apiKey);
+                HttpEntity<Void> request = new HttpEntity<>(headers);
+                ResponseEntity<String> response = restTemplate.exchange(apiBaseUrl + "/", HttpMethod.GET, request, String.class);
+                if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null) {
+                    JsonNode root = objectMapper.readTree(response.getBody());
+                    String discovered = root.path("domain_name").asText();
+                    if (discovered != null && !discovered.isBlank()) {
+                        this.domainName = discovered.trim();
+                        log.info("Successfully discovered Daily.co team domain from API: {}", this.domainName);
+                    }
+                }
+            } catch (Exception ex) {
+                log.info("Using configured Daily.co domain: {}", this.domainName);
+            }
+        }
     }
 
     private boolean isConfigured() {
@@ -50,8 +76,10 @@ public class DailyVideoMeetingProvider implements VideoMeetingProvider {
         }
 
         try {
-            String cleanPrefix = roomNamePrefix != null ? roomNamePrefix.replaceAll("[^a-zA-Z0-9_-]", "") : "session";
-            String roomName = "boa-" + cleanPrefix + "-" + UUID.randomUUID().toString().substring(0, 8);
+            String cleanPrefix = roomNamePrefix != null 
+                    ? roomNamePrefix.replaceAll("[^a-zA-Z0-9_-]", "").toLowerCase() 
+                    : "session";
+            String roomName = ("boa-" + cleanPrefix + "-" + UUID.randomUUID().toString().substring(0, 8)).toLowerCase();
 
             HttpHeaders headers = new HttpHeaders();
             headers.setContentType(MediaType.APPLICATION_JSON);
@@ -77,7 +105,7 @@ public class DailyVideoMeetingProvider implements VideoMeetingProvider {
                 JsonNode root = objectMapper.readTree(response.getBody());
                 String returnedName = root.path("name").asText(roomName);
                 String returnedUrl = root.path("url").asText();
-                log.info("Successfully provisioned Daily.co private room: {}", returnedName);
+                log.info("Successfully provisioned Daily.co private room: {} ({})", returnedName, returnedUrl);
                 return new MeetingRoomDetails(returnedName, returnedUrl, expiresAt, false);
             }
         } catch (Exception ex) {
@@ -121,8 +149,8 @@ public class DailyVideoMeetingProvider implements VideoMeetingProvider {
             if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null) {
                 JsonNode root = objectMapper.readTree(response.getBody());
                 String token = root.path("token").asText();
-                String urlWithToken = "https://" + roomName + ".daily.co/" + roomName + "?t=" + token;
-                log.info("Generated Daily.co meeting token for participant: {}", employeeNumber);
+                String urlWithToken = "https://" + domainName + ".daily.co/" + roomName + "?t=" + token;
+                log.info("Generated Daily.co meeting token for participant: {} (url: {})", employeeNumber, urlWithToken);
                 return new MeetingTokenDetails(token, urlWithToken, expiresAt, false);
             }
         } catch (Exception ex) {
@@ -130,6 +158,24 @@ public class DailyVideoMeetingProvider implements VideoMeetingProvider {
         }
 
         return mockProvider.createParticipantToken(roomName, employeeNumber, fullName, isOwner, expiresAt);
+    }
+
+    @Override
+    public void deleteRoom(String roomName) {
+        if (!isConfigured() || roomName == null || roomName.isBlank()) {
+            mockProvider.deleteRoom(roomName);
+            return;
+        }
+
+        try {
+            HttpHeaders headers = new HttpHeaders();
+            headers.setBearerAuth(apiKey);
+            HttpEntity<Void> request = new HttpEntity<>(headers);
+            restTemplate.exchange(apiBaseUrl + "/rooms/" + roomName, HttpMethod.DELETE, request, Void.class);
+            log.info("Successfully deleted Daily.co room: {}", roomName);
+        } catch (Exception ex) {
+            log.warn("Failed to delete Daily.co room {}: {}", roomName, ex.getMessage());
+        }
     }
 }
 

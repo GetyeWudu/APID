@@ -13,5 +13,7 @@ public interface VideoMeetingProvider {
             boolean isOwner,
             Instant expiresAt
     );
+
+    void deleteRoom(String roomName);
 }
 

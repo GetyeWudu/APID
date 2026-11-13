@@ -34,5 +34,10 @@ public class MockVideoMeetingProvider implements VideoMeetingProvider {
         log.info("[MOCK] Issued simulated participant meeting token for emp: {}", employeeNumber);
         return new MeetingTokenDetails(mockToken, urlWithToken, expiresAt, true);
     }
+
+    @Override
+    public void deleteRoom(String roomName) {
+        log.info("[MOCK] Deleted simulated Daily video room: {}", roomName);
+    }
 }
 

@@ -317,6 +317,7 @@ export const DailyVideoModal: React.FC<DailyVideoModalProps> = ({
                 src={tokenData.roomUrlWithToken}
                 title="Daily.co Coaching Video Room"
                 allow="camera; microphone; fullscreen; display-capture; autoplay"
+                allowFullScreen
                 style={{
                   width: '100%',
                   height: '100%',

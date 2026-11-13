@@ -40,8 +40,21 @@ export const ScheduleSessionModal: React.FC<ScheduleSessionModalProps> = ({
     enabled: isOpen,
   });
 
+  // Query my coachees directly if not provided by parent prop
+  const coacheesQuery = useQuery<MyCoacheeItem[]>({
+    queryKey: ['coaching', 'my-coachees'],
+    queryFn: coachingAssignmentApi.getMyCoachees,
+    enabled: isOpen && (!myCoachees || myCoachees.length === 0),
+  });
+
+  const allCoachees = (myCoachees && myCoachees.length > 0)
+    ? myCoachees
+    : (coacheesQuery.data || []);
+
+  const mandatoryCoachees = allCoachees.filter((c) => c.pathway !== 'SELF_DEVELOPMENT');
+
   // When assignment changes, load that coachee's goals for target PMS goal dropdown
-  const selectedCoachee = myCoachees.find((c) => c.assignmentId === Number(selectedAssignmentId));
+  const selectedCoachee = allCoachees.find((c) => c.assignmentId === Number(selectedAssignmentId));
   const goalsQuery = useQuery({
     queryKey: ['employee-performance-goals', selectedCoachee?.coacheeEmployeeId],
     queryFn: () => coachingAssignmentApi.getEmployeePerformanceGoals(selectedCoachee!.coacheeEmployeeId),
@@ -111,7 +124,6 @@ export const ScheduleSessionModal: React.FC<ScheduleSessionModalProps> = ({
     scheduleMutation.mutate(payload);
   };
 
-  const mandatoryCoachees = myCoachees.filter((c) => c.pathway !== 'SELF_DEVELOPMENT');
   const approvedSkillRequests = skillRequestsQuery.data || [];
 
   return (
@@ -239,6 +251,7 @@ export const ScheduleSessionModal: React.FC<ScheduleSessionModalProps> = ({
                 required
               >
                 <option value="">-- Select assigned coachee --</option>
+                {coacheesQuery.isLoading && <option value="" disabled>Loading assigned coachees...</option>}
                 {mandatoryCoachees.map((c) => (
                   <option key={c.assignmentId} value={c.assignmentId}>
                     {c.coacheeFullName} ({c.coacheeEmployeeNumber}) · {c.coacheeDepartment ?? 'Branch'}
@@ -303,8 +316,9 @@ export const ScheduleSessionModal: React.FC<ScheduleSessionModalProps> = ({
                 onChange={(e) => setSelectedGoalId(e.target.value ? Number(e.target.value) : '')}
               >
                 <option value="">-- General Coaching / Discussion --</option>
+                {goalsQuery.isLoading && <option value="" disabled>Loading employee goals...</option>}
                 {goalsQuery.data?.goalLines?.map((g) => (
-                  <option key={g.sourceRowNumber} value={g.sourceRowNumber}>
+                  <option key={g.id || g.sourceRowNumber} value={g.id || g.sourceRowNumber}>
                     {g.goalName} (Score: {Number(g.goalScore).toFixed(2)} · Weight: {Number(g.weight).toFixed(0)}%)
                   </option>
                 ))}
