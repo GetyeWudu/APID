@@ -2,10 +2,16 @@ package com.boa.apid.core.organization.service;
 
 import com.boa.apid.common.exception.BusinessException;
 import com.boa.apid.common.exception.ResourceNotFoundException;
+import com.boa.apid.core.audit.entity.AuditLog;
+import com.boa.apid.core.audit.repository.AuditLogRepository;
 import com.boa.apid.core.audit.service.AuditService;
 import com.boa.apid.core.auth.security.ApidUserPrincipal;
 import com.boa.apid.core.authorization.entity.User;
+import com.boa.apid.core.authorization.entity.UserStatus;
 import com.boa.apid.core.authorization.repository.UserRepository;
+import com.boa.apid.core.identity.dto.CreateUserRequest;
+import com.boa.apid.core.identity.dto.CreateUserResponse;
+import com.boa.apid.core.identity.service.UserAdminService;
 import com.boa.apid.core.organization.dto.*;
 import com.boa.apid.core.organization.entity.Department;
 import com.boa.apid.core.organization.entity.Employee;
@@ -37,6 +43,8 @@ public class OrganizationService {
     private final ApplicationEventPublisher eventPublisher;
     private final AuditService auditService;
     private final EntityManager entityManager;
+    private final UserAdminService userAdminService;
+    private final AuditLogRepository auditLogRepository;
 
     public OrganizationService(
             DepartmentRepository departmentRepository,
@@ -46,7 +54,9 @@ public class OrganizationService {
             EmployeeQueryService employeeQueryService,
             ApplicationEventPublisher eventPublisher,
             AuditService auditService,
-            EntityManager entityManager
+            EntityManager entityManager,
+            UserAdminService userAdminService,
+            AuditLogRepository auditLogRepository
     ) {
         this.departmentRepository = departmentRepository;
         this.employeeRepository = employeeRepository;
@@ -56,6 +66,8 @@ public class OrganizationService {
         this.eventPublisher = eventPublisher;
         this.auditService = auditService;
         this.entityManager = entityManager;
+        this.userAdminService = userAdminService;
+        this.auditLogRepository = auditLogRepository;
     }
 
     @Transactional(readOnly = true)
@@ -221,7 +233,9 @@ public class OrganizationService {
         if (email != null && employeeRepository.existsByEmailIgnoreCaseAndIdNot(email, id)) {
             throw new BusinessException("EMPLOYEE_EMAIL_EXISTS", "Email address is already assigned to another employee", HttpStatus.CONFLICT);
         }
-        validateUserLink(request.userId(), id);
+        if (request.userId() != null && !Objects.equals(request.userId(), employee.getUserId())) {
+            validateUserLink(request.userId(), id);
+        }
 
         Department department = resolveDepartment(request.departmentId());
         Employee manager = resolveManager(request.managerId());
@@ -232,7 +246,9 @@ public class OrganizationService {
         EmploymentStatus oldStatus = employee.getEmploymentStatus();
         EmploymentStatus newStatus = request.employmentStatus();
 
-        employee.setUserId(request.userId());
+        if (request.userId() != null) {
+            employee.setUserId(request.userId());
+        }
         employee.setEmployeeNumber(employeeNumber);
         employee.setFullName(fullName);
         employee.setEmail(email);
@@ -327,6 +343,128 @@ public class OrganizationService {
                 "EMPLOYEE",
                 String.valueOf(saved.getId()),
                 auditDetails("employeeNumber", saved.getEmployeeNumber(), "previousUserId", previousUserId),
+                null,
+                null
+        ));
+
+        return employeeQueryService.toDtoWithUsername(saved);
+    }
+
+    @Transactional
+    public CreateAndLinkEmployeeUserResponse createAndLinkUser(
+            Long employeeId,
+            CreateEmployeeUserRequest request,
+            ApidUserPrincipal actor
+    ) {
+        acquireHierarchyAdvisoryLock();
+        Employee employee = employeeRepository.findById(employeeId)
+                .orElseThrow(() -> new ResourceNotFoundException("Employee not found"));
+        if (employee.getUserId() != null) {
+            throw new BusinessException(
+                    "EMPLOYEE_ALREADY_LINKED",
+                    "This employee already has a linked login account",
+                    HttpStatus.CONFLICT
+            );
+        }
+
+        String normalizedUsername = request.username().trim().toLowerCase(Locale.ROOT);
+        Optional<User> existingAccount = userRepository.findByUsernameLowerForUpdate(normalizedUsername);
+        String username;
+        String temporaryPassword;
+        Long userId;
+
+        if (existingAccount.isPresent()) {
+            User user = existingAccount.get();
+            if (user.getStatus() != UserStatus.DISABLED
+                    || employeeRepository.existsByUserId(user.getId())
+                    || !wasRevokedFromEmployee(employee, user.getId())) {
+                throw new BusinessException(
+                        "USERNAME_EXISTS",
+                        "Username '" + normalizedUsername + "' already exists",
+                        HttpStatus.CONFLICT
+                );
+            }
+
+            userAdminService.deleteUserAccountForEmployeeRevocation(
+                    user.getId(),
+                    actor,
+                    "Replaced while recreating the employee login"
+            );
+        }
+
+        CreateUserResponse created = userAdminService.createUser(
+                new CreateUserRequest(normalizedUsername, null, request.roleIds()),
+                actor
+        );
+        userId = created.user().id();
+        username = created.user().username();
+        temporaryPassword = created.temporaryPassword();
+
+        validateUserLink(userId, employeeId);
+        employee.setUserId(userId);
+        Employee saved = employeeRepository.save(employee);
+
+        auditService.record(new AuditService.AuditCommand(
+                null,
+                actor.getUserId(),
+                actor.getUsername(),
+                userId,
+                MODULE,
+                "EMPLOYEE_USER_LINKED",
+                "SUCCESS",
+                null,
+                "EMPLOYEE",
+                String.valueOf(saved.getId()),
+                auditDetails("employeeNumber", saved.getEmployeeNumber(), "username", username),
+                null,
+                null
+        ));
+
+        return new CreateAndLinkEmployeeUserResponse(
+                employeeQueryService.toDtoWithUsername(saved),
+                username,
+                temporaryPassword
+        );
+    }
+
+    @Transactional
+    public EmployeeDto revokeUserLink(Long employeeId, ApidUserPrincipal actor) {
+        acquireHierarchyAdvisoryLock();
+        Employee employee = employeeRepository.findById(employeeId)
+                .orElseThrow(() -> new ResourceNotFoundException("Employee not found"));
+        Long linkedUserId = employee.getUserId();
+        if (linkedUserId == null) {
+            throw new BusinessException(
+                    "EMPLOYEE_NOT_LINKED",
+                    "This employee does not have a linked login account",
+                    HttpStatus.CONFLICT
+            );
+        }
+
+        String linkedUsername = userAdminService.deleteUserAccountForEmployeeRevocation(
+                linkedUserId,
+                actor,
+                "Employee login link revoked"
+        );
+        employee.setUserId(null);
+        Employee saved = employeeRepository.save(employee);
+
+        auditService.record(new AuditService.AuditCommand(
+                null,
+                actor.getUserId(),
+                actor.getUsername(),
+                null,
+                MODULE,
+                "EMPLOYEE_USER_LINK_REVOKED",
+                "SUCCESS",
+                null,
+                "EMPLOYEE",
+                String.valueOf(saved.getId()),
+                Map.of(
+                        "employeeNumber", saved.getEmployeeNumber(),
+                        "userId", linkedUserId,
+                        "username", linkedUsername
+                ),
                 null,
                 null
         ));
@@ -468,6 +606,34 @@ public class OrganizationService {
                     HttpStatus.CONFLICT
             );
         }
+    }
+
+    private boolean wasRevokedFromEmployee(Employee employee, Long userId) {
+        return auditLogRepository
+                .findByEntityTypeAndEntityIdAndResultAndActionInOrderByCreatedAtDescIdDesc(
+                        "EMPLOYEE",
+                        String.valueOf(employee.getId()),
+                        "SUCCESS",
+                        List.of("EMPLOYEE_USER_LINKED", "EMPLOYEE_USER_LINK_REVOKED")
+                )
+                .stream()
+                .filter(entry -> auditEntryTargetsUser(entry, userId))
+                .findFirst()
+                .map(AuditLog::getAction)
+                .filter("EMPLOYEE_USER_LINK_REVOKED"::equals)
+                .isPresent();
+    }
+
+    private boolean auditEntryTargetsUser(AuditLog entry, Long userId) {
+        if (Objects.equals(entry.getTargetUserId(), userId)) {
+            return true;
+        }
+
+        Object auditedUserId = entry.getDetailsJson() == null
+                ? null
+                : entry.getDetailsJson().get("userId");
+        return auditedUserId instanceof Number number && number.longValue() == userId
+                || auditedUserId instanceof String id && id.equals(userId.toString());
     }
 
     private void applyDepartment(Employee employee, Department department) {

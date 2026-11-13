@@ -2,6 +2,7 @@ package com.boa.apid.core.authorization.repository;
 
 import com.boa.apid.core.authorization.entity.UserRole;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
@@ -48,4 +49,8 @@ public interface UserRoleRepository extends JpaRepository<UserRole, Long> {
               AND ur.active = true
             """)
     List<UserRole> findActiveByUserIdsWithRole(@Param("userIds") List<Long> userIds);
+
+    @Modifying
+    @Query("DELETE FROM UserRole ur WHERE ur.user.id = :userId")
+    int deleteAllForUser(@Param("userId") Long userId);
 }

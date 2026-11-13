@@ -11,7 +11,8 @@ import type {
   OrgImportRowStatus,
   UpdateDepartmentPayload,
   UpdateEmployeePayload,
-  UserAccountSummary,
+  CreateEmployeeUserPayload,
+  CreateEmployeeUserResult,
 } from '../types/organization.types';
 
 export const organizationApi = {
@@ -73,17 +74,20 @@ export const organizationApi = {
     return res.data.data;
   },
 
-  async linkEmployeeUser(employeeId: number, userId: number): Promise<EmployeeItem> {
-    const res = await apiClient.post<ApiResponse<EmployeeItem>>(
-      `/core/admin/employees/${employeeId}/link-user`,
-      { userId }
+  async createAndLinkEmployeeUser(
+    employeeId: number,
+    payload: CreateEmployeeUserPayload
+  ): Promise<CreateEmployeeUserResult> {
+    const res = await apiClient.post<ApiResponse<CreateEmployeeUserResult>>(
+      `/core/admin/employees/${employeeId}/create-and-link-user`,
+      payload
     );
     return res.data.data;
   },
 
-  async unlinkEmployeeUser(employeeId: number): Promise<EmployeeItem> {
+  async revokeEmployeeUserLink(employeeId: number): Promise<EmployeeItem> {
     const res = await apiClient.delete<ApiResponse<EmployeeItem>>(
-      `/core/admin/employees/${employeeId}/link-user`
+      `/core/admin/employees/${employeeId}/revoke-user-link`
     );
     return res.data.data;
   },
@@ -130,18 +134,5 @@ export const organizationApi = {
 
   async cancelImportBatch(batchId: number): Promise<void> {
     await apiClient.delete(`/core/admin/employees/import/batches/${batchId}`);
-  },
-
-  async listAvailableUsers(includeUserId?: number | null, search?: string): Promise<UserAccountSummary[]> {
-    const res = await apiClient.get<ApiResponse<UserAccountSummary[]>>(
-      '/core/admin/employees/unlinked-users',
-      {
-        params: {
-          includeUserId: includeUserId ?? undefined,
-          search: search?.trim() || undefined,
-        },
-      }
-    );
-    return res.data.data;
   },
 };

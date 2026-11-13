@@ -490,8 +490,8 @@ describe('WorkspaceDashboardPage identity-driven empty state', () => {
   });
 });
 
-describe('LinkUserModal Create New User & Link', () => {
-  it('creates a new user account, links it to the employee, and masks the one-time password', async () => {
+describe('LinkUserModal employee login provisioning', () => {
+  it('creates and links a new account, then masks the one-time password', async () => {
     vi.spyOn(AuthContextModule, 'useAuth').mockReturnValue(
       buildAuthMock({
         id: 1,
@@ -501,26 +501,29 @@ describe('LinkUserModal Create New User & Link', () => {
         permissions: ['USER_MANAGE', 'HIERARCHY_MANAGE'],
       })
     );
-    vi.spyOn(organizationApi, 'listAvailableUsers').mockResolvedValue([]);
-    vi.spyOn(organizationApi, 'linkEmployeeUser').mockResolvedValue({
-      id: 4,
-      userId: 88,
+    vi.spyOn(organizationApi, 'createAndLinkEmployeeUser').mockResolvedValue({
+      employee: {
+        id: 4,
+        userId: 88,
+        username: 'mekdes.alemu.004',
+        employeeNumber: '00010004',
+        fullName: 'Mekdes Alemu',
+        email: 'mekdes.alemu.004@bankofabyssinia.com',
+        gender: 'Female',
+        departmentId: 3,
+        departmentName: 'Bole Branch Operations',
+        parentDepartmentName: 'Retail & Branch Banking',
+        job: 'Branch Management',
+        position: 'Branch Manager',
+        managerId: 2,
+        managerEmployeeNumber: '00010003',
+        managerFullName: 'Bekele Tesfaye',
+        employmentStatus: 'ACTIVE',
+        createdAt: '2026-11-12T08:00:00Z',
+        updatedAt: '2026-11-12T08:00:00Z',
+      },
       username: 'mekdes.alemu.004',
-      employeeNumber: '00010004',
-      fullName: 'Mekdes Alemu',
-      email: 'mekdes.alemu.004@bankofabyssinia.com',
-      gender: 'Female',
-      departmentId: 3,
-      departmentName: 'Bole Branch Operations',
-      parentDepartmentName: 'Retail & Branch Banking',
-      job: 'Branch Management',
-      position: 'Branch Manager',
-      managerId: 2,
-      managerEmployeeNumber: '00010003',
-      managerFullName: 'Bekele Tesfaye',
-      employmentStatus: 'ACTIVE',
-      createdAt: '2026-11-12T08:00:00Z',
-      updatedAt: '2026-11-12T08:00:00Z',
+      temporaryPassword: 'Temp#Mekdes004!',
     });
     vi.spyOn(rolesApi, 'listRoles').mockResolvedValue([
       {
@@ -532,24 +535,16 @@ describe('LinkUserModal Create New User & Link', () => {
         permissions: [],
         activeUserCount: 0,
       },
-    ]);
-    vi.spyOn(usersApi, 'create').mockResolvedValue({
-      user: {
-        id: 88,
-        username: 'mekdes.alemu.004',
-        authProvider: 'LOCAL',
-        status: 'ACTIVE',
-        mustChangePassword: true,
-        temporarilyLocked: false,
-        lockedUntil: null,
-        failedLoginAttempts: 0,
-        roles: [],
-        lastLoginAt: null,
-        createdAt: '2026-11-12T08:00:00Z',
+      {
+        id: 5,
+        name: 'Coach',
+        description: 'Coach role',
+        active: true,
+        systemProtected: false,
+        permissions: [],
+        activeUserCount: 0,
       },
-      temporaryPassword: 'Temp#Mekdes004!',
-    });
-
+    ]);
     const onUpdated = vi.fn().mockResolvedValue(undefined);
     const onClose = vi.fn();
 
@@ -580,11 +575,15 @@ describe('LinkUserModal Create New User & Link', () => {
       />
     );
 
-    fireEvent.click(screen.getByRole('button', { name: 'Create New User & Link' }));
     await waitFor(() => expect(screen.getByLabelText('Employee')).toBeChecked());
+    fireEvent.click(screen.getByLabelText('Coach'));
     fireEvent.click(screen.getByRole('button', { name: 'Create Account & Link' }));
 
     await waitFor(() => expect(screen.getByTestId('link-modal-masked-credential')).toBeInTheDocument());
+    expect(organizationApi.createAndLinkEmployeeUser).toHaveBeenCalledWith(4, {
+      username: 'mekdes.alemu.004',
+      roleIds: [4, 5],
+    });
     expect(screen.getByTestId('link-modal-masked-credential')).toHaveTextContent('••••••••••••••••');
     expect(screen.queryByText('Temp#Mekdes004!')).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /copy/i })).not.toBeInTheDocument();

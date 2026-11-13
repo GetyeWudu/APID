@@ -4,9 +4,8 @@ import { useAuth } from '../../../../app/AuthContext';
 import type { ApiErrorPayload } from '../../../../shared/api/apiClient';
 import { rolesApi } from '../../roles/api/rolesApi';
 import type { RoleItem } from '../../roles/types/roles.types';
-import { usersApi } from '../../users/api/usersApi';
 import { organizationApi } from '../api/organizationApi';
-import type { EmployeeItem, UserAccountSummary } from '../types/organization.types';
+import type { EmployeeItem } from '../types/organization.types';
 
 interface LinkUserModalProps {
   employee: EmployeeItem;
@@ -14,12 +13,9 @@ interface LinkUserModalProps {
   onUpdated: (message: string) => Promise<void> | void;
 }
 
-type ModalMode = 'existing' | 'create';
-
 interface CreatedCredentialView {
   username: string;
   temporaryPassword: string;
-  linked: boolean;
 }
 
 function suggestUsername(employee: EmployeeItem): string {
@@ -32,15 +28,12 @@ function suggestUsername(employee: EmployeeItem): string {
 
 export function LinkUserModal({ employee, onClose, onUpdated }: LinkUserModalProps) {
   const { hasPermission } = useAuth();
-  const canCreateUser = hasPermission('USER_MANAGE');
-
-  const [mode, setMode] = useState<ModalMode>('existing');
-  const [search, setSearch] = useState('');
-  const [candidates, setCandidates] = useState<UserAccountSummary[]>([]);
-  const [selectedUserId, setSelectedUserId] = useState<number | null>(employee.userId);
-  const [loading, setLoading] = useState(true);
+  const canManageAccount =
+    hasPermission('HIERARCHY_MANAGE') && hasPermission('USER_MANAGE');
+  const isLinked = employee.userId != null;
 
   const [roles, setRoles] = useState<RoleItem[]>([]);
+  const [rolesLoading, setRolesLoading] = useState(false);
   const [newUsername, setNewUsername] = useState(() => suggestUsername(employee));
   const [selectedRoleIds, setSelectedRoleIds] = useState<number[]>([]);
   const [createdCredential, setCreatedCredential] = useState<CreatedCredentialView | null>(null);
@@ -50,75 +43,44 @@ export function LinkUserModal({ employee, onClose, onUpdated }: LinkUserModalPro
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
   useEffect(() => {
-    return () => {
-      setCreatedCredential(null);
-      setShowSecret(false);
-    };
-  }, []);
-
-  useEffect(() => {
+    if (!canManageAccount || isLinked) return;
     let active = true;
-    const timer = window.setTimeout(async () => {
-      setLoading(true);
-      try {
-        const list = await organizationApi.listAvailableUsers(employee.userId, search);
-        if (active) setCandidates(list);
-      } catch {
-        if (active) setCandidates([]);
-      } finally {
-        if (active) setLoading(false);
-      }
-    }, 200);
-    return () => {
-      active = false;
-      window.clearTimeout(timer);
-    };
-  }, [employee.userId, search]);
-
-  useEffect(() => {
-    if (!canCreateUser || mode !== 'create' || roles.length > 0) return;
-    let active = true;
+    setRolesLoading(true);
     rolesApi
       .listRoles()
       .then((list) => {
         if (!active) return;
-        const activeRoles = list.filter((r) => r.active);
+        const activeRoles = list.filter((role) => role.active);
         setRoles(activeRoles);
-        const employeeRole = activeRoles.find((r) => r.name.toLowerCase() === 'employee');
-        if (employeeRole) {
-          setSelectedRoleIds((prev) => (prev.length === 0 ? [employeeRole.id] : prev));
-        }
+        const employeeRole = activeRoles.find((role) => role.name.toLowerCase() === 'employee');
+        if (employeeRole) setSelectedRoleIds([employeeRole.id]);
       })
-      .catch(() => {
-        if (active) setRoles([]);
+      .catch((err: unknown) => {
+        if (!active) return;
+        const ax = err as AxiosError<ApiErrorPayload>;
+        setErrorMsg(ax.response?.data?.message || 'Failed to load account roles.');
+      })
+      .finally(() => {
+        if (active) setRolesLoading(false);
       });
     return () => {
       active = false;
     };
-  }, [canCreateUser, mode, roles.length]);
+  }, [canManageAccount, isLinked]);
 
-  const handleLink = async (e: FormEvent) => {
-    e.preventDefault();
-    if (!selectedUserId) return;
-    setSaving(true);
-    setErrorMsg(null);
-    try {
-      await organizationApi.linkEmployeeUser(employee.id, selectedUserId);
-      await onUpdated(`Linked login account to employee "${employee.fullName}" (${employee.employeeNumber}).`);
-      onClose();
-    } catch (err) {
-      const ax = err as AxiosError<ApiErrorPayload>;
-      setErrorMsg(ax.response?.data?.message || 'Failed to link user account');
-    } finally {
-      setSaving(false);
-    }
+  const toggleRole = (roleId: number) => {
+    setSelectedRoleIds((previous) =>
+      previous.includes(roleId)
+        ? previous.filter((id) => id !== roleId)
+        : [...previous, roleId]
+    );
   };
 
-  const handleCreateAndLink = async (e: FormEvent) => {
-    e.preventDefault();
-    if (!canCreateUser) return;
-    const trimmed = newUsername.trim();
-    if (trimmed.length < 3) {
+  const handleCreateAndLink = async (event: FormEvent) => {
+    event.preventDefault();
+    if (!canManageAccount) return;
+    const username = newUsername.trim();
+    if (username.length < 3) {
       setErrorMsg('Username must be at least 3 characters.');
       return;
     }
@@ -130,59 +92,47 @@ export function LinkUserModal({ employee, onClose, onUpdated }: LinkUserModalPro
     setSaving(true);
     setErrorMsg(null);
     try {
-      const created = await usersApi.create({ username: trimmed, roleIds: selectedRoleIds });
-      let linked = false;
-      try {
-        await organizationApi.linkEmployeeUser(employee.id, created.user.id);
-        linked = true;
-      } catch (linkErr) {
-        const ax = linkErr as AxiosError<ApiErrorPayload>;
-        setErrorMsg(
-          ax.response?.data?.message ||
-            'User account was created, but automatic linking failed. Record the one-time credential below and link manually.'
-        );
-      }
+      const result = await organizationApi.createAndLinkEmployeeUser(employee.id, {
+        username,
+        roleIds: selectedRoleIds,
+      });
       setShowSecret(false);
       setCreatedCredential({
-        username: created.user.username,
-        temporaryPassword: created.temporaryPassword,
-        linked,
+        username: result.username,
+        temporaryPassword: result.temporaryPassword,
       });
     } catch (err) {
       const ax = err as AxiosError<ApiErrorPayload>;
-      setErrorMsg(ax.response?.data?.message || 'Failed to create user account');
+      setErrorMsg(ax.response?.data?.message || 'Failed to create and link the user account.');
     } finally {
       setSaving(false);
     }
   };
 
-  const handleUnlink = async () => {
+  const handleRevoke = async () => {
+    if (!canManageAccount) return;
     setSaving(true);
     setErrorMsg(null);
     try {
-      await organizationApi.unlinkEmployeeUser(employee.id);
-      await onUpdated(`Unlinked login account from "${employee.fullName}".`);
+      await organizationApi.revokeEmployeeUserLink(employee.id);
+      await onUpdated(`Revoked the login link for "${employee.fullName}" and deleted the login account.`);
       onClose();
     } catch (err) {
       const ax = err as AxiosError<ApiErrorPayload>;
-      setErrorMsg(ax.response?.data?.message || 'Failed to unlink user account');
+      setErrorMsg(ax.response?.data?.message || 'Failed to revoke the employee login link.');
     } finally {
       setSaving(false);
     }
   };
 
-  const toggleRole = (roleId: number) => {
-    setSelectedRoleIds((prev) =>
-      prev.includes(roleId) ? prev.filter((id) => id !== roleId) : [...prev, roleId]
-    );
-  };
-
   const handleFinishCredentialView = async () => {
-    const cred = createdCredential;
+    const credential = createdCredential;
     setShowSecret(false);
     setCreatedCredential(null);
-    if (cred?.linked) {
-      await onUpdated(`Created and linked @${cred.username} to "${employee.fullName}" (${employee.employeeNumber}).`);
+    if (credential) {
+      await onUpdated(
+        `Created and linked @${credential.username} to "${employee.fullName}" (${employee.employeeNumber}).`
+      );
     }
     onClose();
   };
@@ -191,22 +141,28 @@ export function LinkUserModal({ employee, onClose, onUpdated }: LinkUserModalPro
     <div className="apid-modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="link-user-modal-title">
       <div className="apid-modal apid-card" style={{ maxWidth: '540px' }}>
         <h3 id="link-user-modal-title">
-          {createdCredential ? 'One-Time Login Credential Issued' : `Login Account — ${employee.fullName}`}
+          {createdCredential
+            ? 'One-Time Login Credential Issued'
+            : isLinked
+              ? `Revoke Employee Login — ${employee.fullName}`
+              : `Create Employee Login — ${employee.fullName}`}
         </h3>
         <p className="apid-subtitle">
           Employee #{employee.employeeNumber} • Current link:{' '}
-          <strong>{employee.username ? `@${employee.username}` : 'Unlinked'}</strong>. Linking is explicit and
-          recorded in Audit Logs.
+          <strong>{employee.username ? `@${employee.username}` : 'Unlinked'}</strong>
         </p>
 
         {errorMsg && <div className="apid-alert apid-alert-err">{errorMsg}</div>}
 
-        {createdCredential ? (
+        {!canManageAccount ? (
+          <div className="apid-alert apid-alert-err">
+            You need both hierarchy-management and user-management permissions to manage employee login accounts.
+          </div>
+        ) : createdCredential ? (
           <div>
             <p className="boa-muted" style={{ fontSize: '0.84rem', marginTop: '0.25rem' }}>
-              Account <strong>@{createdCredential.username}</strong>{' '}
-              {createdCredential.linked ? 'has been linked to this employee profile.' : 'was created.'} This
-              temporary secret is shown once and cleared from memory when closed. Password change is enforced on
+              Account <strong>@{createdCredential.username}</strong> has been linked to this employee profile. This
+              temporary password is shown once and cleared from memory when closed. Password change is enforced on
               first sign-in.
             </p>
             <div className="boa-secret-box">
@@ -216,7 +172,7 @@ export function LinkUserModal({ employee, onClose, onUpdated }: LinkUserModalPro
               <button
                 type="button"
                 className="apid-btn apid-btn-sm"
-                onClick={() => setShowSecret((prev) => !prev)}
+                onClick={() => setShowSecret((previous) => !previous)}
               >
                 {showSecret ? 'Hide password' : 'Reveal password'}
               </button>
@@ -230,136 +186,84 @@ export function LinkUserModal({ employee, onClose, onUpdated }: LinkUserModalPro
               </button>
             </div>
           </div>
-        ) : (
+        ) : isLinked ? (
           <>
-            {canCreateUser && (
-              <div className="apid-toolbar" style={{ marginBottom: '0.75rem' }}>
-                <div className="apid-toolbar-left">
-                  <button
-                    type="button"
-                    className={`apid-tab ${mode === 'existing' ? 'active' : ''}`}
-                    onClick={() => {
-                      setMode('existing');
-                      setErrorMsg(null);
-                    }}
-                  >
-                    Link Existing User
-                  </button>
-                  <button
-                    type="button"
-                    className={`apid-tab ${mode === 'create' ? 'active' : ''}`}
-                    onClick={() => {
-                      setMode('create');
-                      setErrorMsg(null);
-                    }}
-                  >
-                    Create New User &amp; Link
-                  </button>
-                </div>
-              </div>
-            )}
-
-            {mode === 'existing' ? (
-              <form className="apid-form" onSubmit={handleLink}>
-                <div className="apid-field">
-                  <label htmlFor="link-user-search">Search Unlinked User Accounts</label>
-                  <input
-                    id="link-user-search"
-                    type="text"
-                    className="apid-input"
-                    placeholder="Search username..."
-                    value={search}
-                    onChange={(e) => setSearch(e.target.value)}
-                  />
-                </div>
-
-                <div className="apid-field">
-                  <label htmlFor="link-user-select">Select User Account</label>
-                  <select
-                    id="link-user-select"
-                    className="apid-input"
-                    value={selectedUserId ?? ''}
-                    onChange={(e) => setSelectedUserId(e.target.value ? Number(e.target.value) : null)}
-                  >
-                    <option value="">— Select user account —</option>
-                    {candidates.map((u) => {
-                      const isExactMatch = u.username.toLowerCase() === employee.employeeNumber.toLowerCase();
-                      return (
-                        <option key={u.id} value={u.id}>
-                          @{u.username} ({u.status}){isExactMatch ? ' ★ Matches Emp #' : ''}
-                        </option>
-                      );
-                    })}
-                  </select>
-                  {loading && (
-                    <span style={{ fontSize: '0.75rem', color: 'var(--muted)' }}>Loading available users...</span>
-                  )}
-                </div>
-
-                <div className="apid-modal-actions">
-                  {employee.userId != null && (
-                    <button
-                      type="button"
-                      className="apid-btn apid-btn-outline apid-btn-danger"
-                      disabled={saving}
-                      onClick={handleUnlink}
-                    >
-                      Unlink Current User
-                    </button>
-                  )}
-                  <button type="button" className="apid-btn apid-btn-outline" disabled={saving} onClick={onClose}>
-                    Cancel
-                  </button>
-                  <button type="submit" className="apid-btn apid-btn-primary" disabled={saving || !selectedUserId}>
-                    {saving ? 'Linking...' : 'Confirm Link'}
-                  </button>
-                </div>
-              </form>
-            ) : (
-              <form className="apid-form" onSubmit={handleCreateAndLink}>
-                <div className="apid-field">
-                  <label htmlFor="create-link-username">New Username (temp password auto-generated)</label>
-                  <input
-                    id="create-link-username"
-                    type="text"
-                    className="apid-input"
-                    value={newUsername}
-                    onChange={(e) => setNewUsername(e.target.value)}
-                    minLength={3}
-                    required
-                  />
-                </div>
-
-                <div className="apid-field">
-                  <label>Assign Roles</label>
-                  <div className="apid-checkbox-list">
-                    {roles.map((r) => (
-                      <label key={r.id} className="apid-checkbox-row">
-                        <input
-                          type="checkbox"
-                          checked={selectedRoleIds.includes(r.id)}
-                          onChange={() => toggleRole(r.id)}
-                        />
-                        <span>{r.name}</span>
-                      </label>
-                    ))}
-                    {roles.length === 0 && (
-                      <span style={{ fontSize: '0.78rem', color: 'var(--muted)' }}>Loading active roles...</span>
-                    )}
-                  </div>
-                </div>
-
-                <div className="apid-modal-actions">
-                  <button type="button" className="apid-btn apid-btn-outline" disabled={saving} onClick={onClose}>
-                    Cancel
-                  </button>
-                  <button type="submit" className="apid-btn apid-btn-primary" disabled={saving}>
-                    {saving ? 'Creating & Linking...' : 'Create Account & Link'}
-                  </button>
-                </div>
-              </form>
-            )}
+            <p className="apid-alert apid-alert-info">
+              Revoking permanently deletes @{employee.username}'s login account, role assignments, and active
+              sessions while preserving business and audit history. If retained records require this account, the
+              revoke will be blocked and the link will remain.
+            </p>
+            <div className="apid-modal-actions">
+              <button type="button" className="apid-btn apid-btn-outline" disabled={saving} onClick={onClose}>
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="apid-btn apid-btn-danger"
+                disabled={saving}
+                onClick={handleRevoke}
+              >
+                {saving ? 'Revoking...' : 'Revoke Link & Delete Account'}
+              </button>
+            </div>
           </>
+        ) : (
+          <form className="apid-form" onSubmit={handleCreateAndLink}>
+            <div className="apid-field">
+              <label htmlFor="create-link-username">Username</label>
+              <input
+                id="create-link-username"
+                type="text"
+                className="apid-input"
+                value={newUsername}
+                onChange={(event) => setNewUsername(event.target.value)}
+                minLength={3}
+                maxLength={100}
+                required
+              />
+              <span style={{ fontSize: '0.78rem', color: 'var(--muted)' }}>
+                After a successful revoke, the same username can be used for a fresh account with a new one-time
+                password and the roles selected below.
+              </span>
+            </div>
+
+            <div className="apid-field">
+              <label>Assign Roles</label>
+              <div className="apid-checkbox-list">
+                {roles.map((role) => (
+                  <label key={role.id} className="apid-checkbox-row">
+                    <input
+                      type="checkbox"
+                      checked={selectedRoleIds.includes(role.id)}
+                      onChange={() => toggleRole(role.id)}
+                    />
+                    <span>{role.name}</span>
+                  </label>
+                ))}
+                {rolesLoading && (
+                  <span style={{ fontSize: '0.78rem', color: 'var(--muted)' }}>Loading active roles...</span>
+                )}
+                {!rolesLoading && roles.length === 0 && !errorMsg && (
+                  <span style={{ fontSize: '0.78rem', color: 'var(--muted)' }}>
+                    No active roles are available.
+                  </span>
+                )}
+              </div>
+            </div>
+
+            <div className="apid-modal-actions">
+              <button type="button" className="apid-btn apid-btn-outline" disabled={saving} onClick={onClose}>
+                Cancel
+              </button>
+              <button
+                type="submit"
+                className="apid-btn apid-btn-primary"
+                disabled={saving || rolesLoading || roles.length === 0}
+              >
+                {saving ? 'Creating & Linking...' : 'Create Account & Link'}
+              </button>
+            </div>
+          </form>
         )}
       </div>
     </div>

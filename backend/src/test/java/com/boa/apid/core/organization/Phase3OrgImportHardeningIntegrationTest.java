@@ -1,5 +1,6 @@
 package com.boa.apid.core.organization;
 
+import com.boa.apid.core.audit.entity.AuditLog;
 import com.boa.apid.core.audit.repository.AuditLogRepository;
 import com.boa.apid.core.auth.controller.AuthController;
 import com.boa.apid.core.auth.dto.LoginRequest;
@@ -483,6 +484,136 @@ class Phase3OrgImportHardeningIntegrationTest {
         // Redis outage fallback check on department listing
         var departments = organizationService.listDepartments(true);
         assertThat(departments).isNotEmpty();
+    }
+
+    @Test
+    void createAndLinkEmployeeUser_isAtomicAndRevokeDeletesAccountAndAllowsRelink() throws Exception {
+        String s = suffix();
+        User admin = createDirectUser("p3h_provision_" + s, TEST_PASS, superAdminRole);
+        String token = login(admin.getUsername(), TEST_PASS);
+        Long empId = createEmployeeApi(
+                token,
+                "PROVISION-" + s,
+                "Provision Candidate",
+                "provision." + s + "@boa.et",
+                null
+        );
+        String username = "provision_user_" + s.toLowerCase(Locale.ROOT);
+
+        MvcResult created = mockMvc.perform(post("/api/v1/core/admin/employees/" + empId + "/create-and-link-user")
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of(
+                                "username", username,
+                                "roleIds", List.of(orgAdminRole.getId())
+                        ))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.username").value(username))
+                .andExpect(jsonPath("$.data.temporaryPassword").isNotEmpty())
+                .andExpect(jsonPath("$.data.employee.userId").isNumber())
+                .andReturn();
+
+        JsonNode response = objectMapper.readTree(created.getResponse().getContentAsString()).path("data");
+        long userId = response.path("employee").path("userId").asLong();
+        String temporaryPassword = response.path("temporaryPassword").asText();
+        User linkedUser = userRepository.findById(userId).orElseThrow();
+        assertThat(linkedUser.isMustChangePassword()).isTrue();
+        assertThat(linkedUser.getStatus()).isEqualTo(UserStatus.ACTIVE);
+
+        mockMvc.perform(post("/api/v1/core/admin/employees/" + empId + "/create-and-link-user")
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of(
+                                "username", username + "_again",
+                                "roleIds", List.of(orgAdminRole.getId())
+                        ))))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.errorCode").value("EMPLOYEE_ALREADY_LINKED"));
+        assertThat(userRepository.findByUsernameIgnoreCase(username + "_again")).isEmpty();
+
+        mockMvc.perform(delete("/api/v1/core/admin/employees/" + empId + "/revoke-user-link")
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.userId").isEmpty());
+
+        assertThat(userRepository.findById(userId)).isEmpty();
+        assertThat(userRepository.findByUsernameIgnoreCase(username)).isEmpty();
+        assertThat(auditLogRepository.findAll().stream()
+                .anyMatch(a -> "EMPLOYEE_USER_LINKED".equals(a.getAction())
+                        && String.valueOf(empId).equals(a.getEntityId())
+                        && Long.valueOf(userId).equals(a.getTargetUserId()))).isTrue();
+        assertThat(temporaryPassword).isNotBlank();
+        assertThat(employeeQueryService.getById(empId).userId()).isNull();
+
+        MvcResult relinked = mockMvc.perform(post("/api/v1/core/admin/employees/" + empId + "/create-and-link-user")
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of(
+                                "username", username,
+                                "roleIds", List.of(orgAdminRole.getId())
+                        ))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.username").value(username))
+                .andExpect(jsonPath("$.data.temporaryPassword").isNotEmpty())
+                .andExpect(jsonPath("$.data.employee.userId").isNumber())
+                .andReturn();
+
+        JsonNode relinkedData = objectMapper.readTree(relinked.getResponse().getContentAsString()).path("data");
+        long recreatedUserId = relinkedData.path("employee").path("userId").asLong();
+        User recreatedUser = userRepository.findById(recreatedUserId).orElseThrow();
+        assertThat(recreatedUserId).isNotEqualTo(userId);
+        assertThat(recreatedUser.getStatus()).isEqualTo(UserStatus.ACTIVE);
+        assertThat(recreatedUser.isMustChangePassword()).isTrue();
+        assertThat(relinkedData.path("temporaryPassword").asText()).isNotBlank();
+        assertThat(employeeQueryService.getById(empId).userId()).isEqualTo(recreatedUserId);
+    }
+
+    @Test
+    void createAndLinkEmployeeUser_reusesLegacyDisabledAccountAfterRevocation() throws Exception {
+        String s = suffix();
+        User admin = createDirectUser("p3h_legacy_" + s, TEST_PASS, superAdminRole);
+        String token = login(admin.getUsername(), TEST_PASS);
+        Long empId = createEmployeeApi(
+                token,
+                "LEGACY-" + s,
+                "Legacy Provision Candidate",
+                "legacy." + s + "@boa.et",
+                null
+        );
+        String username = "legacy_user_" + s.toLowerCase(Locale.ROOT);
+        User legacyUser = createDirectUser(username, TEST_PASS, orgAdminRole);
+        legacyUser.setStatus(UserStatus.DISABLED);
+        userRepository.saveAndFlush(legacyUser);
+
+        AuditLog legacyRevoke = new AuditLog();
+        legacyRevoke.setActorUserId(admin.getId());
+        legacyRevoke.setActorUsername(admin.getUsername());
+        legacyRevoke.setModule("ORG");
+        legacyRevoke.setAction("EMPLOYEE_USER_LINK_REVOKED");
+        legacyRevoke.setResult("SUCCESS");
+        legacyRevoke.setEntityType("EMPLOYEE");
+        legacyRevoke.setEntityId(String.valueOf(empId));
+        legacyRevoke.setDetailsJson(Map.of("userId", legacyUser.getId(), "username", username));
+        auditLogRepository.saveAndFlush(legacyRevoke);
+
+        MvcResult relinked = mockMvc.perform(post("/api/v1/core/admin/employees/" + empId + "/create-and-link-user")
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of(
+                                "username", username,
+                                "roleIds", List.of(orgAdminRole.getId())
+                        ))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.username").value(username))
+                .andExpect(jsonPath("$.data.employee.userId").isNumber())
+                .andReturn();
+
+        long newUserId = objectMapper.readTree(relinked.getResponse().getContentAsString())
+                .path("data").path("employee").path("userId").asLong();
+        assertThat(newUserId).isNotEqualTo(legacyUser.getId());
+        assertThat(userRepository.findById(legacyUser.getId())).isEmpty();
+        assertThat(userRepository.findById(newUserId)).isPresent();
+        assertThat(employeeQueryService.getById(empId).userId()).isEqualTo(newUserId);
     }
 
     // --- Helpers ---

@@ -1,4 +1,4 @@
-import type { PageResponse, UserStatus } from '../../users/types/users.types';
+import type { PageResponse } from '../../users/types/users.types';
 
 export type EmploymentStatus = 'ACTIVE' | 'ON_LEAVE' | 'INACTIVE' | 'TERMINATED';
 export type OrgImportBatchStatus = 'PREVIEWED' | 'COMMITTED' | 'FAILED' | 'EXPIRED' | 'CANCELLED';
@@ -51,7 +51,6 @@ export interface EmployeeItem {
 }
 
 export interface CreateEmployeePayload {
-  userId?: number | null;
   employeeNumber: string;
   fullName: string;
   email?: string;
@@ -134,10 +133,15 @@ export interface OrgImportCommitResult {
   committedAt: string;
 }
 
-export interface UserAccountSummary {
-  id: number;
+export interface CreateEmployeeUserPayload {
   username: string;
-  status: UserStatus;
+  roleIds: number[];
+}
+
+export interface CreateEmployeeUserResult {
+  employee: EmployeeItem;
+  username: string;
+  temporaryPassword: string;
 }
 
 export type EmployeePage = PageResponse<EmployeeItem>;

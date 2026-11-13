@@ -156,6 +156,31 @@ public class OrganizationController {
         return ApiResponse.ok("Employee updated", organizationService.updateEmployee(id, request, actor));
     }
 
+    @PostMapping("/admin/employees/{id}/create-and-link-user")
+    @PreAuthorize("hasAuthority('HIERARCHY_MANAGE') and hasAuthority('USER_MANAGE')")
+    public ApiResponse<CreateAndLinkEmployeeUserResponse> createAndLinkEmployeeUser(
+            @PathVariable Long id,
+            @Valid @RequestBody CreateEmployeeUserRequest request,
+            @AuthenticationPrincipal ApidUserPrincipal actor
+    ) {
+        return ApiResponse.ok(
+                "User account created and linked to employee",
+                organizationService.createAndLinkUser(id, request, actor)
+        );
+    }
+
+    @DeleteMapping("/admin/employees/{id}/revoke-user-link")
+    @PreAuthorize("hasAuthority('HIERARCHY_MANAGE') and hasAuthority('USER_MANAGE')")
+    public ApiResponse<EmployeeDto> revokeEmployeeUserLink(
+            @PathVariable Long id,
+            @AuthenticationPrincipal ApidUserPrincipal actor
+    ) {
+        return ApiResponse.ok(
+                "Employee login link revoked and account deleted",
+                organizationService.revokeUserLink(id, actor)
+        );
+    }
+
     @PostMapping("/admin/employees/{id}/link-user")
     @PreAuthorize("hasAuthority('HIERARCHY_MANAGE')")
     public ApiResponse<EmployeeDto> linkEmployeeUser(
