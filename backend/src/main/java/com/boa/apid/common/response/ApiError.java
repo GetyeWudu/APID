@@ -5,21 +5,37 @@ import java.util.Map;
 
 /**
  * Standard envelope for APID REST error responses.
+ *
+ * JSON shape:
+ * <pre>
+ * {
+ *   "success": false,
+ *   "error": {
+ *     "code": "SOME_ERROR_CODE",
+ *     "message": "Human-readable description",
+ *     "fieldErrors": {}
+ *   },
+ *   "timestamp": "..."
+ * }
+ * </pre>
  */
 public record ApiError(
         boolean success,
-        String errorCode,
-        String message,
-        Map<String, String> fieldErrors,
+        ErrorDetail error,
         Instant timestamp
 ) {
 
-    public static ApiError of(String errorCode, String message) {
-        return new ApiError(false, errorCode, message, Map.of(), Instant.now());
+    public record ErrorDetail(
+            String code,
+            String message,
+            Map<String, String> fieldErrors
+    ) {}
+
+    public static ApiError of(String code, String message) {
+        return new ApiError(false, new ErrorDetail(code, message, Map.of()), Instant.now());
     }
 
     public static ApiError validation(String message, Map<String, String> fieldErrors) {
-        return new ApiError(false, "VALIDATION_ERROR", message, fieldErrors, Instant.now());
+        return new ApiError(false, new ErrorDetail("VALIDATION_ERROR", message, fieldErrors), Instant.now());
     }
 }
-

@@ -23,9 +23,9 @@ class ApiResponseTest {
     void validationErrorIncludesFieldErrors() {
         ApiError error = ApiError.validation("Invalid", Map.of("email", "must not be blank"));
         assertFalse(error.success());
-        assertEquals("VALIDATION_ERROR", error.errorCode());
-        assertEquals("must not be blank", error.fieldErrors().get("email"));
+        assertNotNull(error.error());
+        assertEquals("VALIDATION_ERROR", error.error().code());
+        assertEquals("must not be blank", error.error().fieldErrors().get("email"));
         assertNotNull(error.timestamp());
     }
 }
-

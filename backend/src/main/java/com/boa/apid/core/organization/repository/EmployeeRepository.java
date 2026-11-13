@@ -38,6 +38,8 @@ public interface EmployeeRepository extends JpaRepository<Employee, Long>, JpaSp
             """)
     Optional<Employee> findDetailedByUserId(@Param("userId") Long userId);
 
+    Optional<Employee> findByUserId(Long userId);
+
     @Query("""
             SELECT e FROM Employee e
             LEFT JOIN FETCH e.department d

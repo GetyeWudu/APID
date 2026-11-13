@@ -13,10 +13,6 @@ import {
   SvgSparkline,
 } from '../../../shared/components/ui';
 import { PMS_MODULE_PERMISSIONS } from '../../../shared/auth/workspaceResolver';
-import type {
-  PreviewPmsAssignment,
-  PreviewSkillDevRequest,
-} from '../../../shared/mocks/boaPreviewFixtures';
 import { coachingPreviewAdapter } from '../api/coachingDashboardApi';
 import type { PmsDashboardFilters } from '../api/coachingDashboardTypes';
 import { PmsAssignmentsTab } from '../components/PmsAssignmentsTab';
@@ -24,6 +20,7 @@ import { PmsReportsTab } from '../components/PmsReportsTab';
 import { PmsUploadPreviewTab } from '../components/PmsUploadPreviewTab';
 import { RatingDistributionCard } from '../components/RatingDistributionCard';
 import { SkillDevApprovalTab } from '../components/SkillDevApprovalTab';
+import { skillCoachingRequestApi } from '../api/skillCoachingRequestApi';
 import {
   classifyRating,
   isMandatoryCoachingRounded,
@@ -75,15 +72,6 @@ export function PmsAdminDashboardPage() {
     directorate: 'ALL',
   });
 
-  // Session-only preview mutations merged on top of adapter snapshot
-  const [coachOverrides, setCoachOverrides] = useState<
-    Record<string, { coachName: string; entries: PreviewPmsAssignment['coachHistory'] }>
-  >({});
-  const [extraInitiatives, setExtraInitiatives] = useState<PreviewPmsAssignment[]>([]);
-  const [requestOverrides, setRequestOverrides] = useState<
-    Record<string, { status: PreviewSkillDevRequest['status']; reviewReason?: string }>
-  >({});
-
   const visibleTabs = useMemo(
     () => PMS_TABS.filter((t) => hasAnyPermission(t.anyPermissions)),
     [hasAnyPermission]
@@ -97,28 +85,8 @@ export function PmsAdminDashboardPage() {
     queryFn: () => coachingPreviewAdapter.getOverview(filters),
   });
 
-  const mergedAssignments = useMemo(() => {
-    const base = overviewQuery.data?.assignments ?? [];
-    const combined = [...extraInitiatives, ...base];
-    return combined.map((item) => {
-      const patch = coachOverrides[item.id];
-      if (!patch) return item;
-      return {
-        ...item,
-        coachName: patch.coachName,
-        status: item.status === 'PENDING_COACH_ASSIGNMENT' ? 'ACTIVE' : item.status,
-        coachHistory: [...item.coachHistory, ...patch.entries],
-      };
-    });
-  }, [overviewQuery.data, extraInitiatives, coachOverrides]);
-
-  const mergedRequests = useMemo(() => {
-    const base = overviewQuery.data?.requests ?? [];
-    return base.map((req) => {
-      const patch = requestOverrides[req.id];
-      return patch ? { ...req, status: patch.status, reviewReason: patch.reviewReason } : req;
-    });
-  }, [overviewQuery.data, requestOverrides]);
+  const mergedAssignments = overviewQuery.data?.assignments ?? [];
+  const mergedRequests = overviewQuery.data?.requests ?? [];
 
   if (!hasAnyPermission(PMS_MODULE_PERMISSIONS) || !activeTab) {
     return (
@@ -137,7 +105,15 @@ export function PmsAdminDashboardPage() {
   const grade3PassingCount =
     overviewQuery.data?.ratingSeries.filter((r) => classifyRating(r) === 'GRADE_3_MEETS_STANDARD').length ?? 0;
 
-  const pendingApprovalsCount = mergedRequests.filter((r) => r.status === 'PENDING_APPROVAL').length;
+  const livePendingRequestsQuery = useQuery({
+    queryKey: ['coaching', 'skill-requests', 'pending'],
+    queryFn: skillCoachingRequestApi.getPendingRequests,
+    enabled: hasAnyPermission(['COACHING_REQUEST_APPROVE']),
+  });
+
+  const pendingApprovalsCount = Array.isArray(livePendingRequestsQuery.data)
+    ? livePendingRequestsQuery.data.length
+    : mergedRequests.filter((r) => r.status === 'PENDING_APPROVAL').length;
   const overdueCount = mergedAssignments.reduce((acc, a) => acc + a.overdueReports, 0);
 
   const activeTabMeta = visibleTabs.find((t) => t.key === activeTab) ?? visibleTabs[0];
@@ -274,29 +250,7 @@ export function PmsAdminDashboardPage() {
                   'COACHING_REPORT_VIEW_ALL',
                 ]}
               >
-                <PmsAssignmentsTab
-                  assignments={mergedAssignments}
-                  onAssignmentCoachUpdated={(id, nextCoach, reason) =>
-                    setCoachOverrides((prev) => ({
-                      ...prev,
-                      [id]: {
-                        coachName: nextCoach,
-                        entries: [
-                          ...(prev[id]?.entries ?? []),
-                          {
-                            date: new Date().toISOString().slice(0, 10),
-                            fromCoach: prev[id]?.coachName ?? 'Previous Coach',
-                            toCoach: nextCoach,
-                            reason,
-                          },
-                        ],
-                      },
-                    }))
-                  }
-                  onCreateInitiative={(created) =>
-                    setExtraInitiatives((prev) => [created, ...prev])
-                  }
-                />
+                <PmsAssignmentsTab />
               </PermissionGate>
             </div>
           )}
@@ -309,15 +263,7 @@ export function PmsAdminDashboardPage() {
 
           {activeTab === 'approvals' && (
             <PermissionGate permission="COACHING_REQUEST_APPROVE">
-              <SkillDevApprovalTab
-                requests={mergedRequests}
-                onRequestUpdated={(id, status, reviewReason) =>
-                  setRequestOverrides((prev) => ({
-                    ...prev,
-                    [id]: { status, reviewReason },
-                  }))
-                }
-              />
+              <SkillDevApprovalTab />
             </PermissionGate>
           )}
 

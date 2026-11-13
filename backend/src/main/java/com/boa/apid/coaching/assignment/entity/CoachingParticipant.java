@@ -24,6 +24,9 @@ public class CoachingParticipant {
     @Column(name = "active", nullable = false)
     private boolean active = true;
 
+    @Column(name = "left_at")
+    private Instant leftAt;
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
 
@@ -39,6 +42,8 @@ public class CoachingParticipant {
     public void setRole(ParticipantRole role) { this.role = role; }
     public boolean isActive() { return active; }
     public void setActive(boolean active) { this.active = active; }
+    public Instant getLeftAt() { return leftAt; }
+    public void setLeftAt(Instant leftAt) { this.leftAt = leftAt; }
     public Instant getCreatedAt() { return createdAt; }
 }
 

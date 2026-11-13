@@ -135,6 +135,13 @@ export function AppLayout({ children }: { children: ReactNode }) {
                   },
                 ]
               : []),
+            {
+              to: '/coaching?view=skills',
+              label: 'Skill Development',
+              icon: <Award size={17} />,
+              requiredAnyPermissions: EMPLOYEE_WORKSPACE_PERMISSIONS,
+              matchSearch: '?view=skills',
+            },
           ],
         },
         {
