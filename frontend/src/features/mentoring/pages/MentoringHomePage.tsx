@@ -14,9 +14,10 @@ import { workspaceLiveApi, workspacePreviewAdapter } from '../../workspace/api/w
 import type { ChatMessageItem } from '../../workspace/components/IsolatedChatPanel';
 import { MentoringTab } from '../../workspace/components/MentoringTab';
 import { mentorDirectoryApi } from '../api/mentorDirectoryApi';
+import { ApplyForMentorForm } from '../components/ApplyForMentorForm';
 import { MentorDirectory } from '../components/MentorDirectory';
 
-type MentoringViewKey = 'overview' | 'directory' | 'trainer';
+type MentoringViewKey = 'overview' | 'directory' | 'trainer' | 'apply';
 
 export function MentoringHomePage() {
   const { user, hasPermission, hasAnyPermission } = useAuth();
@@ -25,7 +26,9 @@ export function MentoringHomePage() {
 
   const requestedView = searchParams.get('view') as MentoringViewKey | null;
   const activeView: MentoringViewKey =
-    requestedView === 'directory' || requestedView === 'trainer' ? requestedView : 'overview';
+    requestedView === 'directory' || requestedView === 'trainer' || requestedView === 'apply'
+      ? requestedView
+      : 'overview';
 
   const identityQuery = useQuery({
     queryKey: ['workspace', 'identity', user?.id],
@@ -36,7 +39,7 @@ export function MentoringHomePage() {
   const previewQuery = useQuery({
     queryKey: ['workspace', 'preview-participation'],
     queryFn: workspacePreviewAdapter.getParticipationPreview,
-    enabled: activeView !== 'directory',
+    enabled: activeView === 'overview' || activeView === 'trainer',
   });
 
   const mentorsQuery = useQuery({
@@ -118,6 +121,18 @@ export function MentoringHomePage() {
             }
           />
         </div>
+      </div>
+    );
+  }
+
+  if (activeView === 'apply') {
+    return (
+      <div className="boa-stack">
+        <PageHeader
+          title="Apply for Mentor"
+          subtitle="Choose a catalog skill, enter a custom skill, or provide both, then upload proof."
+        />
+        <ApplyForMentorForm activeSkills={activeSkills} />
       </div>
     );
   }

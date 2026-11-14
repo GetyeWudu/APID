@@ -50,7 +50,9 @@ export function LinkUserModal({ employee, onClose, onUpdated }: LinkUserModalPro
       .listRoles()
       .then((list) => {
         if (!active) return;
-        const activeRoles = list.filter((role) => role.active);
+        const activeRoles = list.filter(
+          (role) => role.active && role.name.trim().toLowerCase() !== 'mentor'
+        );
         setRoles(activeRoles);
         const employeeRole = activeRoles.find((role) => role.name.toLowerCase() === 'employee');
         if (employeeRole) setSelectedRoleIds([employeeRole.id]);

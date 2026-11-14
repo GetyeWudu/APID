@@ -23,6 +23,7 @@ import {
   ShieldCheck,
   SlidersHorizontal,
   UserCheck,
+  UserPlus,
   Users,
   X,
 } from 'lucide-react';
@@ -195,11 +196,11 @@ export function AppLayout({ children }: { children: ReactNode }) {
               matchSearch: '?view=directory',
             },
             {
-              to: '/mentoring?view=trainer',
-              label: 'Trainer Workspace',
-              icon: <Users size={17} />,
+              to: '/mentoring?view=apply',
+              label: 'Apply for Mentor',
+              icon: <UserPlus size={17} />,
               requiredAnyPermissions: EMPLOYEE_WORKSPACE_PERMISSIONS,
-              matchSearch: '?view=trainer',
+              matchSearch: '?view=apply',
             },
           ],
         },
