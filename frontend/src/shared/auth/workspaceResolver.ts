@@ -79,7 +79,7 @@ export const WORKSPACE_DEFINITIONS: WorkspaceDefinition[] = [
   {
     key: 'workspace',
     label: 'My Workspace',
-    description: 'My Coaching, My Mentoring, Direct Reports & Upcoming Sessions',
+    description: 'Employee dashboard, private chats, coaching, mentoring, and direct reports',
     route: '/workspace',
     requiredAnyPermissions: EMPLOYEE_WORKSPACE_PERMISSIONS,
   },
@@ -122,7 +122,7 @@ export function resolveAuthorizedModules(permissions: string[]): PortalModuleDef
       title: 'Mentoring & Trainers',
       shortLabel: 'Mentoring',
       tagline:
-        'Find certified trainers, track mentoring sessions, apply as a trainer, and HR matching.',
+        'Find a mentor, track your learning sessions, mentor trainees, and apply to become a mentor.',
       route: hasEmployee ? '/mentoring' : '/mentoring/hr',
       requiredAnyPermissions: MENTORING_PORTAL_PERMISSIONS,
     });

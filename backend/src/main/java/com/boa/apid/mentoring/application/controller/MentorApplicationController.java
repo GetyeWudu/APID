@@ -3,14 +3,19 @@ package com.boa.apid.mentoring.application.controller;
 import com.boa.apid.common.response.ApiResponse;
 import com.boa.apid.core.auth.security.ApidUserPrincipal;
 import com.boa.apid.mentoring.application.dto.MentorApplicationDto;
+import com.boa.apid.mentoring.application.dto.MentorApplicationReviewRequest;
 import com.boa.apid.mentoring.application.dto.MentorApplicationSubmittedDto;
 import com.boa.apid.mentoring.application.service.MentorApplicationService;
+import jakarta.validation.Valid;
 import org.springframework.http.MediaType;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
@@ -46,5 +51,18 @@ public class MentorApplicationController {
     @PreAuthorize("hasAuthority('TRAINER_APPLICATION_REVIEW')")
     public ApiResponse<List<MentorApplicationDto>> listApplications() {
         return ApiResponse.ok(mentorApplicationService.listApplications());
+    }
+
+    @PatchMapping("/{applicationId}/review")
+    @PreAuthorize("hasAuthority('TRAINER_APPLICATION_REVIEW')")
+    public ApiResponse<MentorApplicationDto> reviewApplication(
+            @PathVariable Long applicationId,
+            @Valid @RequestBody MentorApplicationReviewRequest request,
+            @AuthenticationPrincipal ApidUserPrincipal actor
+    ) {
+        return ApiResponse.ok(
+                "Mentor application reviewed",
+                mentorApplicationService.reviewApplication(applicationId, request, actor)
+        );
     }
 }

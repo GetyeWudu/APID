@@ -482,9 +482,12 @@ APID supports **all three** discovery and matching paths concurrently:
    - Employee submits an open learning request (`"I want to learn X, please match me"`); HR Admin views matching Trainers and manually pairs the Trainee with a suitable Trainer.
 
 ### 5.5 Mentoring Requests & Capacity Rules (`FR-MENTOR-05`)
-- Supports **Individual** and **Group** learning requests.
-- **Request Fields:** `skillId`, `requestType` (`INDIVIDUAL` | `GROUP`), `traineeIds`, `learningObjectives`, `preferredTrainerId` (optional), `preferredScheduleNotes`, `justification`.
-- **Lifecycle Statuses:** `SUBMITTED`, `UNDER_REVIEW` (for HR matching), `AWAITING_TRAINER` (for direct browse), `MATCHED`, `ACCEPTED`, `REJECTED`, `CANCELLED`.
+- Supports **Individual** and **Group** mentoring relationships.
+- An employee can request **individual mentorship** from one active Mentor; that Mentor approves or declines the request.
+- A Mentor can invite one employee to an individual pairing or invite multiple employees to a **Group/class**. Each invited employee independently approves or declines; accepted employees join the same class relationship.
+- Group invitations are Mentor-initiated. Trainee-initiated requests are individual.
+- Requests include the Mentor, initiator, optional skill and message, relationship type, and one response record per recipient.
+- Each recipient response is `PENDING`, `ACCEPTED`, or `DECLINED`. Approval creates an active Mentor–Trainee relationship; pending and declined responses do not.
 - **Capacity Guard:** System prevents assigning a new pairing if Trainer has reached `maxConcurrentTrainees` (unless HR Admin explicitly overrides).
 
 ### 5.6 Trainer–Trainee Relationships & Collaboration (`FR-MENTOR-06`)
@@ -523,7 +526,8 @@ All notifications write immediately to `core.notifications` (displayed in the to
 | Trainer application approved / rejected | Mentoring | Applicant employee | `/mentoring/trainer-profile` |
 | Direct HR Trainer appointment | Mentoring | Appointed employee | `/mentoring/trainer-profile` |
 | Trainer suspended / revoked / restored | Mentoring | Trainer (+ active Trainees / HR if affected) | `/mentoring/relationships` |
-| New Mentoring request / HR match / Acceptance | Mentoring | Trainer + Trainee(s) | `/mentoring/requests/{id}` |
+| New Mentor invitation / trainee mentorship request | Mentoring | Invited Trainee or requested Mentor | `/mentoring?view=trainee` or `/mentoring?view=trainer` |
+| Mentoring request approved / declined | Mentoring | Request initiator | `/mentoring?view=trainer` or `/mentoring?view=trainee` |
 
 ---
 
@@ -599,9 +603,10 @@ APID uses **one PostgreSQL 16 database (`apid_db`)** divided into **3 isolated s
 - `mentoring.trainer_authorizations` (`id`, `employee_id` FK->`core.employees`, `source_type` (`APPLICATION`|`DIRECT_APPOINTMENT`), `source_application_id`, `status` (`ACTIVE`|`SUSPENDED`|`REVOKED`), `max_concurrent_trainees`, `bio`, `appointment_reason`, `authorized_by_user_id`, `status_reason`, `effective_from`, `updated_at`)
 - `mentoring.trainer_skills` (`trainer_auth_id`, `skill_id` FK->`core.skills`)
 - `mentoring.trainer_status_history` (`id`, `trainer_auth_id`, `previous_status`, `new_status`, `reason`, `changed_by_user_id`, `changed_at`)
-- `mentoring.mentoring_requests` (`id`, `requester_user_id`, `skill_id` FK->`core.skills`, `request_type` (`INDIVIDUAL`|`GROUP`), `discovery_mode` (`BROWSE`|`RECOMMENDED`|`HR_ASSISTED`), `preferred_trainer_employee_id`, `learning_objectives`, `preferred_schedule`, `status`, `handled_by_user_id`, `decision_notes`, `created_at`)
-- `mentoring.mentoring_request_trainees` (`request_id`, `employee_id`)
-- `mentoring.mentoring_relationships` (`id`, `request_id`, `trainer_employee_id`, `skill_id`, `learning_objectives`, `start_date`, `planned_end_date`, `status`, `completed_at`)
+- `mentoring.mentoring_requests` (`id`, `mentor_user_id`, `initiated_by_user_id`, `request_type` (`INDIVIDUAL`|`GROUP`), optional `skill_id` and `message`, `created_at`)
+- `mentoring.mentoring_request_recipients` (`id`, `request_id`, `recipient_user_id`, `trainee_user_id`, `status` (`PENDING`|`ACCEPTED`|`DECLINED`), `responded_at`); group invitations have one recipient row per invited employee.
+- `mentoring.mentoring_relationships` (`id`, `request_id`, `mentor_user_id`, `status` (`ACTIVE`|`PAUSED`|`COMPLETED`|`CANCELLED`|`REASSIGNED`), `started_at`, `ended_at`); one group request creates one shared class relationship.
+- `mentoring.mentoring_relationship_members` (`id`, `relationship_id`, `request_recipient_id`, `mentor_user_id`, `trainee_user_id`, `status`, `joined_at`, `ended_at`); each approved trainee has a separate membership, while an individual relationship has one member.
 - `mentoring.mentoring_relationship_trainees` (`relationship_id`, `trainee_employee_id`, `rating`, `feedback`, `rated_at`)
 - `mentoring.mentoring_sessions` (`id`, `relationship_id`, `title`, `agenda`, `scheduled_start`, `scheduled_end`, `delivery_mode`, `video_room_id`, `status`, `reminded_24h`, `reminded_15m`, `notes`)
 - `mentoring.mentoring_session_attendance` (`id`, `session_id`, `trainee_employee_id`, `attendance_status`, `joined_at`, `confirmed_by_trainer_at`)

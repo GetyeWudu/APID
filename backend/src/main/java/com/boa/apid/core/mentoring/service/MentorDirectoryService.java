@@ -34,10 +34,11 @@ public class MentorDirectoryService {
         }
 
         List<Long> userIds = mentors.stream().map(User::getId).toList();
-        Map<Long, Employee> employeesByUserId = employeeRepository.findDetailedByUserIdIn(userIds).stream()
+        Map<Long, Employee> employeesByUserId = employeeRepository.findActiveDetailedByUserIdIn(userIds).stream()
                 .collect(Collectors.toMap(Employee::getUserId, Function.identity()));
 
         return mentors.stream()
+                .filter(user -> employeesByUserId.containsKey(user.getId()))
                 .map(user -> toDto(user, employeesByUserId.get(user.getId())))
                 .sorted(Comparator.comparing(MentorDirectoryDto::fullName, String.CASE_INSENSITIVE_ORDER))
                 .toList();

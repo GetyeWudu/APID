@@ -7,13 +7,21 @@ import com.boa.apid.common.storage.StoredFile;
 import com.boa.apid.common.storage.StoredFileDto;
 import com.boa.apid.common.storage.StoredFileRepository;
 import com.boa.apid.core.auth.security.ApidUserPrincipal;
+import com.boa.apid.core.audit.service.AuditService;
+import com.boa.apid.core.authorization.entity.Role;
 import com.boa.apid.core.authorization.entity.User;
+import com.boa.apid.core.authorization.entity.UserRole;
+import com.boa.apid.core.authorization.repository.RoleRepository;
 import com.boa.apid.core.authorization.repository.UserRepository;
+import com.boa.apid.core.authorization.repository.UserRoleRepository;
+import com.boa.apid.core.notifications.service.NotificationService;
 import com.boa.apid.core.skills.entity.Skill;
 import com.boa.apid.core.skills.repository.SkillRepository;
+import com.boa.apid.mentoring.application.dto.MentorApplicationReviewRequest;
 import com.boa.apid.mentoring.application.entity.MentorApplication;
 import com.boa.apid.mentoring.application.entity.MentorApplicationStatus;
 import com.boa.apid.mentoring.application.repository.MentorApplicationRepository;
+import org.springframework.context.ApplicationEventPublisher;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
@@ -52,6 +60,21 @@ class MentorApplicationServiceTest {
 
     @Mock
     private FileStorageService fileStorageService;
+
+    @Mock
+    private RoleRepository roleRepository;
+
+    @Mock
+    private UserRoleRepository userRoleRepository;
+
+    @Mock
+    private AuditService auditService;
+
+    @Mock
+    private NotificationService notificationService;
+
+    @Mock
+    private ApplicationEventPublisher eventPublisher;
 
     @InjectMocks
     private MentorApplicationService service;
@@ -128,6 +151,118 @@ class MentorApplicationServiceTest {
         assertEquals("mentor.applicant", result.get(0).applicantUsername());
         assertEquals("Financial Analysis", result.get(0).skillName());
         assertEquals("financial-analysis.pdf", result.get(0).proofFileName());
+    }
+
+    @Test
+    void reviewApprovalAssignsMentorRoleAndCatalogSkill() {
+        ApidUserPrincipal actor = actor();
+        User applicant = user(11L, "applicant");
+        User reviewer = user(actor.getUserId(), actor.getUsername());
+        Skill skill = new Skill();
+        skill.setId(12L);
+        skill.setName("Financial Analysis");
+        MentorApplication application = application(applicant, skill);
+        Role mentorRole = new Role();
+        mentorRole.setId(4L);
+        mentorRole.setName("Mentor");
+
+        when(applicationRepository.findByIdForUpdate(50L)).thenReturn(Optional.of(application));
+        when(userRepository.findByIdForUpdate(11L)).thenReturn(Optional.of(applicant));
+        when(userRepository.findById(actor.getUserId())).thenReturn(Optional.of(reviewer));
+        when(userRepository.getReferenceById(actor.getUserId())).thenReturn(reviewer);
+        when(roleRepository.findByNameIgnoreCase("Mentor")).thenReturn(Optional.of(mentorRole));
+        when(userRoleRepository.findActiveByUserIdWithRole(11L)).thenReturn(List.of());
+        when(applicationRepository.save(any(MentorApplication.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+
+        var result = service.reviewApplication(
+                50L,
+                new MentorApplicationReviewRequest(MentorApplicationStatus.APPROVED, null),
+                actor
+        );
+
+        ArgumentCaptor<UserRole> roleCaptor = ArgumentCaptor.forClass(UserRole.class);
+        verify(userRoleRepository).save(roleCaptor.capture());
+        assertSame(applicant, roleCaptor.getValue().getUser());
+        assertSame(mentorRole, roleCaptor.getValue().getRole());
+        assertSame(reviewer, roleCaptor.getValue().getAssignedBy());
+        assertEquals(MentorApplicationStatus.APPROVED, result.status());
+        assertEquals("Financial Analysis", result.skillName());
+        assertEquals(MentorApplicationStatus.APPROVED, application.getStatus());
+        assertEquals(1, applicant.getSkills().size());
+        verify(notificationService).notify(
+                11L,
+                com.boa.apid.core.notifications.entity.NotificationModule.MENTORING,
+                "MENTOR_APPLICATION_APPROVED",
+                "Mentor application approved",
+                "Your mentor application for Financial Analysis was approved.",
+                "/mentoring?tab=applications"
+        );
+    }
+
+    @Test
+    void reviewDeclineRequiresReasonAndNotifiesApplicant() {
+        ApidUserPrincipal actor = actor();
+        User applicant = user(11L, "applicant");
+        User reviewer = user(actor.getUserId(), actor.getUsername());
+        MentorApplication application = application(applicant, null);
+        application.setCustomSkill("Coaching");
+
+        when(applicationRepository.findByIdForUpdate(50L)).thenReturn(Optional.of(application));
+        when(userRepository.findByIdForUpdate(11L)).thenReturn(Optional.of(applicant));
+        when(userRepository.findById(actor.getUserId())).thenReturn(Optional.of(reviewer));
+        when(applicationRepository.save(any(MentorApplication.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+
+        var result = service.reviewApplication(
+                50L,
+                new MentorApplicationReviewRequest(MentorApplicationStatus.DECLINED, "Evidence is incomplete."),
+                actor
+        );
+
+        assertEquals(MentorApplicationStatus.DECLINED, result.status());
+        assertEquals("Evidence is incomplete.", result.reviewReason());
+        assertEquals(actor.getUsername(), result.reviewedByUsername());
+        verify(userRoleRepository, org.mockito.Mockito.never()).save(any(UserRole.class));
+        verify(notificationService).notify(
+                11L,
+                com.boa.apid.core.notifications.entity.NotificationModule.MENTORING,
+                "MENTOR_APPLICATION_DECLINED",
+                "Mentor application declined",
+                "Your mentor application for Coaching was declined. Reason: Evidence is incomplete.",
+                "/mentoring?tab=applications"
+        );
+    }
+
+    @Test
+    void reviewDeclineWithoutReasonDoesNotLoadApplication() {
+        assertThrows(
+                BusinessException.class,
+                () -> service.reviewApplication(
+                        50L,
+                        new MentorApplicationReviewRequest(MentorApplicationStatus.DECLINED, "  "),
+                        actor()
+                )
+        );
+
+        verifyNoInteractions(applicationRepository);
+    }
+
+    private static User user(Long id, String username) {
+        User user = new User();
+        user.setId(id);
+        user.setUsername(username);
+        return user;
+    }
+
+    private static MentorApplication application(User applicant, Skill skill) {
+        StoredFile proofFile = new StoredFile();
+        proofFile.setOriginalFilename("proof.pdf");
+        MentorApplication application = new MentorApplication();
+        application.setApplicant(applicant);
+        application.setCatalogSkill(skill);
+        application.setProofDocument(proofFile);
+        return application;
     }
 
     private static ApidUserPrincipal actor() {

@@ -13,39 +13,61 @@ import {
 import { workspaceLiveApi, workspacePreviewAdapter } from '../../workspace/api/workspaceDashboardApi';
 import type { ChatMessageItem } from '../../workspace/components/IsolatedChatPanel';
 import { MentoringTab } from '../../workspace/components/MentoringTab';
+import { mentoringPairingApi } from '../api/mentoringPairingApi';
 import { mentorDirectoryApi } from '../api/mentorDirectoryApi';
 import { ApplyForMentorForm } from '../components/ApplyForMentorForm';
 import { MentorDirectory } from '../components/MentorDirectory';
+import { MentorInvitationForm } from '../components/MentorInvitationForm';
+import { MentoringRequestsPanel } from '../components/MentoringRequestsPanel';
 
-type MentoringViewKey = 'overview' | 'directory' | 'trainer' | 'apply';
+type MentoringViewKey =
+  | 'overview'
+  | 'directory'
+  | 'trainee'
+  | 'trainee-sessions'
+  | 'trainer'
+  | 'trainer-sessions'
+  | 'apply';
 
 export function MentoringHomePage() {
   const { user, hasPermission, hasAnyPermission } = useAuth();
   const [searchParams] = useSearchParams();
   const [mentoringChatExtra, setMentoringChatExtra] = useState<ChatMessageItem[]>([]);
+  const isMentor = user?.roles.some((role) => role.trim().toLowerCase() === 'mentor') ?? false;
 
   const requestedView = searchParams.get('view') as MentoringViewKey | null;
   const activeView: MentoringViewKey =
-    requestedView === 'directory' || requestedView === 'trainer' || requestedView === 'apply'
+    requestedView === 'directory' ||
+    requestedView === 'trainee' ||
+    requestedView === 'trainee-sessions' ||
+    requestedView === 'trainer' ||
+    requestedView === 'trainer-sessions' ||
+    requestedView === 'apply'
       ? requestedView
       : 'overview';
 
   const identityQuery = useQuery({
     queryKey: ['workspace', 'identity', user?.id],
     queryFn: workspaceLiveApi.loadMyIdentity,
-    enabled: activeView !== 'directory',
+    enabled: hasAnyPermission(EMPLOYEE_WORKSPACE_PERMISSIONS),
   });
 
   const previewQuery = useQuery({
     queryKey: ['workspace', 'preview-participation'],
     queryFn: workspacePreviewAdapter.getParticipationPreview,
-    enabled: activeView === 'overview' || activeView === 'trainer',
+    enabled: activeView === 'trainee-sessions' || activeView === 'trainer-sessions',
   });
 
   const mentorsQuery = useQuery({
     queryKey: ['mentoring', 'directory'],
     queryFn: mentorDirectoryApi.listMentors,
     enabled: activeView === 'directory' && hasAnyPermission(EMPLOYEE_WORKSPACE_PERMISSIONS),
+  });
+
+  const pairingRequestsQuery = useQuery({
+    queryKey: ['mentoring', 'pairing', 'requests', user?.id],
+    queryFn: mentoringPairingApi.listMyRequests,
+    enabled: hasAnyPermission(EMPLOYEE_WORKSPACE_PERMISSIONS),
   });
 
   if (!hasAnyPermission(EMPLOYEE_WORKSPACE_PERMISSIONS)) {
@@ -59,36 +81,9 @@ export function MentoringHomePage() {
     );
   }
 
-  if (activeView === 'directory') {
-    if (mentorsQuery.isLoading) {
-      return <LoadingSkeleton rows={6} height={28} />;
-    }
-
-    if (mentorsQuery.isError) {
-      return (
-        <ErrorState
-          message="Unable to load mentors from the database."
-          onRetry={() => void mentorsQuery.refetch()}
-        />
-      );
-    }
-
-    return (
-      <div className="boa-stack">
-        <PageHeader
-          title="Certified Trainer Directory"
-          subtitle="Browse active users assigned the Mentor role and their linked skills."
-          source="live"
-        />
-        <MentorDirectory mentors={mentorsQuery.data ?? []} />
-      </div>
-    );
-  }
-
-  if (identityQuery.isLoading || previewQuery.isLoading) {
+  if (identityQuery.isLoading) {
     return <LoadingSkeleton rows={6} height={28} />;
   }
-
   if (identityQuery.isError || !identityQuery.data) {
     return (
       <ErrorState
@@ -103,8 +98,8 @@ export function MentoringHomePage() {
     return (
       <div className="boa-stack">
         <PageHeader
-          title="Mentoring & Trainers"
-          subtitle="Track your mentoring match, browse certified trainers, or apply as a trainer."
+          title="Mentoring"
+          subtitle="Learn with a mentor, find mentors by skill, or apply to become a mentor."
           source="live"
         />
         <div className="apid-card" data-testid="unlinked-profile-state">
@@ -125,11 +120,120 @@ export function MentoringHomePage() {
     );
   }
 
+  if (activeView === 'directory') {
+    if (mentorsQuery.isLoading || pairingRequestsQuery.isLoading) {
+      return <LoadingSkeleton rows={6} height={28} />;
+    }
+
+    if (mentorsQuery.isError || pairingRequestsQuery.isError) {
+      return (
+        <ErrorState
+          message="Unable to load mentors or your mentoring requests."
+          onRetry={() => {
+            void mentorsQuery.refetch();
+            void pairingRequestsQuery.refetch();
+          }}
+        />
+      );
+    }
+
+    return (
+      <div className="boa-stack">
+        <PageHeader
+          title="Find a Mentor"
+          subtitle="Browse active mentors by their linked skills."
+          source="live"
+        />
+        <MentorDirectory
+          mentors={mentorsQuery.data ?? []}
+          currentUserId={user?.id}
+          requests={pairingRequestsQuery.data ?? []}
+        />
+      </div>
+    );
+  }
+
+  if (activeView === 'overview' || activeView === 'trainee' || activeView === 'trainer') {
+    if (pairingRequestsQuery.isLoading) {
+      return <LoadingSkeleton rows={6} height={28} />;
+    }
+    if (pairingRequestsQuery.isError) {
+      return (
+        <ErrorState
+          message="Unable to load your mentoring requests."
+          onRetry={() => void pairingRequestsQuery.refetch()}
+        />
+      );
+    }
+    if (activeView === 'trainer' && !isMentor) {
+      return (
+        <div className="boa-stack">
+          <PageHeader title="My Trainees" subtitle="Mentor invitations and requests." source="live" />
+          <div className="apid-card">
+            <EmptyState
+              title="Mentor Access Required"
+              description="Only approved mentors can invite employees or respond to trainee requests."
+            />
+          </div>
+        </div>
+      );
+    }
+
+    const view = activeView === 'trainer' ? 'mentor' : activeView === 'trainee' ? 'trainee' : 'all';
+    const title =
+      activeView === 'trainer'
+        ? 'My Trainees'
+        : activeView === 'trainee'
+          ? 'My Mentor'
+          : 'Mentoring';
+    const subtitle =
+      activeView === 'trainer'
+        ? 'Invite employees to a one-to-one pairing or class, and respond to mentorship requests.'
+        : activeView === 'trainee'
+          ? 'Request a mentor, respond to invitations, and track your active relationships.'
+          : 'Manage mentoring invitations, requests, and active pairings.';
+
+    return (
+      <div className="boa-stack">
+        <PageHeader title={title} subtitle={subtitle} source="live" />
+        {activeView === 'trainer' && user?.id && <MentorInvitationForm currentUserId={user.id} />}
+        {activeView === 'trainee' && (
+          <div>
+            <Link to="/mentoring?view=directory" className="apid-btn apid-btn-primary apid-btn-sm">
+              Find a Mentor
+            </Link>
+          </div>
+        )}
+        {activeView === 'overview' && (
+          <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+            <Link to="/mentoring?view=directory" className="apid-btn apid-btn-outline apid-btn-sm">
+              Find a Mentor
+            </Link>
+            {isMentor && (
+              <Link to="/mentoring?view=trainer" className="apid-btn apid-btn-outline apid-btn-sm">
+                Invite Employees
+              </Link>
+            )}
+          </div>
+        )}
+        <MentoringRequestsPanel
+          requests={pairingRequestsQuery.data ?? []}
+          currentUserId={user?.id ?? 0}
+          view={view}
+        />
+      </div>
+    );
+  }
+
+  if (previewQuery.isLoading) {
+    return <LoadingSkeleton rows={6} height={28} />;
+  }
+
   if (activeView === 'apply') {
     return (
       <div className="boa-stack">
         <PageHeader
-          title="Apply for Mentor"
+          title="Apply to Become a Mentor"
           subtitle="Choose a catalog skill, enter a custom skill, or provide both, then upload proof."
         />
         <ApplyForMentorForm activeSkills={activeSkills} />
@@ -148,17 +252,16 @@ export function MentoringHomePage() {
   };
 
   const viewMeta =
-    activeView === 'trainer'
+    activeView === 'trainer-sessions'
       ? {
-          title: 'Trainer Workspace & Certification',
-          subtitle: 'Manage incoming trainee requests or apply to become a certified internal trainer.',
+          title: 'Mentor Sessions',
+          subtitle: 'View sessions scheduled with your trainees.',
         }
       : {
-          title: 'My Mentor & Progress',
-          subtitle: 'Track your active mentoring match, completed sessions, and trainee ↔ trainer channel.',
+          title: 'My Sessions',
+          subtitle: 'Track your learning sessions with your mentor.',
         };
-
-  const section = activeView === 'trainer' ? 'trainer' : 'trainee';
+  const section = activeView === 'trainer-sessions' ? 'trainer-sessions' : 'trainee-sessions';
 
   return (
     <div className="boa-stack">
@@ -170,6 +273,7 @@ export function MentoringHomePage() {
         chatMessages={allMentoringMsgs}
         onAppendChat={appendMessage}
         section={section}
+        isMentor={isMentor}
       />
     </div>
   );

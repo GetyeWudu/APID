@@ -23,12 +23,31 @@ export interface MentorApplication {
   proofFileName: string;
   note: string | null;
   submittedAt: string;
+  reviewedByUsername: string | null;
+  reviewedAt: string | null;
+  reviewReason: string | null;
+}
+
+export interface ReviewMentorApplicationPayload {
+  decision: 'APPROVED' | 'DECLINED';
+  reason?: string;
 }
 
 export const mentorApplicationApi = {
   async list(): Promise<MentorApplication[]> {
     const response = await apiClient.get<ApiResponse<MentorApplication[]>>(
       '/mentoring/applications'
+    );
+    return response.data.data;
+  },
+
+  async review(
+    applicationId: number,
+    payload: ReviewMentorApplicationPayload
+  ): Promise<MentorApplication> {
+    const response = await apiClient.patch<ApiResponse<MentorApplication>>(
+      `/mentoring/applications/${applicationId}/review`,
+      payload
     );
     return response.data.data;
   },

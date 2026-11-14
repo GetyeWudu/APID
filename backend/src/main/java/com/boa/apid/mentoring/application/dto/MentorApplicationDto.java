@@ -12,7 +12,10 @@ public record MentorApplicationDto(
         String skillName,
         String proofFileName,
         String note,
-        Instant submittedAt
+        Instant submittedAt,
+        String reviewedByUsername,
+        Instant reviewedAt,
+        String reviewReason
 ) {
 
     public static MentorApplicationDto from(MentorApplication application) {
@@ -27,7 +30,10 @@ public record MentorApplicationDto(
                 skillName,
                 application.getProofDocument().getOriginalFilename(),
                 application.getNote(),
-                application.getSubmittedAt()
+                application.getSubmittedAt(),
+                application.getReviewedBy() == null ? null : application.getReviewedBy().getUsername(),
+                application.getReviewedAt(),
+                application.getReviewReason()
         );
     }
 }

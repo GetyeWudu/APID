@@ -28,6 +28,16 @@ public class MentorApplication {
     private StoredFile proofDocument;
 
     @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "reviewed_by_user_id")
+    private User reviewedBy;
+
+    @Column(name = "reviewed_at")
+    private Instant reviewedAt;
+
+    @Column(name = "review_reason", columnDefinition = "TEXT")
+    private String reviewReason;
+
+    @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "catalog_skill_id")
     private Skill catalogSkill;
 
@@ -57,6 +67,15 @@ public class MentorApplication {
 
     public StoredFile getProofDocument() { return proofDocument; }
     public void setProofDocument(StoredFile proofDocument) { this.proofDocument = proofDocument; }
+
+    public User getReviewedBy() { return reviewedBy; }
+    public void setReviewedBy(User reviewedBy) { this.reviewedBy = reviewedBy; }
+
+    public Instant getReviewedAt() { return reviewedAt; }
+    public void setReviewedAt(Instant reviewedAt) { this.reviewedAt = reviewedAt; }
+
+    public String getReviewReason() { return reviewReason; }
+    public void setReviewReason(String reviewReason) { this.reviewReason = reviewReason; }
 
     public Skill getCatalogSkill() { return catalogSkill; }
     public void setCatalogSkill(Skill catalogSkill) { this.catalogSkill = catalogSkill; }

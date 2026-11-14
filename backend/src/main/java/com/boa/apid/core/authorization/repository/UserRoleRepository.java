@@ -50,6 +50,17 @@ public interface UserRoleRepository extends JpaRepository<UserRole, Long> {
             """)
     List<UserRole> findActiveByUserIdsWithRole(@Param("userIds") List<Long> userIds);
 
+    @Query("""
+            SELECT CASE WHEN COUNT(ur) > 0 THEN true ELSE false END
+            FROM UserRole ur
+            JOIN ur.role r
+            WHERE ur.user.id = :userId
+              AND ur.active = true
+              AND r.active = true
+              AND LOWER(r.name) = 'mentor'
+            """)
+    boolean existsActiveMentorRoleByUserId(@Param("userId") Long userId);
+
     @Modifying
     @Query("DELETE FROM UserRole ur WHERE ur.user.id = :userId")
     int deleteAllForUser(@Param("userId") Long userId);

@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { Award, Building2, ClipboardCheck, ShieldAlert, Users } from 'lucide-react';
+import { Award, Building2, ShieldAlert, Users } from 'lucide-react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../../../app/AuthContext';
 import {
@@ -14,22 +14,21 @@ import {
   StatusPill,
 } from '../../../shared/components/ui';
 import { EMPLOYEE_WORKSPACE_PERMISSIONS } from '../../../shared/auth/workspaceResolver';
+import { mentoringPairingApi } from '../../mentoring/api/mentoringPairingApi';
+import { MentoringRequestsPanel } from '../../mentoring/components/MentoringRequestsPanel';
 import { workspaceLiveApi, workspacePreviewAdapter } from '../api/workspaceDashboardApi';
-import { CoachingTab } from '../components/CoachingTab';
-import type { ChatMessageItem } from '../components/IsolatedChatPanel';
-import { MentoringTab } from '../components/MentoringTab';
+import { IsolatedChatPanel, type ChatMessageItem } from '../components/IsolatedChatPanel';
 
-type WorkspaceTabKey = 'overview' | 'coaching' | 'mentoring';
+type WorkspaceTabKey = 'overview' | 'mentoring' | 'chat';
 
 export function WorkspaceDashboardPage() {
   const { user, hasPermission, hasAnyPermission } = useAuth();
   const [searchParams, setSearchParams] = useSearchParams();
+  const isMentor = user?.roles.some((role) => role.trim().toLowerCase() === 'mentor') ?? false;
 
   // Strictly dev-only participation flag toggles (never visible in production builds)
-  const [devCoachOverride, setDevCoachOverride] = useState<boolean | null>(null);
   const [devTrainerOverride, setDevTrainerOverride] = useState<boolean | null>(null);
 
-  const [coachingChatExtra, setCoachingChatExtra] = useState<ChatMessageItem[]>([]);
   const [mentoringChatExtra, setMentoringChatExtra] = useState<ChatMessageItem[]>([]);
 
   const identityQuery = useQuery({
@@ -42,9 +41,17 @@ export function WorkspaceDashboardPage() {
     queryFn: workspacePreviewAdapter.getParticipationPreview,
   });
 
+  const pairingRequestsQuery = useQuery({
+    queryKey: ['mentoring', 'pairing', 'requests', user?.id],
+    queryFn: mentoringPairingApi.listMyRequests,
+    enabled: Boolean(user && hasAnyPermission(EMPLOYEE_WORKSPACE_PERMISSIONS)),
+  });
+
   const requestedTab = (searchParams.get('tab') as WorkspaceTabKey | null) ?? 'overview';
   const activeTab: WorkspaceTabKey =
-    requestedTab === 'coaching' || requestedTab === 'mentoring' ? requestedTab : 'overview';
+    requestedTab === 'mentoring' || requestedTab === 'chat'
+      ? requestedTab
+      : 'overview';
 
   const selectTab = (key: WorkspaceTabKey) => {
     if (key === 'overview') {
@@ -57,18 +64,14 @@ export function WorkspaceDashboardPage() {
   const effectiveWorkspace = useMemo(() => {
     const base = previewQuery.data?.workspace;
     if (!base) return null;
-    const isCoachDefault =
-      (identityQuery.data?.directReports.length ?? 0) > 0 || base.isAssignedCoach;
     return {
       ...base,
-      isAssignedCoach:
-        import.meta.env.DEV && devCoachOverride !== null ? devCoachOverride : isCoachDefault,
       isApprovedTrainer:
         import.meta.env.DEV && devTrainerOverride !== null
           ? devTrainerOverride
-          : base.isApprovedTrainer,
+          : base.isApprovedTrainer || isMentor,
     };
-  }, [previewQuery.data, identityQuery.data, devCoachOverride, devTrainerOverride]);
+  }, [previewQuery.data, devTrainerOverride, isMentor]);
 
   if (!hasAnyPermission(EMPLOYEE_WORKSPACE_PERMISSIONS)) {
     return (
@@ -125,35 +128,34 @@ export function WorkspaceDashboardPage() {
   }
 
   const workspaceData = effectiveWorkspace!;
-  const allCoachingMsgs = [...workspaceData.chatCoachingMessages, ...coachingChatExtra];
   const allMentoringMsgs = [...workspaceData.chatMentoringMessages, ...mentoringChatExtra];
 
-  const appendMessage = (channel: 'coaching' | 'mentoring', body: string) => {
+  const appendMessage = (body: string) => {
     const item: ChatMessageItem = {
       id: `msg-${Date.now()}`,
       sender: 'You',
       body,
       time: 'Just now',
     };
-    if (channel === 'coaching') {
-      setCoachingChatExtra((prev) => [...prev, item]);
-    } else {
-      setMentoringChatExtra((prev) => [...prev, item]);
-    }
+    setMentoringChatExtra((prev) => [...prev, item]);
   };
 
   const workspaceHeading =
-    activeTab === 'coaching'
-      ? 'My Coaching'
+    activeTab === 'chat'
+      ? 'Chat'
       : activeTab === 'mentoring'
         ? 'My Mentoring'
-        : 'Overview';
+        : 'Employee Dashboard';
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
       <PageHeader
         title={workspaceHeading}
-        subtitle="Your personal coaching, mentoring, and team reporting view."
+        subtitle={
+          activeTab === 'chat'
+            ? 'Your private conversations for active mentoring relationships.'
+            : 'Your employee overview, mentoring, and team reporting.'
+        }
         source="live"
       />
 
@@ -200,20 +202,20 @@ export function WorkspaceDashboardPage() {
           <button
             type="button"
             role="tab"
-            aria-selected={activeTab === 'coaching'}
-            className={`apid-tab ${activeTab === 'coaching' ? 'active' : ''}`}
-            onClick={() => selectTab('coaching')}
-          >
-            My Coaching
-          </button>
-          <button
-            type="button"
-            role="tab"
             aria-selected={activeTab === 'mentoring'}
             className={`apid-tab ${activeTab === 'mentoring' ? 'active' : ''}`}
             onClick={() => selectTab('mentoring')}
           >
             My Mentoring
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={activeTab === 'chat'}
+            className={`apid-tab ${activeTab === 'chat' ? 'active' : ''}`}
+            onClick={() => selectTab('chat')}
+          >
+            Chat
           </button>
         </div>
       </div>
@@ -236,18 +238,9 @@ export function WorkspaceDashboardPage() {
             }}
           >
             <div>
-              <strong>Sample Role View:</strong> Toggle Coach or Trainer view to preview role cards.
+              <strong>Sample Role View:</strong> Toggle mentor status to preview mentor features.
             </div>
             <div style={{ display: 'flex', gap: '0.5rem' }}>
-              <button
-                type="button"
-                className="apid-btn apid-btn-outline apid-btn-sm"
-                onClick={() =>
-                  setDevCoachOverride((prev) => !(prev ?? workspaceData.isAssignedCoach))
-                }
-              >
-                Coach Flag: {workspaceData.isAssignedCoach ? 'ON' : 'OFF'}
-              </button>
               <button
                 type="button"
                 className="apid-btn apid-btn-outline apid-btn-sm"
@@ -274,14 +267,6 @@ export function WorkspaceDashboardPage() {
                   : 'Individual contributor'
               }
               icon={<Users size={16} />}
-            />
-            <StatCard
-              label="Coaching Progress"
-              value={`${workspaceData.talentPlan.progressPct}%`}
-              subtext={workspaceData.talentPlan.quarter}
-              badge={workspaceData.hasTalentAssignment ? 'ACTIVE PLAN' : 'NONE'}
-              badgeTone="info"
-              icon={<ClipboardCheck size={16} />}
             />
             <StatCard
               label="Mentoring Sessions"
@@ -347,7 +332,7 @@ export function WorkspaceDashboardPage() {
               <div>
                 <h3 className="boa-card-title">Quick Navigation</h3>
                 <p className="boa-card-subtitle">
-                  Open your Coaching plans or browse available Trainers under Mentoring.
+                  Explore Mentoring or open your employee Chat.
                 </p>
               </div>
               <DataSourceBadge source="preview" />
@@ -355,40 +340,66 @@ export function WorkspaceDashboardPage() {
             <div style={{ display: 'flex', gap: '0.65rem', flexWrap: 'wrap' }}>
               <button
                 type="button"
-                className="apid-btn apid-btn-primary apid-btn-sm"
-                onClick={() => selectTab('coaching')}
+                className="apid-btn apid-btn-outline apid-btn-sm"
+                onClick={() => selectTab('mentoring')}
               >
-                Open My Coaching
+                Open My Mentoring
               </button>
               <button
                 type="button"
                 className="apid-btn apid-btn-outline apid-btn-sm"
-                onClick={() => selectTab('mentoring')}
+                onClick={() => selectTab('chat')}
               >
-                Open My Mentoring &amp; Trainer Directory
+                Open Chat
               </button>
             </div>
           </div>
         </div>
       )}
 
-      {activeTab === 'coaching' && (
-        <CoachingTab
-          workspace={workspaceData}
-          directReports={directReports}
-          activeSkills={activeSkills}
-          chatMessages={allCoachingMsgs}
-          onAppendChat={(body) => appendMessage('coaching', body)}
-        />
-      )}
+      {activeTab === 'mentoring' &&
+        (pairingRequestsQuery.isLoading ? (
+          <LoadingSkeleton rows={6} height={28} />
+        ) : pairingRequestsQuery.isError ? (
+          <ErrorState
+            message="Unable to load your mentoring requests."
+            onRetry={() => void pairingRequestsQuery.refetch()}
+          />
+        ) : (
+          <div className="boa-stack">
+            <div>
+              <Link to="/mentoring?view=directory" className="apid-btn apid-btn-primary apid-btn-sm">
+                Find a Mentor
+              </Link>
+            </div>
+            <MentoringRequestsPanel
+              requests={pairingRequestsQuery.data ?? []}
+              currentUserId={user?.id ?? 0}
+            />
+          </div>
+        ))}
 
-      {activeTab === 'mentoring' && (
-        <MentoringTab
-          workspace={workspaceData}
-          activeSkills={activeSkills}
-          chatMessages={allMentoringMsgs}
-          onAppendChat={(body) => appendMessage('mentoring', body)}
-        />
+      {activeTab === 'chat' && (
+        <div className="boa-stack">
+          {workspaceData.hasTraineeRelationship ||
+          workspaceData.mentoringAsTrainer.activeTrainees > 0 ? (
+            <IsolatedChatPanel
+              contextTitle="Mentoring Conversation"
+              contextKey="mentoring"
+              messages={allMentoringMsgs}
+              onSendMessage={appendMessage}
+            />
+          ) : null}
+          {!workspaceData.hasTraineeRelationship &&
+            workspaceData.mentoringAsTrainer.activeTrainees === 0 && (
+              <div className="apid-card">
+                <EmptyState
+                  title="No Conversations Yet"
+                  description="Mentoring conversations appear here when you have an active mentoring relationship."
+                />
+              </div>
+            )}
+        </div>
       )}
     </div>
   );

@@ -13,12 +13,14 @@ export function MentoringTab({
   chatMessages,
   onAppendChat,
   section = 'all',
+  isMentor = false,
 }: {
   workspace: PreviewWorkspaceData;
   activeSkills: SkillItem[];
   chatMessages: ChatMessageItem[];
   onAppendChat: (body: string) => void;
-  section?: 'all' | 'trainee' | 'trainer' | 'directory';
+  section?: 'all' | 'trainee' | 'trainee-sessions' | 'trainer' | 'trainer-sessions' | 'directory';
+  isMentor?: boolean;
 }) {
   const { pushToast } = useToast();
   const [showApplyModal, setShowApplyModal] = useState(false);
@@ -35,7 +37,7 @@ export function MentoringTab({
       `Trainer certification application (${applySkill})`
     );
     pushToast({
-      title: 'Application Submitted to HR (Preview)',
+      title: 'Mentor Application Submitted (Preview)',
       message: res.message,
       tone: 'ok',
     });
@@ -49,10 +51,11 @@ export function MentoringTab({
     pushToast({ title: `Trainee Request ${decision} (Preview)`, message: res.message, tone: 'info' });
   };
 
-  const showTrainee = section === 'all' || section === 'trainee';
+  const showTrainee = section === 'all' || section === 'trainee' || section === 'trainee-sessions';
   const showTrainer = section === 'all' || section === 'trainer';
   const showDirectory = section === 'all' || section === 'directory';
-  const showChat = section === 'all' || section === 'trainee';
+  const showTrainerSessions = section === 'trainer-sessions';
+  const showChat = section === 'all' || section === 'trainee' || section === 'trainee-sessions';
 
   return (
     <div className="boa-stack">
@@ -66,7 +69,9 @@ export function MentoringTab({
             <div className="apid-card">
           <div className="boa-card-header">
             <div>
-              <h3 className="boa-card-title">My Mentoring Progress (Trainee)</h3>
+              <h3 className="boa-card-title">
+                {section === 'trainee-sessions' ? 'My Sessions' : 'My Mentor & Progress'}
+              </h3>
               <p className="boa-card-subtitle">{workspace.mentoringAsTrainee.skillName}</p>
             </div>
             <DataSourceBadge source="preview" />
@@ -75,12 +80,17 @@ export function MentoringTab({
           {!workspace.hasTraineeRelationship ? (
             <EmptyState
               title="No Active Mentoring Match"
-              description="Browse certified Bank of Abyssinia Trainers below or submit an HR-assisted skill request."
+              description="Find a mentor from the directory or submit an HR-assisted skill request."
+              action={
+                <Link to="/mentoring?view=directory" className="apid-btn apid-btn-primary apid-btn-sm">
+                  Find a Mentor
+                </Link>
+              }
             />
           ) : (
             <div className="boa-stack">
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <StatusPill label={`Trainer: ${workspace.mentoringAsTrainee.trainerName}`} tone="info" />
+                <StatusPill label={`Mentor: ${workspace.mentoringAsTrainee.trainerName}`} tone="info" />
                 <span className="tabular-nums" style={{ fontSize: '0.82rem', fontWeight: 700 }}>
                   {workspace.mentoringAsTrainee.sessionsCompleted} /{' '}
                   {workspace.mentoringAsTrainee.sessionsPlanned} Sessions
@@ -120,7 +130,7 @@ export function MentoringTab({
             <div className="apid-card">
           <div className="boa-card-header">
             <div>
-              <h3 className="boa-card-title">Trainer Certification &amp; Mentorship</h3>
+              <h3 className="boa-card-title">Mentoring as a Mentor</h3>
               <p className="boa-card-subtitle">
                 Share domain expertise with colleagues across Bank of Abyssinia.
               </p>
@@ -128,10 +138,10 @@ export function MentoringTab({
             <DataSourceBadge source="preview" />
           </div>
 
-          {!workspace.isApprovedTrainer ? (
+          {!workspace.isApprovedTrainer && !isMentor ? (
             <EmptyState
-              title="Become a Certified Internal Trainer"
-              description="Employees with deep domain expertise can apply for HR trainer certification."
+              title="Become a Mentor"
+              description="Employees with relevant expertise can apply to become a mentor."
               icon={<Award size={28} />}
               action={
                 <button
@@ -139,14 +149,14 @@ export function MentoringTab({
                   className="apid-btn apid-btn-primary apid-btn-sm"
                   onClick={() => setShowApplyModal(true)}
                 >
-                  <UserPlus size={14} /> Apply as Trainer
+                  <UserPlus size={14} /> Apply to Become a Mentor
                 </button>
               }
             />
           ) : (
             <div className="boa-stack">
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <StatusPill label="CERTIFIED TRAINER" tone="ok" />
+                <StatusPill label="APPROVED MENTOR" tone="ok" />
                 <span className="tabular-nums" style={{ fontSize: '0.82rem' }}>
                   Capacity: {workspace.mentoringAsTrainer.activeTrainees}/
                   {workspace.mentoringAsTrainer.maxTrainees}
@@ -210,18 +220,34 @@ export function MentoringTab({
         </div>
       )}
 
+      {showTrainerSessions && (
+        <div className="apid-card">
+          <div className="boa-card-header">
+            <div>
+              <h3 className="boa-card-title">Mentor Sessions</h3>
+              <p className="boa-card-subtitle">Sessions with your trainees.</p>
+            </div>
+            <DataSourceBadge source="preview" />
+          </div>
+          <EmptyState
+            title="Session schedules are not available yet"
+            description="Scheduled sessions will appear here when mentoring session data is connected."
+          />
+        </div>
+      )}
+
       {/* Certified Trainer Browse Directory */}
       {showDirectory && (
         <div className="apid-card">
           <div className="boa-card-header">
             <div>
-              <h3 className="boa-card-title">Certified Trainer Directory</h3>
-              <p className="boa-card-subtitle">Browse active users assigned the Mentor role.</p>
+              <h3 className="boa-card-title">Mentor Directory</h3>
+              <p className="boa-card-subtitle">Browse active mentors.</p>
             </div>
           </div>
           <EmptyState
             title="No Mentor Data Available"
-            description="Sample trainer profiles are not shown here."
+            description="Mentor profiles will appear here when the directory is opened."
             action={
               <Link to="/mentoring?view=directory" className="apid-btn apid-btn-primary apid-btn-sm">
                 Open Directory
@@ -245,10 +271,10 @@ export function MentoringTab({
           className="apid-modal-backdrop"
           role="dialog"
           aria-modal="true"
-          aria-label="Apply for Trainer Certification"
+          aria-label="Apply to Become a Mentor"
         >
           <div className="apid-card apid-modal">
-            <h3 style={{ marginTop: 0 }}>Apply for Internal Trainer Certification (Preview)</h3>
+            <h3 style={{ marginTop: 0 }}>Apply to Become a Mentor (Preview)</h3>
             <form onSubmit={handleApplySubmit} className="apid-form">
               <div className="apid-field">
                 <label htmlFor="tr-app-skill">Primary Skill Area</label>

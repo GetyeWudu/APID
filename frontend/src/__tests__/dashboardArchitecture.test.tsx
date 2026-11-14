@@ -19,6 +19,8 @@ import {
   RATING_BAND_METADATA,
 } from '../features/coaching/utils/ratingClassification';
 import { mentoringPreviewAdapter } from '../features/mentoring/api/mentoringDashboardApi';
+import { MentorDirectory } from '../features/mentoring/components/MentorDirectory';
+import { MentoringRequestsPanel } from '../features/mentoring/components/MentoringRequestsPanel';
 import { TrainerRosterTab } from '../features/mentoring/components/TrainerRosterTab';
 import { workspaceLiveApi } from '../features/workspace/api/workspaceDashboardApi';
 import { WorkspaceDashboardPage } from '../features/workspace/pages/WorkspaceDashboardPage';
@@ -227,10 +229,75 @@ describe('Portal Home module cards & scoped sidebar isolation', () => {
     expect(screen.getByText('All Modules')).toBeInTheDocument();
 
     // Scoped away on Coaching page
+    expect(screen.queryByText('Employee')).not.toBeInTheDocument();
+    expect(screen.queryByText('Dashboard')).not.toBeInTheDocument();
+    expect(screen.queryByText('Chat')).not.toBeInTheDocument();
     expect(screen.queryByText('My Mentoring')).not.toBeInTheDocument();
     expect(screen.queryByText('PMS Administration')).not.toBeInTheDocument();
     expect(screen.queryByText('HR Administration')).not.toBeInTheDocument();
     expect(screen.queryByText('System Administration')).not.toBeInTheDocument();
+  });
+
+  it('keeps trainee navigation for employees who also have the Mentor role', () => {
+    vi.spyOn(AuthContextModule, 'useAuth').mockReturnValue(
+      buildAuthMock({
+        id: 12,
+        username: 'mentor.trainee',
+        mustChangePassword: false,
+        roles: ['Employee', 'Mentor'],
+        permissions: ['EMPLOYEE_PORTAL_ACCESS'],
+      })
+    );
+    vi.spyOn(workspaceLiveApi, 'loadMyIdentity').mockResolvedValue({
+      linkedEmployee: null,
+      directReports: [],
+      activeSkills: [],
+    });
+
+    renderWithProviders(
+      <AppLayout>
+        <div>Mentoring Content</div>
+      </AppLayout>,
+      '/mentoring?view=trainer'
+    );
+
+    expect(screen.getByText('Employee')).toBeInTheDocument();
+    expect(screen.getByText('Dashboard')).toBeInTheDocument();
+    expect(screen.queryByText('My Coaching')).not.toBeInTheDocument();
+    expect(screen.getByText('Chat')).toBeInTheDocument();
+    expect(screen.getByText('As a Trainee')).toBeInTheDocument();
+    expect(screen.getByText('My Mentor')).toBeInTheDocument();
+    expect(screen.getByText('My Sessions')).toBeInTheDocument();
+    expect(screen.getByText('Find a Mentor')).toBeInTheDocument();
+    expect(screen.getByText('As a Mentor')).toBeInTheDocument();
+    expect(screen.getByText('My Trainees')).toBeInTheDocument();
+    expect(screen.getByText('Mentor Sessions')).toBeInTheDocument();
+  });
+
+  it('keeps the employee Dashboard and Chat sidebar available on workspace routes', () => {
+    vi.spyOn(AuthContextModule, 'useAuth').mockReturnValue(
+      buildAuthMock({
+        id: 21,
+        username: 'employee.user',
+        mustChangePassword: false,
+        roles: ['Employee'],
+        permissions: ['EMPLOYEE_PORTAL_ACCESS'],
+      })
+    );
+
+    renderWithProviders(
+      <AppLayout>
+        <div>Workspace Content</div>
+      </AppLayout>,
+      '/workspace?tab=chat'
+    );
+
+    expect(screen.getByRole('navigation', { name: 'Module navigation' })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Dashboard' })).toHaveAttribute('href', '/workspace');
+    expect(screen.queryByRole('link', { name: 'My Coaching' })).not.toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Chat' })).toHaveAttribute('href', '/workspace?tab=chat');
+    expect(screen.getByText('As a Trainee')).toBeInTheDocument();
+    expect(screen.getByText('Find a Mentor')).toBeInTheDocument();
   });
 
   it('shows personal + HR Admin features inside Mentoring sidebar for HR Admin and excludes duplicate tabs in Admin', () => {
@@ -256,8 +323,11 @@ describe('Portal Home module cards & scoped sidebar isolation', () => {
       '/mentoring'
     );
 
-    expect(screen.getByText('My Mentoring')).toBeInTheDocument();
+    expect(screen.getByText('As a Trainee')).toBeInTheDocument();
+    expect(screen.getByText('My Mentor')).toBeInTheDocument();
+    expect(screen.getByText('Find a Mentor')).toBeInTheDocument();
     expect(screen.getByText('HR Administration')).toBeInTheDocument();
+    expect(screen.queryByText('As a Mentor')).not.toBeInTheDocument();
     expect(screen.getByText('Trainer Applications')).toBeInTheDocument();
     expect(screen.getByText('Match Requests')).toBeInTheDocument();
     expect(screen.queryByText('System Administration')).not.toBeInTheDocument();
@@ -283,6 +353,136 @@ describe('Portal Home module cards & scoped sidebar isolation', () => {
 
     expect(screen.getAllByText('System Administration').length).toBeGreaterThan(0);
     expect(screen.queryByRole('tablist', { name: 'System Administration sections' })).not.toBeInTheDocument();
+  });
+});
+
+describe('Mentor directory self-exclusion', () => {
+  it('hides the current employee and excludes their skills from the directory filters', () => {
+    renderWithProviders(
+      <MentorDirectory
+        currentUserId={12}
+        mentors={[
+          {
+            userId: 12,
+            username: 'current.employee',
+            employeeNumber: 'E-12',
+            fullName: 'Current Employee',
+            departmentName: 'Operations',
+            skills: [{ id: 1, name: 'Self Only Skill', category: 'Business' }],
+          },
+          {
+            userId: 13,
+            username: 'other.mentor',
+            employeeNumber: 'E-13',
+            fullName: 'Other Mentor',
+            departmentName: 'Technology',
+            skills: [{ id: 2, name: 'Available Skill', category: 'Technical' }],
+          },
+        ]}
+      />
+    );
+
+    expect(screen.queryByText('Current Employee')).not.toBeInTheDocument();
+    expect(screen.queryByRole('option', { name: 'Self Only Skill' })).not.toBeInTheDocument();
+    expect(screen.getByText('Other Mentor')).toBeInTheDocument();
+  });
+
+  it('shows a clear empty state if the only matching profile is the employee', () => {
+    renderWithProviders(
+      <MentorDirectory
+        currentUserId={12}
+        mentors={[
+          {
+            userId: 12,
+            username: 'current.employee',
+            employeeNumber: 'E-12',
+            fullName: 'Current Employee',
+            departmentName: 'Operations',
+            skills: [],
+          },
+        ]}
+      />
+    );
+
+    expect(screen.getByText('No Other Mentors Found')).toBeInTheDocument();
+    expect(screen.getByText('Your own profile is hidden from the mentor directory.')).toBeInTheDocument();
+  });
+
+  it('sends an individual mentorship request to the selected mentor', async () => {
+    const request = vi.spyOn(apiClient, 'post').mockResolvedValue({
+      data: { data: { id: 20, status: 'PENDING' } },
+    } as never);
+    renderWithProviders(
+      <MentorDirectory
+        currentUserId={12}
+        mentors={[
+          {
+            userId: 13,
+            username: 'other.mentor',
+            employeeNumber: 'E-13',
+            fullName: 'Other Mentor',
+            departmentName: 'Technology',
+            skills: [{ id: 2, name: 'Available Skill', category: 'Technical' }],
+          },
+        ]}
+      />
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Request mentorship' }));
+    fireEvent.change(screen.getByLabelText('Message (optional)'), {
+      target: { value: 'I want to learn this skill.' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Send request' }));
+
+    await waitFor(() =>
+      expect(request).toHaveBeenCalledWith('/mentoring/pairing/requests/mentors', {
+        mentorUserId: 13,
+        skillId: 2,
+        message: 'I want to learn this skill.',
+      })
+    );
+    expect(await screen.findByText('Mentorship request sent')).toBeInTheDocument();
+  });
+
+  it('approves an incoming mentor invitation through the pairing API', async () => {
+    const request = vi.spyOn(apiClient, 'post').mockResolvedValue({
+      data: { data: { status: 'ACCEPTED' } },
+    } as never);
+    renderWithProviders(
+      <MentoringRequestsPanel
+        currentUserId={2}
+        view="trainee"
+        requests={[
+          {
+            id: 20,
+            requestId: 10,
+            requestType: 'INDIVIDUAL',
+            status: 'PENDING',
+            incoming: true,
+            initiatedByMentor: true,
+            mentorUserId: 1,
+            mentorName: 'Mentor One',
+            traineeUserId: 2,
+            traineeName: 'Trainee One',
+            recipientUserId: 2,
+            skillId: null,
+            skillName: null,
+            message: null,
+            createdAt: new Date().toISOString(),
+            respondedAt: null,
+          },
+        ]}
+      />
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Approve' }));
+
+    await waitFor(() =>
+      expect(request).toHaveBeenCalledWith('/mentoring/pairing/requests/20/decision', {
+        decision: 'ACCEPTED',
+      })
+    );
+    expect(await screen.findByText('Mentoring request approved')).toBeInTheDocument();
   });
 });
 
@@ -717,7 +917,7 @@ describe('Phase 4 live SystemConfigPanel, NotificationBellPopover & AppLayout qu
           eventType: 'PMS_COACHING_ASSIGNED',
           title: 'Mandatory Coaching Plan Ready',
           message: 'Please review Q2 action goals.',
-          deepLink: '/workspace?tab=coaching',
+          deepLink: '/coaching',
           read: false,
           readAt: null,
           createdAt: new Date().toISOString(),

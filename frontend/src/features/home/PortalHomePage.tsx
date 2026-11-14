@@ -97,7 +97,11 @@ export function PortalHomePage() {
     if (key === 'mentoring') {
       const items: string[] = [];
       if (hasEmployeeAccess) {
-        items.push('My Mentor & Progress', 'Trainer Directory', 'Become a Trainer');
+        items.push('My Mentor', 'My Sessions', 'Find a Mentor');
+        if (user.roles.some((role) => role.trim().toLowerCase() === 'mentor')) {
+          items.push('My Trainees', 'Mentor Sessions');
+        }
+        items.push('Apply to Become a Mentor');
       }
       if (hasHrAdmin) {
         items.push('Trainer Applications', 'Match Queue & Roster');
@@ -280,11 +284,12 @@ export function PortalHomePage() {
         <div className="apid-card">
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.45rem' }}>
             <Award size={17} color="var(--brand)" />
-            <h3 className="boa-card-title">How Mentoring &amp; Trainers Work</h3>
+            <h3 className="boa-card-title">How Mentoring Works</h3>
           </div>
           <p style={{ fontSize: '0.84rem', color: 'var(--muted)', lineHeight: 1.55 }}>
-            Employees can request skill mentoring from certified internal trainers or apply to become a Certified Trainer.
-            HR reviews trainer applications and matches trainees while respecting trainer capacity limits.
+            Employees can learn from a mentor and request mentoring sessions. Approved mentors can also support trainees
+            while continuing to learn from their own mentors.
+            HR reviews mentor applications and matches trainees while respecting mentor capacity limits.
           </p>
         </div>
       </section>

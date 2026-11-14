@@ -57,6 +57,26 @@ interface NavGroup {
   items: NavEntry[];
 }
 
+const EMPLOYEE_NAV_GROUP: NavGroup = {
+  id: 'employee',
+  label: 'Employee',
+  items: [
+    {
+      to: '/workspace',
+      label: 'Dashboard',
+      icon: <LayoutDashboard size={17} />,
+      requiredAnyPermissions: EMPLOYEE_WORKSPACE_PERMISSIONS,
+    },
+    {
+      to: '/workspace?tab=chat',
+      label: 'Chat',
+      icon: <MessageSquare size={17} />,
+      requiredAnyPermissions: EMPLOYEE_WORKSPACE_PERMISSIONS,
+      matchSearch: '?tab=chat',
+    },
+  ],
+};
+
 export function AppLayout({ children }: { children: ReactNode }) {
   const { user, isAuthenticated, logout, refreshProfile, hasAnyPermission } = useAuth();
   const navigate = useNavigate();
@@ -88,7 +108,9 @@ export function AppLayout({ children }: { children: ReactNode }) {
     [user]
   );
 
-  const activeModule = getActiveModuleFromPath(location.pathname);
+  const isWorkspacePath = location.pathname.startsWith('/workspace');
+  const activeModule =
+    getActiveModuleFromPath(location.pathname) ?? (isWorkspacePath ? 'mentoring' : null);
 
   const hasEmployeeAccess = Boolean(
     isAuthenticated && user && !user.mustChangePassword && hasAnyPermission(EMPLOYEE_WORKSPACE_PERMISSIONS)
@@ -104,6 +126,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
   const canCoachDirectReports =
     (identityQuery.data?.directReports.length ?? 0) > 0 ||
     Boolean(user?.permissions.includes('COACHING_REQUEST_SUBMIT'));
+  const isMentor = user?.roles.some((role) => role.trim().toLowerCase() === 'mentor') ?? false;
 
   const moduleNavGroups = useMemo<Record<PortalModuleKey, NavGroup[]>>(
     () => ({
@@ -179,31 +202,63 @@ export function AppLayout({ children }: { children: ReactNode }) {
       ],
       mentoring: [
         {
-          id: 'mentoring-personal',
-          label: 'My Mentoring',
+          id: 'mentoring-trainee',
+          label: 'As a Trainee',
           items: [
             {
-              to: '/mentoring',
-              label: 'My Mentor & Progress',
+              to: '/mentoring?view=trainee',
+              label: 'My Mentor',
               icon: <Award size={17} />,
               requiredAnyPermissions: EMPLOYEE_WORKSPACE_PERMISSIONS,
+              matchSearch: '?view=trainee',
+            },
+            {
+              to: '/mentoring?view=trainee-sessions',
+              label: 'My Sessions',
+              icon: <MessageSquare size={17} />,
+              requiredAnyPermissions: EMPLOYEE_WORKSPACE_PERMISSIONS,
+              matchSearch: '?view=trainee-sessions',
             },
             {
               to: '/mentoring?view=directory',
-              label: 'Find Certified Trainer',
+              label: 'Find a Mentor',
               icon: <BookOpen size={17} />,
               requiredAnyPermissions: EMPLOYEE_WORKSPACE_PERMISSIONS,
               matchSearch: '?view=directory',
             },
             {
               to: '/mentoring?view=apply',
-              label: 'Apply for Mentor',
+              label: 'Apply to Become a Mentor',
               icon: <UserPlus size={17} />,
               requiredAnyPermissions: EMPLOYEE_WORKSPACE_PERMISSIONS,
               matchSearch: '?view=apply',
             },
           ],
         },
+        ...(isMentor
+          ? [
+              {
+                id: 'mentoring-mentor',
+                label: 'As a Mentor',
+                items: [
+                  {
+                    to: '/mentoring?view=trainer',
+                    label: 'My Trainees',
+                    icon: <Users size={17} />,
+                    requiredAnyPermissions: EMPLOYEE_WORKSPACE_PERMISSIONS,
+                    matchSearch: '?view=trainer',
+                  },
+                  {
+                    to: '/mentoring?view=trainer-sessions',
+                    label: 'Mentor Sessions',
+                    icon: <MessageSquare size={17} />,
+                    requiredAnyPermissions: EMPLOYEE_WORKSPACE_PERMISSIONS,
+                    matchSearch: '?view=trainer-sessions',
+                  },
+                ],
+              },
+            ]
+          : []),
         {
           id: 'mentoring-hr',
           label: 'HR Administration',
@@ -313,18 +368,29 @@ export function AppLayout({ children }: { children: ReactNode }) {
         },
       ],
     }),
-    [canCoachDirectReports]
+    [canCoachDirectReports, isMentor]
   );
 
   const visibleGroups = useMemo(() => {
-    if (!activeModule) return [];
-    return moduleNavGroups[activeModule]
+    const showEmployeeNavigation = activeModule === 'mentoring' || isWorkspacePath;
+    const employeeGroup =
+      showEmployeeNavigation && hasAnyPermission(EMPLOYEE_WORKSPACE_PERMISSIONS)
+        ? {
+            ...EMPLOYEE_NAV_GROUP,
+            items: EMPLOYEE_NAV_GROUP.items.filter((item) =>
+              hasAnyPermission(item.requiredAnyPermissions)
+            ),
+          }
+        : null;
+    const moduleGroups = activeModule ? moduleNavGroups[activeModule] : [];
+    const visibleModuleGroups = moduleGroups
       .map((group) => ({
         ...group,
         items: group.items.filter((item) => hasAnyPermission(item.requiredAnyPermissions)),
       }))
       .filter((group) => group.items.length > 0);
-  }, [activeModule, moduleNavGroups, hasAnyPermission]);
+    return [...(employeeGroup ? [employeeGroup] : []), ...visibleModuleGroups];
+  }, [activeModule, isWorkspacePath, moduleNavGroups, hasAnyPermission]);
 
   // Full-bleed split auth layout without app chrome when unauthenticated or password-change-pending
   if (!isAuthenticated || !user || user.mustChangePassword) {
@@ -348,7 +414,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
       return { kicker: 'Mentoring & Trainers', title: 'HR Mentoring Administration' };
     }
     if (location.pathname.startsWith('/mentoring')) {
-      return { kicker: 'Mentoring & Trainers', title: 'Mentoring Dashboard' };
+      return { kicker: 'Mentoring', title: 'Mentoring Dashboard' };
     }
     if (location.pathname.startsWith('/workspace')) {
       return { kicker: 'Bank of Abyssinia', title: 'My Workspace' };
@@ -390,7 +456,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
     });
   };
 
-  const showSidebar = activeModule !== null;
+  const showSidebar = activeModule !== null || isWorkspacePath;
 
   return (
     <div className="boa-shell">
