@@ -115,41 +115,77 @@ export function PortalHomePage() {
     return adminItems;
   };
 
+  const hour = new Date().getHours();
+  const greeting = hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening';
+
   return (
     <div className="boa-portal-home">
       {/* Executive Welcome & Identity Context */}
-      <section className="boa-home-hero apid-card">
-        <div className="boa-home-hero-main">
-          <AvatarBadge name={linkedEmployee?.fullName ?? user.username} size={52} />
+      <section
+        className="apid-card"
+        style={{
+          background: 'linear-gradient(135deg, #ffffff 0%, #f8fafc 100%)',
+          borderLeft: '4px solid var(--brand-gold, #ca8a04)',
+          borderRadius: '12px',
+          padding: '1.5rem',
+          boxShadow: '0 2px 10px rgba(0, 0, 0, 0.03)',
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          gap: '1.25rem',
+          flexWrap: 'wrap',
+        }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', gap: '1.25rem', flexWrap: 'wrap' }}>
+          <AvatarBadge name={linkedEmployee?.fullName ?? user.username} size={56} />
           <div>
-            <div className="boa-home-kicker">Abyssinia Personal Intelligence &amp; Development</div>
-            <h1 className="boa-home-title">
-              Welcome back, {linkedEmployee?.fullName ?? user.username}
+            <div
+              style={{
+                fontSize: '0.72rem',
+                fontWeight: 800,
+                textTransform: 'uppercase',
+                letterSpacing: '0.08em',
+                color: 'var(--brand-gold, #ca8a04)',
+                marginBottom: '0.2rem',
+              }}
+            >
+              Bank of Abyssinia · Personal Intelligence &amp; Development
+            </div>
+            <h1
+              style={{
+                margin: '0 0 0.35rem 0',
+                fontSize: '1.45rem',
+                fontWeight: 800,
+                color: 'var(--text-primary, #0f172a)',
+                letterSpacing: '-0.02em',
+              }}
+            >
+              {greeting}, {linkedEmployee?.fullName ?? user.username}
             </h1>
             {canLoadIdentity && identityQuery.isLoading ? (
               <div style={{ marginTop: '0.4rem', maxWidth: 320 }}>
                 <LoadingSkeleton rows={1} height={16} />
               </div>
             ) : linkedEmployee ? (
-              <div className="boa-home-meta">
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem 1.25rem', fontSize: '0.84rem', color: 'var(--muted, #475569)' }}>
                 <span>
-                  Emp #{linkedEmployee.employeeNumber} · {linkedEmployee.position || linkedEmployee.job || 'Staff Member'}
+                  <strong>Emp #{linkedEmployee.employeeNumber}</strong> · {linkedEmployee.position || linkedEmployee.job || 'Staff Member'}
                 </span>
-                <span>
-                  <Building2 size={13} style={{ verticalAlign: 'text-bottom', marginRight: '0.25rem' }} />
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.3rem' }}>
+                  <Building2 size={13} style={{ color: 'var(--brand-gold, #ca8a04)' }} />
                   {linkedEmployee.departmentName || 'Unassigned Department'}
-                  {linkedEmployee.managerFullName ? ` · Manager: ${linkedEmployee.managerFullName}` : ''}
+                  {linkedEmployee.managerFullName ? ` · Reporting to: ${linkedEmployee.managerFullName}` : ''}
                 </span>
               </div>
             ) : (
-              <div className="boa-home-meta">
-                <span>Account: {user.username} · Roles: {user.roles.join(', ') || 'None'}</span>
+              <div style={{ fontSize: '0.84rem', color: 'var(--muted, #475569)' }}>
+                Account: <strong>{user.username}</strong> · Roles: {user.roles.join(', ') || 'None'}
               </div>
             )}
           </div>
         </div>
 
-        <div className="boa-home-hero-badges">
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem', alignItems: 'center' }}>
           {activeQuarter && (
             <StatusPill
               label={`${activeQuarter.label} (${activeQuarter.startDate} – ${activeQuarter.endDate})`}
@@ -227,35 +263,79 @@ export function PortalHomePage() {
                 to={mod.route}
                 className={`boa-module-card apid-card boa-module-card--${mod.key}`}
                 data-testid={`module-card-${mod.key}`}
+                style={{
+                  borderRadius: '12px',
+                  padding: '1.5rem',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  justifyContent: 'space-between',
+                  boxShadow: '0 2px 10px rgba(0, 0, 0, 0.03)',
+                  transition: 'all 0.2s ease-in-out',
+                }}
               >
-                <div className="boa-module-card-top">
-                  <div className={`boa-module-icon boa-module-icon--${mod.key}`}>
-                    {moduleIcon(mod.key)}
-                  </div>
-                  {hasAdminSide && (
-                    <StatusPill
-                      label={mod.key === 'admin' ? 'Admin Only' : 'Includes Admin Tools'}
-                      tone={mod.key === 'admin' ? 'warn' : 'info'}
-                    />
-                  )}
-                </div>
-
                 <div>
-                  <h3 className="boa-module-title">{mod.title}</h3>
-                  <p className="boa-module-tagline">{mod.tagline}</p>
+                  <div className="boa-module-card-top" style={{ marginBottom: '1rem' }}>
+                    <div
+                      className={`boa-module-icon boa-module-icon--${mod.key}`}
+                      style={{
+                        width: 48,
+                        height: 48,
+                        borderRadius: '12px',
+                      }}
+                    >
+                      {moduleIcon(mod.key)}
+                    </div>
+                    {hasAdminSide && (
+                      <StatusPill
+                        label={mod.key === 'admin' ? 'Admin Only' : 'Includes Admin Tools'}
+                        tone={mod.key === 'admin' ? 'warn' : 'info'}
+                      />
+                    )}
+                  </div>
+
+                  <div>
+                    <h3 className="boa-module-title" style={{ fontSize: '1.25rem', fontWeight: 800 }}>
+                      {mod.title}
+                    </h3>
+                    <p className="boa-module-tagline" style={{ fontSize: '0.86rem', lineHeight: 1.5, marginTop: '0.35rem' }}>
+                      {mod.tagline}
+                    </p>
+                  </div>
+
+                  <div className="boa-module-chips" style={{ marginTop: '1.25rem', display: 'flex', flexWrap: 'wrap', gap: '0.4rem' }}>
+                    {features.map((feat) => (
+                      <span
+                        key={feat}
+                        className="boa-module-chip"
+                        style={{
+                          fontSize: '0.78rem',
+                          fontWeight: 600,
+                          padding: '0.25rem 0.6rem',
+                          borderRadius: '6px',
+                        }}
+                      >
+                        {feat}
+                      </span>
+                    ))}
+                  </div>
                 </div>
 
-                <div className="boa-module-chips">
-                  {features.map((feat) => (
-                    <span key={feat} className="boa-module-chip">
-                      {feat}
-                    </span>
-                  ))}
-                </div>
-
-                <div className="boa-module-cta">
-                  <span>Open {mod.shortLabel}</span>
-                  <ArrowRight size={16} />
+                <div
+                  className="boa-module-cta"
+                  style={{
+                    marginTop: '1.5rem',
+                    paddingTop: '1rem',
+                    borderTop: '1px solid var(--border, #f1f5f9)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    fontWeight: 700,
+                    fontSize: '0.9rem',
+                    color: 'var(--brand-gold, #ca8a04)',
+                  }}
+                >
+                  <span>Enter {mod.shortLabel}</span>
+                  <ArrowRight size={17} />
                 </div>
               </Link>
             );

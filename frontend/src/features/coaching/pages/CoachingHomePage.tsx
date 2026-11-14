@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { Award, Building2, Eye, ShieldAlert, UserCheck, UserPlus } from 'lucide-react';
+import { Award, Building2, ChevronDown, ChevronUp, Eye, MessageSquare, ShieldAlert, UserCheck, UserPlus } from 'lucide-react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../../../app/AuthContext';
 import { EMPLOYEE_WORKSPACE_PERMISSIONS } from '../../../shared/auth/workspaceResolver';
@@ -30,6 +30,7 @@ export function CoachingHomePage() {
   const [coachingChatExtra, setCoachingChatExtra] = useState<ChatMessageItem[]>([]);
   const [isSkillModalOpen, setIsSkillModalOpen] = useState(false);
   const [selectedGoalEmployee, setSelectedGoalEmployee] = useState<{ id: number; name?: string } | null>(null);
+  const [isChatOpen, setIsChatOpen] = useState(false);
 
   const requestedView = searchParams.get('view') as CoachingViewKey | null;
   const activeView: CoachingViewKey =
@@ -745,12 +746,78 @@ export function CoachingHomePage() {
             myCoachees={Array.isArray(myCoacheesQuery.data) ? myCoacheesQuery.data : []}
             currentEmployeeId={linkedEmployee.id}
           />
-          <IsolatedChatPanel
-            contextTitle="Coaching Channel (Talent ↔ Coach)"
-            contextKey="coaching"
-            messages={allCoachingMsgs}
-            onSendMessage={appendMessage}
-          />
+
+          {/* Collapsible Coaching Discussion Channel */}
+          <div
+            className="apid-card"
+            style={{
+              padding: '1rem 1.25rem',
+              background: 'var(--surface, #ffffff)',
+              borderRadius: '12px',
+              border: '1px solid var(--border, #e2e8f0)',
+              marginTop: '0.5rem',
+            }}
+          >
+            <div
+              style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                cursor: 'pointer',
+              }}
+              onClick={() => setIsChatOpen((prev) => !prev)}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem' }}>
+                <div
+                  style={{
+                    width: 34,
+                    height: 34,
+                    borderRadius: '8px',
+                    background: 'rgba(2, 132, 199, 0.1)',
+                    color: '#0284c7',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                  }}
+                >
+                  <MessageSquare size={18} />
+                </div>
+                <div>
+                  <h4 style={{ margin: 0, fontSize: '0.98rem', fontWeight: 700 }}>
+                    Coaching Discussion Channel (Talent ↔ Coach)
+                  </h4>
+                  <p style={{ margin: '0.15rem 0 0', fontSize: '0.8rem', color: 'var(--muted, #64748b)' }}>
+                    Private communication thread with coachees and assigned coaches ({allCoachingMsgs.length} messages)
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                className="apid-btn apid-btn-outline"
+                style={{
+                  padding: '0.35rem 0.75rem',
+                  fontSize: '0.8rem',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '0.35rem',
+                }}
+              >
+                {isChatOpen ? 'Collapse Channel' : 'Open Channel'}
+                {isChatOpen ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+              </button>
+            </div>
+
+            {isChatOpen && (
+              <div style={{ marginTop: '1rem', paddingTop: '1rem', borderTop: '1px solid var(--border, #f1f5f9)' }}>
+                <IsolatedChatPanel
+                  contextTitle="Coaching Channel (Talent ↔ Coach)"
+                  contextKey="coaching"
+                  messages={allCoachingMsgs}
+                  onSendMessage={appendMessage}
+                />
+              </div>
+            )}
+          </div>
         </div>
       )}
     </div>
