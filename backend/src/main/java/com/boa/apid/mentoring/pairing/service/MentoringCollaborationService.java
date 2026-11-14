@@ -5,7 +5,9 @@ import com.boa.apid.common.exception.ResourceNotFoundException;
 import com.boa.apid.core.auth.security.ApidUserPrincipal;
 import com.boa.apid.core.authorization.entity.User;
 import com.boa.apid.core.authorization.repository.UserRepository;
+import com.boa.apid.core.authorization.repository.UserRoleRepository;
 import com.boa.apid.core.organization.entity.Employee;
+import com.boa.apid.core.organization.entity.EmploymentStatus;
 import com.boa.apid.core.organization.repository.EmployeeRepository;
 import com.boa.apid.mentoring.pairing.dto.MentoringChatHistoryDto;
 import com.boa.apid.mentoring.pairing.dto.MentoringChatMessageDto;
@@ -14,14 +16,12 @@ import com.boa.apid.mentoring.pairing.dto.MentoringPairingDetailDto;
 import com.boa.apid.mentoring.pairing.dto.MentoringRelationshipPairDto;
 import com.boa.apid.mentoring.pairing.dto.MentoringSessionDto;
 import com.boa.apid.mentoring.pairing.dto.MentoringSessionRequest;
-import com.boa.apid.mentoring.pairing.entity.MentoringDeliveryMode;
 import com.boa.apid.mentoring.pairing.entity.MentoringMessage;
 import com.boa.apid.mentoring.pairing.entity.MentoringRelationship;
 import com.boa.apid.mentoring.pairing.entity.MentoringRelationshipMember;
 import com.boa.apid.mentoring.pairing.entity.MentoringRelationshipMemberStatus;
 import com.boa.apid.mentoring.pairing.entity.MentoringRelationshipStatus;
 import com.boa.apid.mentoring.pairing.entity.MentoringSession;
-import com.boa.apid.mentoring.pairing.entity.MentoringSessionStatus;
 import com.boa.apid.mentoring.pairing.repository.MentoringMessageRepository;
 import com.boa.apid.mentoring.pairing.repository.MentoringRelationshipMemberRepository;
 import com.boa.apid.mentoring.pairing.repository.MentoringRelationshipRepository;
@@ -55,6 +55,7 @@ public class MentoringCollaborationService {
     private final MentoringMessageRepository messageRepository;
     private final EmployeeRepository employeeRepository;
     private final UserRepository userRepository;
+    private final UserRoleRepository userRoleRepository;
 
     public MentoringCollaborationService(
             MentoringRelationshipRepository relationshipRepository,
@@ -62,7 +63,8 @@ public class MentoringCollaborationService {
             MentoringSessionRepository sessionRepository,
             MentoringMessageRepository messageRepository,
             EmployeeRepository employeeRepository,
-            UserRepository userRepository
+            UserRepository userRepository,
+            UserRoleRepository userRoleRepository
     ) {
         this.relationshipRepository = relationshipRepository;
         this.memberRepository = memberRepository;
@@ -70,6 +72,7 @@ public class MentoringCollaborationService {
         this.messageRepository = messageRepository;
         this.employeeRepository = employeeRepository;
         this.userRepository = userRepository;
+        this.userRoleRepository = userRoleRepository;
     }
 
     @Transactional(readOnly = true)
@@ -128,6 +131,26 @@ public class MentoringCollaborationService {
                 .toList();
     }
 
+    @Transactional(readOnly = true)
+    public List<MentoringSessionDto> listMySessions(ApidUserPrincipal actor) {
+        List<Long> relationshipIds = memberRepository.findVisibleToUser(actor.getUserId()).stream()
+                .map(member -> member.getRelationship().getId())
+                .distinct()
+                .toList();
+        if (relationshipIds.isEmpty()) {
+            return List.of();
+        }
+
+        List<MentoringSession> sessions =
+                sessionRepository.findByRelationship_IdInOrderByScheduledStartDesc(relationshipIds);
+        Map<Long, Employee> employeesByUserId = loadEmployees(
+                sessions.stream().map(session -> session.getCreatedByUser().getId()).toList()
+        );
+        return sessions.stream()
+                .map(session -> toSessionDto(session, employeesByUserId))
+                .toList();
+    }
+
     @Transactional
     public MentoringSessionDto createSession(
             Long relationshipId,
@@ -137,6 +160,10 @@ public class MentoringCollaborationService {
         MentoringRelationship relationship = requireRelationshipAccess(relationshipId, actor.getUserId());
         if (!relationship.getMentorUser().getId().equals(actor.getUserId())) {
             throw new AccessDeniedException("Only the mentor can schedule a session.");
+        }
+        if (!userRoleRepository.existsActiveMentorRoleByUserId(actor.getUserId())
+                || !employeeRepository.existsByUserIdAndEmploymentStatus(actor.getUserId(), EmploymentStatus.ACTIVE)) {
+            throw new AccessDeniedException("Only an active mentor can schedule a session.");
         }
         if (relationship.getStatus() != MentoringRelationshipStatus.ACTIVE) {
             throw new BusinessException(
@@ -180,7 +207,7 @@ public class MentoringCollaborationService {
             );
         }
 
-        List<MentoringMessage> newestFirst = messageRepository.findByRelationship_IdOrderByCreatedAtDesc(
+        List<MentoringMessage> newestFirst = messageRepository.findRecentByRelationship(
                 relationshipId,
                 PageRequest.of(requestedPage, requestedPageSize + 1)
         );
@@ -240,7 +267,9 @@ public class MentoringCollaborationService {
     }
 
     private void ensureWritableParticipant(MentoringRelationship relationship, Long userId) {
-        if (relationship.getStatus() != MentoringRelationshipStatus.ACTIVE) {
+        if (relationship.getStatus() == MentoringRelationshipStatus.COMPLETED
+                || relationship.getStatus() == MentoringRelationshipStatus.CANCELLED
+                || relationship.getStatus() == MentoringRelationshipStatus.REASSIGNED) {
             throw new BusinessException(
                     "MENTORING_RELATIONSHIP_READ_ONLY",
                     "Chat is read-only after a mentoring relationship is closed.",
@@ -283,6 +312,9 @@ public class MentoringCollaborationService {
         String normalized = normalizeOptionalText(value);
         if (normalized == null) {
             return null;
+        }
+        if (normalized.length() > 1000) {
+            throw new BusinessException("MENTORING_MEETING_URL_TOO_LONG", "Meeting links cannot exceed 1000 characters.");
         }
         try {
             URI uri = URI.create(normalized);

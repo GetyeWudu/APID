@@ -494,9 +494,9 @@ APID supports **all three** discovery and matching paths concurrently:
 ### 5.6 Trainer–Trainee Relationships & Collaboration (`FR-MENTOR-06`)
 - Accepted/matched requests create a `MentoringRelationship` (`ACTIVE`, `PAUSED`, `COMPLETED`, `CANCELLED`, `REASSIGNED`).
 - **Shared Tools (Isolated from Coaching):**
-  - Mentor and accepted trainees can open a relationship detail page that shows its participants, session history, and conversation.
-  - The Mentor schedules sessions for an active relationship; sessions include a title, agenda, start/end time, delivery mode, and optional meeting link. A class relationship shares its schedule with all accepted trainees.
-  - Persistent, paginated relationship chat is shared by all members of a class. Active participants can send messages; closed relationships retain read-only history.
+  - Mentor and accepted trainees can open a relationship detail page that shows its participants, completed or in-progress sessions, and recent conversation history.
+  - The detail page links mentors to Mentor Sessions to create sessions and trainees to My Sessions to review them. Sessions include a title, agenda, start/end time, delivery mode, and optional meeting link; a class relationship shares its schedule with all accepted trainees.
+  - The detail page's Message action opens employee Chat in the selected relationship context. Persistent, paginated relationship chat is shared by all members of a class. Active participants can send messages; closed relationships retain read-only history.
   - Daily.co live sessions + join-time capture + Trainer attendance confirmation.
   - Scoped resource sharing (`MentoringResource`).
   - Lightweight session notes / progress milestones.

@@ -5,6 +5,8 @@ import com.boa.apid.core.auth.security.ApidUserPrincipal;
 import com.boa.apid.core.authorization.entity.User;
 import com.boa.apid.core.authorization.entity.UserStatus;
 import com.boa.apid.core.authorization.repository.UserRepository;
+import com.boa.apid.core.authorization.repository.UserRoleRepository;
+import com.boa.apid.core.organization.entity.EmploymentStatus;
 import com.boa.apid.core.organization.repository.EmployeeRepository;
 import com.boa.apid.mentoring.pairing.dto.MentoringChatMessageRequest;
 import com.boa.apid.mentoring.pairing.dto.MentoringSessionRequest;
@@ -49,6 +51,7 @@ class MentoringCollaborationServiceTest {
     @Mock private MentoringMessageRepository messageRepository;
     @Mock private EmployeeRepository employeeRepository;
     @Mock private UserRepository userRepository;
+    @Mock private UserRoleRepository userRoleRepository;
 
     @InjectMocks
     private MentoringCollaborationService service;
@@ -77,6 +80,8 @@ class MentoringCollaborationServiceTest {
         User mentor = user(1L, "mentor");
         MentoringRelationship relationship = relationship(mentor, MentoringRelationshipStatus.ACTIVE);
         when(relationshipRepository.findDetailedById(7L)).thenReturn(Optional.of(relationship));
+        when(userRoleRepository.existsActiveMentorRoleByUserId(1L)).thenReturn(true);
+        when(employeeRepository.existsByUserIdAndEmploymentStatus(1L, EmploymentStatus.ACTIVE)).thenReturn(true);
         when(sessionRepository.save(any(MentoringSession.class)))
                 .thenAnswer(invocation -> invocation.getArgument(0));
         when(employeeRepository.findDetailedByUserIdIn(any())).thenReturn(List.of());

@@ -15,6 +15,7 @@ import {
 } from '../../../shared/components/ui';
 import { EMPLOYEE_WORKSPACE_PERMISSIONS } from '../../../shared/auth/workspaceResolver';
 import { mentoringPairingApi } from '../../mentoring/api/mentoringPairingApi';
+import { MentoringPairChatPanel } from '../../mentoring/components/MentoringPairChatPanel';
 import { MentoringRequestsPanel } from '../../mentoring/components/MentoringRequestsPanel';
 import { workspaceLiveApi, workspacePreviewAdapter } from '../api/workspaceDashboardApi';
 import { IsolatedChatPanel, type ChatMessageItem } from '../components/IsolatedChatPanel';
@@ -25,6 +26,13 @@ export function WorkspaceDashboardPage() {
   const { user, hasPermission, hasAnyPermission } = useAuth();
   const [searchParams, setSearchParams] = useSearchParams();
   const isMentor = user?.roles.some((role) => role.trim().toLowerCase() === 'mentor') ?? false;
+  const requestedTab = (searchParams.get('tab') as WorkspaceTabKey | null) ?? 'overview';
+  const activeTab: WorkspaceTabKey =
+    requestedTab === 'mentoring' || requestedTab === 'chat'
+      ? requestedTab
+      : 'overview';
+  const pairingIdParam = searchParams.get('pairingId');
+  const isPairChat = activeTab === 'chat' && pairingIdParam !== null;
 
   // Strictly dev-only participation flag toggles (never visible in production builds)
   const [devTrainerOverride, setDevTrainerOverride] = useState<boolean | null>(null);
@@ -34,31 +42,27 @@ export function WorkspaceDashboardPage() {
   const identityQuery = useQuery({
     queryKey: ['workspace', 'identity', user?.id],
     queryFn: workspaceLiveApi.loadMyIdentity,
+    enabled: !isPairChat,
   });
 
   const previewQuery = useQuery({
     queryKey: ['workspace', 'preview-participation'],
     queryFn: workspacePreviewAdapter.getParticipationPreview,
+    enabled: !isPairChat,
   });
 
   const pairingRequestsQuery = useQuery({
     queryKey: ['mentoring', 'pairing', 'requests', user?.id],
     queryFn: mentoringPairingApi.listMyRequests,
-    enabled: Boolean(user && hasAnyPermission(EMPLOYEE_WORKSPACE_PERMISSIONS)),
+    enabled: Boolean(user && hasAnyPermission(EMPLOYEE_WORKSPACE_PERMISSIONS) && !isPairChat),
   });
 
-  const requestedTab = (searchParams.get('tab') as WorkspaceTabKey | null) ?? 'overview';
-  const activeTab: WorkspaceTabKey =
-    requestedTab === 'mentoring' || requestedTab === 'chat'
-      ? requestedTab
-      : 'overview';
-
   const selectTab = (key: WorkspaceTabKey) => {
-    if (key === 'overview') {
-      setSearchParams({});
-    } else {
-      setSearchParams({ tab: key });
-    }
+    const nextParams = new URLSearchParams();
+    if (key !== 'overview') nextParams.set('tab', key);
+    const pairingId = searchParams.get('pairingId');
+    if (key === 'chat' && pairingId) nextParams.set('pairingId', pairingId);
+    setSearchParams(nextParams);
   };
 
   const effectiveWorkspace = useMemo(() => {
@@ -80,6 +84,23 @@ export function WorkspaceDashboardPage() {
           title="No Employee Workspace Permissions"
           description="Your account does not hold EMPLOYEE_PORTAL_ACCESS or COACHING_REQUEST_SUBMIT."
         />
+      </div>
+    );
+  }
+
+  if (isPairChat) {
+    const pairingId = Number(pairingIdParam);
+    if (!Number.isSafeInteger(pairingId) || pairingId <= 0) {
+      return (
+        <div className="apid-card">
+          <EmptyState title="Invalid Pairing" description="The pairing identifier in this chat link is not valid." />
+        </div>
+      );
+    }
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+        <PageHeader title="Chat" subtitle="Your private conversation for this mentoring pairing." source="live" />
+        <MentoringPairChatPanel relationshipId={pairingId} />
       </div>
     );
   }
@@ -153,7 +174,9 @@ export function WorkspaceDashboardPage() {
         title={workspaceHeading}
         subtitle={
           activeTab === 'chat'
-            ? 'Your private conversations for active mentoring relationships.'
+            ? searchParams.has('pairingId')
+              ? 'Your private conversation for this mentoring pairing.'
+              : 'Your private conversations for active mentoring relationships.'
             : 'Your employee overview, mentoring, and team reporting.'
         }
         source="live"
@@ -382,23 +405,21 @@ export function WorkspaceDashboardPage() {
       {activeTab === 'chat' && (
         <div className="boa-stack">
           {workspaceData.hasTraineeRelationship ||
-          workspaceData.mentoringAsTrainer.activeTrainees > 0 ? (
+            workspaceData.mentoringAsTrainer.activeTrainees > 0 ? (
             <IsolatedChatPanel
               contextTitle="Mentoring Conversation"
               contextKey="mentoring"
               messages={allMentoringMsgs}
               onSendMessage={appendMessage}
             />
-          ) : null}
-          {!workspaceData.hasTraineeRelationship &&
-            workspaceData.mentoringAsTrainer.activeTrainees === 0 && (
-              <div className="apid-card">
-                <EmptyState
-                  title="No Conversations Yet"
-                  description="Mentoring conversations appear here when you have an active mentoring relationship."
-                />
-              </div>
-            )}
+          ) : (
+            <div className="apid-card">
+              <EmptyState
+                title="No Conversations Yet"
+                description="Mentoring conversations appear here when you have an active mentoring relationship."
+              />
+            </div>
+          )}
         </div>
       )}
     </div>

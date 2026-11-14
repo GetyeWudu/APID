@@ -1,4 +1,3 @@
-import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { ShieldAlert } from 'lucide-react';
 import { Link, useSearchParams } from 'react-router-dom';
@@ -10,15 +9,14 @@ import {
   LoadingSkeleton,
   PageHeader,
 } from '../../../shared/components/ui';
-import { workspaceLiveApi, workspacePreviewAdapter } from '../../workspace/api/workspaceDashboardApi';
-import type { ChatMessageItem } from '../../workspace/components/IsolatedChatPanel';
-import { MentoringTab } from '../../workspace/components/MentoringTab';
+import { workspaceLiveApi } from '../../workspace/api/workspaceDashboardApi';
 import { mentoringPairingApi } from '../api/mentoringPairingApi';
 import { mentorDirectoryApi } from '../api/mentorDirectoryApi';
 import { ApplyForMentorForm } from '../components/ApplyForMentorForm';
 import { MentorDirectory } from '../components/MentorDirectory';
 import { MentorInvitationForm } from '../components/MentorInvitationForm';
 import { MentoringRequestsPanel } from '../components/MentoringRequestsPanel';
+import { MentoringSessionsPage } from './MentoringSessionsPage';
 
 type MentoringViewKey =
   | 'overview'
@@ -32,7 +30,6 @@ type MentoringViewKey =
 export function MentoringHomePage() {
   const { user, hasPermission, hasAnyPermission } = useAuth();
   const [searchParams] = useSearchParams();
-  const [mentoringChatExtra, setMentoringChatExtra] = useState<ChatMessageItem[]>([]);
   const isMentor = user?.roles.some((role) => role.trim().toLowerCase() === 'mentor') ?? false;
 
   const requestedView = searchParams.get('view') as MentoringViewKey | null;
@@ -52,12 +49,6 @@ export function MentoringHomePage() {
     enabled: hasAnyPermission(EMPLOYEE_WORKSPACE_PERMISSIONS),
   });
 
-  const previewQuery = useQuery({
-    queryKey: ['workspace', 'preview-participation'],
-    queryFn: workspacePreviewAdapter.getParticipationPreview,
-    enabled: activeView === 'trainee-sessions' || activeView === 'trainer-sessions',
-  });
-
   const mentorsQuery = useQuery({
     queryKey: ['mentoring', 'directory'],
     queryFn: mentorDirectoryApi.listMentors,
@@ -67,7 +58,10 @@ export function MentoringHomePage() {
   const pairingRequestsQuery = useQuery({
     queryKey: ['mentoring', 'pairing', 'requests', user?.id],
     queryFn: mentoringPairingApi.listMyRequests,
-    enabled: hasAnyPermission(EMPLOYEE_WORKSPACE_PERMISSIONS),
+    enabled:
+      hasAnyPermission(EMPLOYEE_WORKSPACE_PERMISSIONS) &&
+      activeView !== 'trainer-sessions' &&
+      activeView !== 'trainee-sessions',
   });
 
   if (!hasAnyPermission(EMPLOYEE_WORKSPACE_PERMISSIONS)) {
@@ -225,10 +219,6 @@ export function MentoringHomePage() {
     );
   }
 
-  if (previewQuery.isLoading) {
-    return <LoadingSkeleton rows={6} height={28} />;
-  }
-
   if (activeView === 'apply') {
     return (
       <div className="boa-stack">
@@ -241,41 +231,6 @@ export function MentoringHomePage() {
     );
   }
 
-  const workspaceData = previewQuery.data!.workspace;
-  const allMentoringMsgs = [...workspaceData.chatMentoringMessages, ...mentoringChatExtra];
-
-  const appendMessage = (body: string) => {
-    setMentoringChatExtra((prev) => [
-      ...prev,
-      { id: `msg-${Date.now()}`, sender: 'You', body, time: 'Just now' },
-    ]);
-  };
-
-  const viewMeta =
-    activeView === 'trainer-sessions'
-      ? {
-          title: 'Mentor Sessions',
-          subtitle: 'View sessions scheduled with your trainees.',
-        }
-      : {
-          title: 'My Sessions',
-          subtitle: 'Track your learning sessions with your mentor.',
-        };
-  const section = activeView === 'trainer-sessions' ? 'trainer-sessions' : 'trainee-sessions';
-
-  return (
-    <div className="boa-stack">
-      <PageHeader title={viewMeta.title} subtitle={viewMeta.subtitle} source="preview" />
-
-      <MentoringTab
-        workspace={workspaceData}
-        activeSkills={activeSkills}
-        chatMessages={allMentoringMsgs}
-        onAppendChat={appendMessage}
-        section={section}
-        isMentor={isMentor}
-      />
-    </div>
-  );
+  return <MentoringSessionsPage view={activeView === 'trainer-sessions' ? 'mentor' : 'trainee'} />;
 }
 

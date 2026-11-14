@@ -133,6 +133,11 @@ export const mentoringPairingApi = {
     return response.data.data;
   },
 
+  async listMySessions(): Promise<MentoringSession[]> {
+    const response = await apiClient.get<ApiResponse<MentoringSession[]>>('/mentoring/pairing/sessions');
+    return response.data.data;
+  },
+
   async createSession(
     relationshipId: number,
     input: {

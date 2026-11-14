@@ -1,15 +1,8 @@
-import { useRef, useState, type FormEvent } from 'react';
+import { useState } from 'react';
 import axios from 'axios';
-import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import {
-  ArrowLeft,
-  CalendarDays,
-  MessageCircle,
-  Send,
-  Video,
-} from 'lucide-react';
+import { useQuery } from '@tanstack/react-query';
+import { ArrowLeft, CalendarDays, MessageCircle, Video } from 'lucide-react';
 import { Link, useParams } from 'react-router-dom';
-import { useAuth } from '../../../app/AuthContext';
 import type { ApiErrorPayload } from '../../../shared/api/apiClient';
 import {
   EmptyState,
@@ -17,13 +10,8 @@ import {
   LoadingSkeleton,
   PageHeader,
   StatusPill,
-  useToast,
 } from '../../../shared/components/ui';
-import {
-  mentoringPairingApi,
-  type MentoringDeliveryMode,
-  type MentoringSession,
-} from '../api/mentoringPairingApi';
+import { mentoringPairingApi, type MentoringSession } from '../api/mentoringPairingApi';
 
 type DetailTab = 'overview' | 'sessions' | 'chat';
 
@@ -41,9 +29,9 @@ function getErrorMessage(error: unknown, fallback: string) {
   return error instanceof Error ? error.message : fallback;
 }
 
-function sessionStatusTone(status: MentoringSession['status']) {
+function sessionStatusTone(status: MentoringSession['status'] | 'IN PROGRESS') {
   if (status === 'COMPLETED') return 'ok';
-  if (status === 'SCHEDULED') return 'info';
+  if (status === 'SCHEDULED' || status === 'IN PROGRESS') return 'info';
   if (status === 'MISSED') return 'err';
   return 'neutral';
 }
@@ -52,12 +40,7 @@ export function MentoringPairingDetailPage() {
   const { relationshipId: rawRelationshipId } = useParams();
   const relationshipId = Number(rawRelationshipId);
   const isValidRelationshipId = Number.isSafeInteger(relationshipId) && relationshipId > 0;
-  const { user } = useAuth();
   const [activeTab, setActiveTab] = useState<DetailTab>('overview');
-  const [messageBody, setMessageBody] = useState('');
-  const sessionFormRef = useRef<HTMLFormElement>(null);
-  const queryClient = useQueryClient();
-  const { pushToast } = useToast();
 
   const detailQuery = useQuery({
     queryKey: ['mentoring', 'pairing', 'detail', relationshipId],
@@ -67,55 +50,13 @@ export function MentoringPairingDetailPage() {
   const sessionsQuery = useQuery({
     queryKey: ['mentoring', 'pairing', 'sessions', relationshipId],
     queryFn: () => mentoringPairingApi.listSessions(relationshipId),
-    enabled: isValidRelationshipId && activeTab === 'sessions',
+    enabled: isValidRelationshipId && (activeTab === 'sessions' || activeTab === 'overview'),
   });
-  const chatQuery = useInfiniteQuery({
-    queryKey: ['mentoring', 'pairing', 'messages', relationshipId],
-    queryFn: ({ pageParam }) => mentoringPairingApi.listMessages(relationshipId, pageParam, 50),
-    initialPageParam: 0,
-    getNextPageParam: (lastPage) => (lastPage.hasMore ? lastPage.page + 1 : undefined),
-    enabled: isValidRelationshipId && activeTab === 'chat',
+  const chatQuery = useQuery({
+    queryKey: ['mentoring', 'pairing', 'messages-preview', relationshipId],
+    queryFn: () => mentoringPairingApi.listMessages(relationshipId, 0, 20),
+    enabled: isValidRelationshipId && (activeTab === 'chat' || activeTab === 'overview'),
     refetchInterval: activeTab === 'chat' ? 10000 : false,
-  });
-
-  const createSessionMutation = useMutation({
-    mutationFn: (input: {
-      title: string;
-      agenda?: string;
-      scheduledStart: string;
-      scheduledEnd: string;
-      deliveryMode: MentoringDeliveryMode;
-      meetingUrl?: string;
-    }) => mentoringPairingApi.createSession(relationshipId, input),
-    onSuccess: async () => {
-      await queryClient.invalidateQueries({
-        queryKey: ['mentoring', 'pairing', 'sessions', relationshipId],
-      });
-      sessionFormRef.current?.reset();
-      pushToast({ title: 'Session scheduled', message: 'Your pairing can now see the session.', tone: 'ok' });
-    },
-    onError: (error: unknown) =>
-      pushToast({
-        title: 'Unable to schedule session',
-        message: getErrorMessage(error, 'Please try again.'),
-        tone: 'err',
-      }),
-  });
-
-  const sendMessageMutation = useMutation({
-    mutationFn: (body: string) => mentoringPairingApi.sendMessage(relationshipId, body),
-    onSuccess: async () => {
-      setMessageBody('');
-      await queryClient.invalidateQueries({
-        queryKey: ['mentoring', 'pairing', 'messages', relationshipId],
-      });
-    },
-    onError: (error: unknown) =>
-      pushToast({
-        title: 'Unable to send message',
-        message: getErrorMessage(error, 'Please try again.'),
-        tone: 'err',
-      }),
   });
 
   if (!isValidRelationshipId) {
@@ -143,45 +84,85 @@ export function MentoringPairingDetailPage() {
   }
 
   const detail = detailQuery.data;
-  const currentTrainee = detail.trainees.find((trainee) => trainee.userId === user?.id);
-  const canChat =
-    detail.status === 'ACTIVE' &&
-    (detail.currentUserRole === 'MENTOR' || currentTrainee?.status === 'ACTIVE');
-  const messages = (chatQuery.data?.pages ?? [])
-    .slice()
-    .reverse()
-    .flatMap((page) => page.messages);
+  const messages = chatQuery.data?.messages ?? [];
+  const sessions = sessionsQuery.data ?? [];
+  const previousSessions = sessions.filter((session) => {
+    const start = new Date(session.scheduledStart).getTime();
+    const end = new Date(session.scheduledEnd).getTime();
+    return session.status === 'COMPLETED' || (session.status === 'SCHEDULED' && start <= Date.now() && end > Date.now());
+  });
+  const sessionView = detail.currentUserRole === 'MENTOR' ? 'trainer-sessions' : 'trainee-sessions';
+  const sessionsPath = `/mentoring?view=${sessionView}&relationshipId=${relationshipId}`;
+  const sessionsAction =
+    detail.currentUserRole === 'MENTOR' && detail.status === 'ACTIVE' ? 'Create session' : 'My Sessions';
+  const chatPath = `/workspace?tab=chat&pairingId=${relationshipId}`;
 
-  const handleCreateSession = (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    const formData = new FormData(event.currentTarget);
-    const scheduledStart = String(formData.get('scheduledStart') ?? '');
-    const scheduledEnd = String(formData.get('scheduledEnd') ?? '');
-    if (!scheduledStart || !scheduledEnd) return;
-
-    createSessionMutation.mutate({
-      title: String(formData.get('title') ?? '').trim(),
-      agenda: String(formData.get('agenda') ?? '').trim() || undefined,
-      scheduledStart: new Date(scheduledStart).toISOString(),
-      scheduledEnd: new Date(scheduledEnd).toISOString(),
-      deliveryMode: String(formData.get('deliveryMode')) as MentoringDeliveryMode,
-      meetingUrl: String(formData.get('meetingUrl') ?? '').trim() || undefined,
+  const renderSessionCards = (items: MentoringSession[]) =>
+    items.map((session) => {
+      const start = new Date(session.scheduledStart).getTime();
+      const end = new Date(session.scheduledEnd).getTime();
+      const status =
+        session.status === 'SCHEDULED' && start <= Date.now() && end > Date.now()
+          ? 'IN PROGRESS'
+          : session.status;
+      return (
+        <article key={session.id} className="apid-card" style={{ border: '1px solid var(--border)' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', gap: '0.7rem', flexWrap: 'wrap' }}>
+            <div>
+              <h3 style={{ margin: 0 }}>{session.title}</h3>
+              <p className="boa-muted" style={{ margin: '0.3rem 0 0', fontSize: '0.84rem' }}>
+                {formatDateTime(session.scheduledStart)} to {formatDateTime(session.scheduledEnd)}
+              </p>
+            </div>
+            <StatusPill label={status} tone={sessionStatusTone(status)} />
+          </div>
+          <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', marginTop: '0.7rem', flexWrap: 'wrap' }}>
+            <StatusPill label={session.deliveryMode.replace('_', ' ')} tone="neutral" />
+            {session.meetingUrl && (
+              <a
+                href={session.meetingUrl}
+                target="_blank"
+                rel="noreferrer"
+                className="apid-btn apid-btn-outline apid-btn-sm"
+              >
+                <Video size={15} /> Join meeting
+              </a>
+            )}
+          </div>
+          {session.agenda && <p className="boa-muted">{session.agenda}</p>}
+        </article>
+      );
     });
-  };
 
-  const handleSendMessage = (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    const body = messageBody.trim();
-    if (body && canChat) {
-      sendMessageMutation.mutate(body);
-    }
-  };
+  const renderMessageCards = (items: typeof messages) =>
+    items.map((message) => (
+      <article
+        key={message.id}
+        className="apid-card"
+        style={{
+          border: '1px solid var(--border)',
+          alignSelf: message.mine ? 'flex-end' : 'flex-start',
+          maxWidth: 'min(90%, 680px)',
+        }}
+      >
+        <div className="boa-muted" style={{ fontSize: '0.8rem', marginBottom: '0.35rem' }}>
+          {message.mine ? 'You' : message.senderName} | {formatDateTime(message.createdAt)}
+        </div>
+        <p style={{ margin: 0, whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>{message.body}</p>
+      </article>
+    ));
+
+  const renderMessageAction = (
+    <Link to={chatPath} className="apid-btn apid-btn-primary apid-btn-sm">
+      <MessageCircle size={15} /> Message
+    </Link>
+  );
 
   return (
     <div className="boa-stack">
       <PageHeader
         title={detail.requestType === 'GROUP' ? 'Mentoring Class' : 'Mentoring Pair'}
-        subtitle={`Mentor: ${detail.mentorName} · ${detail.trainees.length} trainee${detail.trainees.length === 1 ? '' : 's'}`}
+        subtitle={`Mentor: ${detail.mentorName} | ${detail.trainees.length} trainee${detail.trainees.length === 1 ? '' : 's'}`}
         source="live"
         actions={
           <Link to="/mentoring/pairing" className="apid-btn apid-btn-outline apid-btn-sm">
@@ -211,94 +192,99 @@ export function MentoringPairingDetailPage() {
       </div>
 
       {activeTab === 'overview' && (
-        <section className="apid-card">
-          <div className="boa-card-header">
-            <div>
-              <h2 className="boa-card-title">Pairing details</h2>
-              <p className="boa-card-subtitle">
-                Started {formatDateTime(detail.startedAt)}
-                {detail.skillName ? ` · ${detail.skillName}` : ''}
-              </p>
+        <div className="boa-stack">
+          <section className="apid-card">
+            <div className="boa-card-header">
+              <div>
+                <h2 className="boa-card-title">Pairing details</h2>
+                <p className="boa-card-subtitle">
+                  Started {formatDateTime(detail.startedAt)}
+                  {detail.skillName ? ` - ${detail.skillName}` : ''}
+                </p>
+              </div>
+              <StatusPill label={detail.status} tone={detail.status === 'ACTIVE' ? 'ok' : 'neutral'} />
             </div>
-            <StatusPill label={detail.status} tone={detail.status === 'ACTIVE' ? 'ok' : 'neutral'} />
-          </div>
-          {detail.requestMessage && <p className="boa-muted">{detail.requestMessage}</p>}
-          <h3 style={{ margin: '1.1rem 0 0.6rem' }}>Trainees in this pairing</h3>
-          {detail.trainees.length === 0 ? (
-            <EmptyState title="No trainees listed" description="No trainee memberships were found." />
-          ) : (
-            <div className="boa-grid-2" style={{ marginBottom: 0 }}>
-              {detail.trainees.map((trainee) => (
-                <article key={trainee.userId} className="apid-card" style={{ border: '1px solid var(--border)' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', gap: '0.7rem' }}>
-                    <strong>{trainee.name}</strong>
-                    <StatusPill
-                      label={trainee.status}
-                      tone={trainee.status === 'ACTIVE' ? 'ok' : 'neutral'}
-                    />
-                  </div>
-                  <p className="boa-muted" style={{ margin: '0.5rem 0 0', fontSize: '0.84rem' }}>
-                    Joined {formatDateTime(trainee.joinedAt)}
-                  </p>
-                </article>
-              ))}
+            {detail.requestMessage && <p className="boa-muted">{detail.requestMessage}</p>}
+            <h3 style={{ margin: '1.1rem 0 0.6rem' }}>Trainees in this pairing</h3>
+            {detail.trainees.length === 0 ? (
+              <EmptyState title="No trainees listed" description="No trainee memberships were found." />
+            ) : (
+              <div className="boa-grid-2" style={{ marginBottom: 0 }}>
+                {detail.trainees.map((trainee) => (
+                  <article key={trainee.userId} className="apid-card" style={{ border: '1px solid var(--border)' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', gap: '0.7rem' }}>
+                      <strong>{trainee.name}</strong>
+                      <StatusPill label={trainee.status} tone={trainee.status === 'ACTIVE' ? 'ok' : 'neutral'} />
+                    </div>
+                    <p className="boa-muted" style={{ margin: '0.5rem 0 0', fontSize: '0.84rem' }}>
+                      Joined {formatDateTime(trainee.joinedAt)}
+                    </p>
+                  </article>
+                ))}
+              </div>
+            )}
+          </section>
+
+          <section className="apid-card boa-stack">
+            <div className="boa-card-header">
+              <div>
+                <h2 className="boa-card-title">Completed and in-progress sessions</h2>
+                <p className="boa-card-subtitle">Sessions already underway or completed for this pairing.</p>
+              </div>
+              <Link to={sessionsPath} className="apid-btn apid-btn-primary apid-btn-sm">
+                <CalendarDays size={15} /> {sessionsAction}
+              </Link>
             </div>
-          )}
-        </section>
+            {sessionsQuery.isLoading ? (
+              <LoadingSkeleton rows={3} height={26} />
+            ) : sessionsQuery.isError ? (
+              <ErrorState
+                message={getErrorMessage(sessionsQuery.error, 'Unable to load session history.')}
+                onRetry={() => void sessionsQuery.refetch()}
+              />
+            ) : previousSessions.length === 0 ? (
+              <EmptyState
+                title="No completed or in-progress sessions"
+                description="Completed sessions and sessions currently underway will appear here."
+              />
+            ) : (
+              <div className="boa-stack">{renderSessionCards(previousSessions.slice(0, 3))}</div>
+            )}
+          </section>
+
+          <section className="apid-card boa-stack">
+            <div className="boa-card-header">
+              <div>
+                <h2 className="boa-card-title">Recent pair chat</h2>
+                <p className="boa-card-subtitle">Recent messages shared by this pairing.</p>
+              </div>
+              {renderMessageAction}
+            </div>
+            {chatQuery.isLoading ? (
+              <LoadingSkeleton rows={3} height={26} />
+            ) : chatQuery.isError ? (
+              <ErrorState
+                message={getErrorMessage(chatQuery.error, 'Unable to load chat history.')}
+                onRetry={() => void chatQuery.refetch()}
+              />
+            ) : messages.length === 0 ? (
+              <EmptyState title="No messages yet" description="Start a conversation with this pairing." />
+            ) : (
+              <div className="boa-stack" aria-live="polite">
+                {renderMessageCards(messages.slice(-5))}
+              </div>
+            )}
+          </section>
+        </div>
       )}
 
       {activeTab === 'sessions' && (
         <div className="boa-stack">
-          {detail.currentUserRole === 'MENTOR' && detail.status === 'ACTIVE' && (
-            <form ref={sessionFormRef} className="apid-card boa-stack" onSubmit={handleCreateSession}>
-              <div>
-                <h2 className="boa-card-title">Schedule a session</h2>
-                <p className="boa-card-subtitle">This session will be shared with the whole pairing or class.</p>
-              </div>
-              <label>
-                Session title
-                <input className="apid-input" name="title" maxLength={180} required />
-              </label>
-              <label>
-                Agenda
-                <textarea className="apid-input" name="agenda" maxLength={2000} rows={3} />
-              </label>
-              <div className="boa-grid-2">
-                <label>
-                  Starts
-                  <input className="apid-input" name="scheduledStart" type="datetime-local" required />
-                </label>
-                <label>
-                  Ends
-                  <input className="apid-input" name="scheduledEnd" type="datetime-local" required />
-                </label>
-              </div>
-              <div className="boa-grid-2">
-                <label>
-                  Delivery mode
-                  <select className="apid-input" name="deliveryMode" defaultValue="ONLINE">
-                    <option value="ONLINE">Online</option>
-                    <option value="IN_PERSON">In person</option>
-                    <option value="HYBRID">Hybrid</option>
-                  </select>
-                </label>
-                <label>
-                  Meeting link (optional)
-                  <input className="apid-input" name="meetingUrl" type="url" maxLength={1000} />
-                </label>
-              </div>
-              <div>
-                <button
-                  type="submit"
-                  className="apid-btn apid-btn-primary apid-btn-sm"
-                  disabled={createSessionMutation.isPending}
-                >
-                  <CalendarDays size={15} />
-                  {createSessionMutation.isPending ? 'Scheduling…' : 'Schedule session'}
-                </button>
-              </div>
-            </form>
-          )}
+          <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+            <Link to={sessionsPath} className="apid-btn apid-btn-primary apid-btn-sm">
+              <CalendarDays size={15} /> {sessionsAction}
+            </Link>
+          </div>
           {sessionsQuery.isLoading ? (
             <LoadingSkeleton rows={4} height={28} />
           ) : sessionsQuery.isError ? (
@@ -306,60 +292,35 @@ export function MentoringPairingDetailPage() {
               message={getErrorMessage(sessionsQuery.error, 'Unable to load session history.')}
               onRetry={() => void sessionsQuery.refetch()}
             />
-          ) : (sessionsQuery.data ?? []).length === 0 ? (
+          ) : previousSessions.length === 0 ? (
             <div className="apid-card">
-              <EmptyState title="No sessions yet" description="Scheduled and previous sessions will appear here." />
+              <EmptyState
+                title="No completed or in-progress sessions"
+                description="Completed sessions and sessions currently underway will appear here."
+              />
             </div>
           ) : (
-            <section className="apid-card">
+            <section className="apid-card boa-stack">
               <div className="boa-card-header">
                 <div>
                   <h2 className="boa-card-title">Session history</h2>
-                  <p className="boa-card-subtitle">Upcoming sessions and previous meetings for this pairing.</p>
+                  <p className="boa-card-subtitle">Completed and in-progress sessions for this pairing.</p>
                 </div>
               </div>
-              <div className="boa-stack">
-                {(sessionsQuery.data ?? []).map((session) => (
-                  <article key={session.id} className="apid-card" style={{ border: '1px solid var(--border)' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', gap: '0.7rem', flexWrap: 'wrap' }}>
-                      <div>
-                        <h3 style={{ margin: 0 }}>{session.title}</h3>
-                        <p className="boa-muted" style={{ margin: '0.3rem 0 0', fontSize: '0.84rem' }}>
-                          {formatDateTime(session.scheduledStart)} – {formatDateTime(session.scheduledEnd)}
-                        </p>
-                      </div>
-                      <StatusPill label={session.status} tone={sessionStatusTone(session.status)} />
-                    </div>
-                    <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', marginTop: '0.7rem' }}>
-                      <StatusPill label={session.deliveryMode.replace('_', ' ')} tone="neutral" />
-                      {session.meetingUrl && (
-                        <a
-                          href={session.meetingUrl}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="apid-btn apid-btn-outline apid-btn-sm"
-                        >
-                          <Video size={15} /> Join meeting
-                        </a>
-                      )}
-                    </div>
-                    {session.agenda && <p className="boa-muted">{session.agenda}</p>}
-                  </article>
-                ))}
-              </div>
+              {renderSessionCards(previousSessions)}
             </section>
           )}
         </div>
       )}
 
       {activeTab === 'chat' && (
-        <section className="apid-card">
+        <section className="apid-card boa-stack">
           <div className="boa-card-header">
             <div>
               <h2 className="boa-card-title">Pair chat</h2>
               <p className="boa-card-subtitle">Conversation shared by the mentor and all trainees in this pairing.</p>
             </div>
-            <MessageCircle size={20} aria-hidden="true" />
+            {renderMessageAction}
           </div>
           {chatQuery.isLoading ? (
             <LoadingSkeleton rows={5} height={28} />
@@ -371,61 +332,7 @@ export function MentoringPairingDetailPage() {
           ) : messages.length === 0 ? (
             <EmptyState title="No messages yet" description="Start the conversation with your mentoring pairing." />
           ) : (
-            <div className="boa-stack" aria-live="polite">
-              {chatQuery.hasNextPage && (
-                <div>
-                  <button
-                    type="button"
-                    className="apid-btn apid-btn-outline apid-btn-sm"
-                    disabled={chatQuery.isFetchingNextPage}
-                    onClick={() => void chatQuery.fetchNextPage()}
-                  >
-                    {chatQuery.isFetchingNextPage ? 'Loading…' : 'Load older messages'}
-                  </button>
-                </div>
-              )}
-              {messages.map((message) => (
-                <article
-                  key={message.id}
-                  className="apid-card"
-                  style={{
-                    border: '1px solid var(--border)',
-                    alignSelf: message.mine ? 'flex-end' : 'flex-start',
-                    maxWidth: 'min(90%, 680px)',
-                  }}
-                >
-                  <div className="boa-muted" style={{ fontSize: '0.8rem', marginBottom: '0.35rem' }}>
-                    {message.mine ? 'You' : message.senderName} · {formatDateTime(message.createdAt)}
-                  </div>
-                  <p style={{ margin: 0, whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>{message.body}</p>
-                </article>
-              ))}
-            </div>
-          )}
-          <form onSubmit={handleSendMessage} style={{ display: 'flex', gap: '0.55rem', marginTop: '1rem' }}>
-            <textarea
-              className="apid-input"
-              aria-label="Write a message"
-              placeholder={canChat ? 'Write a message to this pairing…' : 'This pairing chat is read-only.'}
-              maxLength={4000}
-              rows={2}
-              value={messageBody}
-              onChange={(event) => setMessageBody(event.target.value)}
-              disabled={!canChat || sendMessageMutation.isPending}
-            />
-            <button
-              type="submit"
-              className="apid-btn apid-btn-primary apid-btn-sm"
-              aria-label="Send message"
-              disabled={!canChat || !messageBody.trim() || sendMessageMutation.isPending}
-            >
-              <Send size={16} />
-            </button>
-          </form>
-          {!canChat && (
-            <p className="boa-muted" style={{ marginBottom: 0, fontSize: '0.82rem' }}>
-              This relationship is closed or your membership is inactive. Chat history remains available to read.
-            </p>
+            <div className="boa-stack" aria-live="polite">{renderMessageCards(messages)}</div>
           )}
         </section>
       )}
