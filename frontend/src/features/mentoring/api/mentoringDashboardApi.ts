@@ -1,7 +1,6 @@
 import {
   PREVIEW_CERTIFIED_TRAINERS,
   PREVIEW_MENTORING_REQUESTS,
-  PREVIEW_TRAINER_APPLICATIONS,
 } from '../../../shared/mocks/boaPreviewFixtures';
 import { skillsApi } from '../../admin/skills/api/skillsApi';
 import type {
@@ -12,7 +11,7 @@ import type {
 /**
  * Hybrid preview adapter for Phase 9-11 HR Mentoring screens:
  * - Reads LIVE active skills from GET /api/v1/core/skills
- * - Simulates Phase 9-11 Trainer applications, roster, capacity & matching strictly in memory
+ * - Simulates Phase 9-11 trainer roster, capacity & matching strictly in memory
  */
 export const mentoringPreviewAdapter: MentoringDashboardApi = {
   mode: 'preview',
@@ -46,19 +45,11 @@ export const mentoringPreviewAdapter: MentoringDashboardApi = {
 
     return {
       liveSkillNames,
-      applications: [...PREVIEW_TRAINER_APPLICATIONS],
       trainers: [...PREVIEW_CERTIFIED_TRAINERS],
       requests: [...PREVIEW_MENTORING_REQUESTS],
       skillSupplyDemand,
       avgCompletionRating: 4.7,
       completionRatePct: 91,
-    };
-  },
-
-  async simulateApplicationDecision(applicationId, decision, reason) {
-    return {
-      simulated: true,
-      message: `Application ${applicationId} marked ${decision}${reason ? ` (${reason})` : ''} in preview session.`,
     };
   },
 

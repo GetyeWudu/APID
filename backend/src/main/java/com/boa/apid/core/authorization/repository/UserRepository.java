@@ -48,6 +48,18 @@ public interface UserRepository extends JpaRepository<User, Long>, JpaSpecificat
             JOIN ur.role r
             WHERE ur.active = true
               AND r.active = true
+              AND LOWER(r.name) = 'mentor'
+              AND u.status = com.boa.apid.core.authorization.entity.UserStatus.ACTIVE
+            """)
+    long countActiveMentors();
+
+    @Query("""
+            SELECT COUNT(DISTINCT u.id)
+            FROM UserRole ur
+            JOIN ur.user u
+            JOIN ur.role r
+            WHERE ur.active = true
+              AND r.active = true
               AND r.name = 'Super Admin'
               AND u.status = com.boa.apid.core.authorization.entity.UserStatus.ACTIVE
             """)

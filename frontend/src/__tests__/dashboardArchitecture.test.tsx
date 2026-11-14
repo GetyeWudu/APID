@@ -311,7 +311,6 @@ describe('Preview adapters network isolation', () => {
   it('performs zero mutating HTTP calls in HR mentoring preview adapter', async () => {
     const postSpy = vi.spyOn(apiClient, 'post');
     const patchSpy = vi.spyOn(apiClient, 'patch');
-    await mentoringPreviewAdapter.simulateApplicationDecision('APP-301', 'APPROVED', 'Valid cert');
     await mentoringPreviewAdapter.simulateDirectAppoint('Trainer Demo', ['Java & Spring Boot Development'], 3);
     await mentoringPreviewAdapter.simulateTrainerStatusChange(
       'TRN-401',

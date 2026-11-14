@@ -9,4 +9,6 @@ public interface MentorApplicationRepository extends JpaRepository<MentorApplica
 
     List<MentorApplication> findAllByApplicant_IdOrderBySubmittedAtDesc(Long applicantId);
 
+    List<MentorApplication> findAllByOrderBySubmittedAtDesc();
+
 }

@@ -12,6 +12,7 @@ import com.boa.apid.core.authorization.entity.User;
 import com.boa.apid.core.authorization.repository.UserRepository;
 import com.boa.apid.core.skills.entity.Skill;
 import com.boa.apid.core.skills.repository.SkillRepository;
+import com.boa.apid.mentoring.application.dto.MentorApplicationDto;
 import com.boa.apid.mentoring.application.dto.MentorApplicationSubmittedDto;
 import com.boa.apid.mentoring.application.entity.MentorApplication;
 import com.boa.apid.mentoring.application.repository.MentorApplicationRepository;
@@ -19,6 +20,8 @@ import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
+
+import java.util.List;
 
 @Service
 public class MentorApplicationService {
@@ -95,6 +98,13 @@ public class MentorApplicationService {
                 saved.getCustomSkill(),
                 saved.getSubmittedAt()
         );
+    }
+
+    @Transactional(readOnly = true)
+    public List<MentorApplicationDto> listApplications() {
+        return applicationRepository.findAllByOrderBySubmittedAtDesc().stream()
+                .map(MentorApplicationDto::from)
+                .toList();
     }
 
     private String normalizeOptional(String value) {

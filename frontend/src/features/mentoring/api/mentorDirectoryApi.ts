@@ -14,6 +14,11 @@ export interface MentorDirectoryItem {
 }
 
 export const mentorDirectoryApi = {
+  async countActiveMentors(): Promise<number> {
+    const response = await apiClient.get<ApiResponse<number>>('/core/mentors/count');
+    return response.data.data;
+  },
+
   async listMentors(): Promise<MentorDirectoryItem[]> {
     const response = await apiClient.get<ApiResponse<MentorDirectoryItem[]>>('/core/mentors');
     return response.data.data;

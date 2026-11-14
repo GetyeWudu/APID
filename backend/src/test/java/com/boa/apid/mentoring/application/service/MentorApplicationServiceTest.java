@@ -23,6 +23,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.mock.web.MockMultipartFile;
 
 import java.time.Instant;
+import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 
@@ -104,6 +105,29 @@ class MentorApplicationServiceTest {
                 storedFileRepository,
                 fileStorageService
         );
+    }
+
+    @Test
+    void listApplicationsReturnsStoredApplicantSkillAndProofDetails() {
+        User applicant = new User();
+        applicant.setUsername("mentor.applicant");
+        Skill skill = new Skill();
+        skill.setName("Financial Analysis");
+        StoredFile proofFile = new StoredFile();
+        proofFile.setOriginalFilename("financial-analysis.pdf");
+
+        MentorApplication application = new MentorApplication();
+        application.setApplicant(applicant);
+        application.setCatalogSkill(skill);
+        application.setProofDocument(proofFile);
+        when(applicationRepository.findAllByOrderBySubmittedAtDesc()).thenReturn(List.of(application));
+
+        var result = service.listApplications();
+
+        assertEquals(1, result.size());
+        assertEquals("mentor.applicant", result.get(0).applicantUsername());
+        assertEquals("Financial Analysis", result.get(0).skillName());
+        assertEquals("financial-analysis.pdf", result.get(0).proofFileName());
     }
 
     private static ApidUserPrincipal actor() {

@@ -1,7 +1,6 @@
 import type {
   PreviewCertifiedTrainer,
   PreviewMentoringRequest,
-  PreviewTrainerApplication,
 } from '../../../shared/mocks/boaPreviewFixtures';
 
 export type TrainerSuspensionPolicy =
@@ -11,7 +10,6 @@ export type TrainerSuspensionPolicy =
 
 export interface HrMentoringOverview {
   liveSkillNames: string[];
-  applications: PreviewTrainerApplication[];
   trainers: PreviewCertifiedTrainer[];
   requests: PreviewMentoringRequest[];
   skillSupplyDemand: Array<{
@@ -26,11 +24,6 @@ export interface HrMentoringOverview {
 export interface MentoringDashboardApi {
   readonly mode: 'preview';
   getOverview(): Promise<HrMentoringOverview>;
-  simulateApplicationDecision(
-    applicationId: string,
-    decision: 'APPROVED' | 'REJECTED',
-    reason: string
-  ): Promise<{ simulated: true; message: string }>;
   simulateDirectAppoint(
     employeeName: string,
     skills: string[],

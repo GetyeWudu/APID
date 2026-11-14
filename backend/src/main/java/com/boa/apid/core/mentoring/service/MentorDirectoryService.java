@@ -43,6 +43,10 @@ public class MentorDirectoryService {
                 .toList();
     }
 
+    public long countActiveMentors() {
+        return userRepository.countActiveMentors();
+    }
+
     private MentorDirectoryDto toDto(User user, Employee employee) {
         List<MentorDirectoryDto.MentorSkillDto> skills = user.getSkills().stream()
                 .filter(Skill::isActive)

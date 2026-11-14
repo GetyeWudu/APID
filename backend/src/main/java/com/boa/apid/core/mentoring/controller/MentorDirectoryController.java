@@ -25,4 +25,10 @@ public class MentorDirectoryController {
     public ApiResponse<List<MentorDirectoryDto>> listMentors() {
         return ApiResponse.ok(mentorDirectoryService.listActiveMentors());
     }
+
+    @GetMapping("/mentors/count")
+    @PreAuthorize("hasAuthority('MENTORING_REPORT_VIEW_ALL')")
+    public ApiResponse<Long> countActiveMentors() {
+        return ApiResponse.ok(mentorDirectoryService.countActiveMentors());
+    }
 }

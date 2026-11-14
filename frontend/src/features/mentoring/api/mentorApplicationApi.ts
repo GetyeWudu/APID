@@ -15,7 +15,24 @@ export interface SubmittedMentorApplication {
   submittedAt: string;
 }
 
+export interface MentorApplication {
+  id: number;
+  applicantUsername: string;
+  status: 'PENDING' | 'APPROVED' | 'DECLINED';
+  skillName: string;
+  proofFileName: string;
+  note: string | null;
+  submittedAt: string;
+}
+
 export const mentorApplicationApi = {
+  async list(): Promise<MentorApplication[]> {
+    const response = await apiClient.get<ApiResponse<MentorApplication[]>>(
+      '/mentoring/applications'
+    );
+    return response.data.data;
+  },
+
   async submit(payload: SubmitMentorApplicationPayload): Promise<SubmittedMentorApplication> {
     const formData = new FormData();
     formData.append('proofDocument', payload.proofDocument);

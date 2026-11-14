@@ -16,8 +16,9 @@ import { HR_MODULE_PERMISSIONS } from '../../../shared/auth/workspaceResolver';
 import type {
   PreviewCertifiedTrainer,
   PreviewMentoringRequest,
-  PreviewTrainerApplication,
 } from '../../../shared/mocks/boaPreviewFixtures';
+import { mentorApplicationApi } from '../api/mentorApplicationApi';
+import { mentorDirectoryApi } from '../api/mentorDirectoryApi';
 import { mentoringPreviewAdapter } from '../api/mentoringDashboardApi';
 import { HrAnalyticsTab } from '../components/HrAnalyticsTab';
 import { HrMatchingTab } from '../components/HrMatchingTab';
@@ -65,10 +66,6 @@ export function HrMentoringDashboardPage() {
   const { hasAnyPermission } = useAuth();
   const [searchParams] = useSearchParams();
 
-  // Client-only preview session state overrides
-  const [appOverrides, setAppOverrides] = useState<
-    Record<string, { status: PreviewTrainerApplication['status']; reviewReason?: string }>
-  >({});
   const [appointedTrainers, setAppointedTrainers] = useState<PreviewCertifiedTrainer[]>([]);
   const [trainerStatusOverrides, setTrainerStatusOverrides] = useState<
     Record<string, PreviewCertifiedTrainer['trainerAuthStatus']>
@@ -88,14 +85,18 @@ export function HrMentoringDashboardPage() {
     queryFn: mentoringPreviewAdapter.getOverview,
   });
 
-  const mergedApps = useMemo(
-    () =>
-      (overviewQuery.data?.applications ?? []).map((app) => {
-        const patch = appOverrides[app.id];
-        return patch ? { ...app, status: patch.status, reviewReason: patch.reviewReason } : app;
-      }),
-    [overviewQuery.data, appOverrides]
-  );
+  const canReviewApplications = hasAnyPermission(['TRAINER_APPLICATION_REVIEW']);
+  const applicationsQuery = useQuery({
+    queryKey: ['mentoring', 'applications'],
+    queryFn: mentorApplicationApi.list,
+    enabled: canReviewApplications,
+  });
+  const canViewMentorCount = hasAnyPermission(['MENTORING_REPORT_VIEW_ALL']);
+  const mentorCountQuery = useQuery({
+    queryKey: ['mentoring', 'active-mentor-count'],
+    queryFn: mentorDirectoryApi.countActiveMentors,
+    enabled: canViewMentorCount,
+  });
 
   const mergedTrainers = useMemo(
     () =>
@@ -126,10 +127,7 @@ export function HrMentoringDashboardPage() {
     );
   }
 
-  const pendingApps = mergedApps.filter((a) => a.status === 'PENDING_REVIEW').length;
-  const activeTrainers = mergedTrainers.filter(
-    (t) => t.employmentStatus === 'ACTIVE' && t.trainerAuthStatus === 'ACTIVE'
-  ).length;
+  const pendingApps = (applicationsQuery.data ?? []).filter((app) => app.status === 'PENDING').length;
   const awaitingMatch = mergedRequests.filter((r) => r.status === 'AWAITING_HR_MATCH').length;
 
   const activeTabMeta = visibleTabs.find((t) => t.key === activeTab) ?? visibleTabs[0];
@@ -142,32 +140,48 @@ export function HrMentoringDashboardPage() {
         source="preview"
       />
 
-      {overviewQuery.isLoading ? (
+      {overviewQuery.isLoading ||
+      (canReviewApplications && applicationsQuery.isLoading) ||
+      (canViewMentorCount && mentorCountQuery.isLoading) ? (
         <LoadingSkeleton rows={6} height={28} />
-      ) : overviewQuery.isError || !overviewQuery.data ? (
+      ) : overviewQuery.isError ||
+        !overviewQuery.data ||
+        (canReviewApplications && applicationsQuery.isError) ||
+        (canViewMentorCount && mentorCountQuery.isError) ? (
         <ErrorState
-          message="Failed to load HR Mentoring preview data."
-          onRetry={() => void overviewQuery.refetch()}
+          message={
+            canViewMentorCount && mentorCountQuery.isError
+              ? 'Failed to load approved mentor count.'
+              : canReviewApplications && applicationsQuery.isError
+              ? 'Failed to load mentor applications.'
+              : 'Failed to load HR Mentoring preview data.'
+          }
+          onRetry={() => {
+            void overviewQuery.refetch();
+            if (canReviewApplications) void applicationsQuery.refetch();
+            if (canViewMentorCount) void mentorCountQuery.refetch();
+          }}
         />
       ) : (
         <>
           <div className="boa-kpi-grid" style={{ marginBottom: 0 }}>
-            <StatCard
-              label="Pending Applications"
-              value={pendingApps}
-              subtext="Awaiting HR certificate review"
-              badge={pendingApps > 0 ? 'REVIEW QUEUE' : 'CLEAR'}
-              badgeTone={pendingApps > 0 ? 'warn' : 'ok'}
-              icon={<ClipboardCheck size={16} />}
-            />
-            <StatCard
-              label="Active Trainers"
-              value={activeTrainers}
-              subtext={`${mergedTrainers.length} total in trainer directory`}
-              badge="CERTIFIED"
-              badgeTone="ok"
-              icon={<Award size={16} />}
-            />
+            {canReviewApplications && (
+              <StatCard
+                label="Pending Applications"
+                value={pendingApps}
+                subtext="Awaiting HR certificate review"
+                badge={pendingApps > 0 ? 'REVIEW QUEUE' : 'CLEAR'}
+                badgeTone={pendingApps > 0 ? 'warn' : 'ok'}
+                icon={<ClipboardCheck size={16} />}
+              />
+            )}
+            {canViewMentorCount && (
+              <StatCard
+                label="Approved Mentors"
+                value={mentorCountQuery.data ?? 0}
+                icon={<Award size={16} />}
+              />
+            )}
             <StatCard
               label="Awaiting Matching"
               value={awaitingMatch}
@@ -195,13 +209,7 @@ export function HrMentoringDashboardPage() {
               />
               <PermissionGate permission="TRAINER_APPLICATION_REVIEW">
                 <TrainerApplicationsTab
-                  applications={mergedApps}
-                  onApplicationDecided={(appId, decision, reviewReason) =>
-                    setAppOverrides((prev) => ({
-                      ...prev,
-                      [appId]: { status: decision, reviewReason },
-                    }))
-                  }
+                  applications={applicationsQuery.data ?? []}
                 />
               </PermissionGate>
             </div>
@@ -210,13 +218,7 @@ export function HrMentoringDashboardPage() {
           {activeTab === 'applications' && (
             <PermissionGate permission="TRAINER_APPLICATION_REVIEW">
               <TrainerApplicationsTab
-                applications={mergedApps}
-                onApplicationDecided={(appId, decision, reviewReason) =>
-                  setAppOverrides((prev) => ({
-                    ...prev,
-                    [appId]: { status: decision, reviewReason },
-                  }))
-                }
+                applications={applicationsQuery.data ?? []}
               />
             </PermissionGate>
           )}
