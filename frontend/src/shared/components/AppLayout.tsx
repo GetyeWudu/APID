@@ -180,6 +180,18 @@ export function AppLayout({ children }: { children: ReactNode }) {
               requiredAnyPermissions: ['COACHING_REPORT_VIEW_ALL'],
               matchSearch: '?tab=reports',
             },
+            {
+              to: '/coaching/pms?tab=policies',
+              label: 'Coaching Rules & Policies',
+              icon: <SlidersHorizontal size={17} />,
+              requiredAnyPermissions: [
+                'COACHING_ASSIGNMENT_VIEW_ALL',
+                'COACHING_INITIATIVE_CREATE',
+                'ADMIN_PORTAL_ACCESS',
+                'PMS_ADMIN_ACCESS',
+              ],
+              matchSearch: '?tab=policies',
+            },
           ],
         },
       ],

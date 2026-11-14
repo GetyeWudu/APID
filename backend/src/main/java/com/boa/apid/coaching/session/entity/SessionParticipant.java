@@ -57,6 +57,12 @@ public class SessionParticipant {
     @Column(name = "feedback_submitted_at")
     private Instant feedbackSubmittedAt;
 
+    @Column(name = "coachee_progress_notes", columnDefinition = "TEXT")
+    private String coacheeProgressNotes;
+
+    @Column(name = "coachee_progress_submitted_at")
+    private Instant coacheeProgressSubmittedAt;
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
 
@@ -119,6 +125,12 @@ public class SessionParticipant {
 
     public Instant getFeedbackSubmittedAt() { return feedbackSubmittedAt; }
     public void setFeedbackSubmittedAt(Instant feedbackSubmittedAt) { this.feedbackSubmittedAt = feedbackSubmittedAt; }
+
+    public String getCoacheeProgressNotes() { return coacheeProgressNotes; }
+    public void setCoacheeProgressNotes(String coacheeProgressNotes) { this.coacheeProgressNotes = coacheeProgressNotes; }
+
+    public Instant getCoacheeProgressSubmittedAt() { return coacheeProgressSubmittedAt; }
+    public void setCoacheeProgressSubmittedAt(Instant coacheeProgressSubmittedAt) { this.coacheeProgressSubmittedAt = coacheeProgressSubmittedAt; }
 
     public Instant getCreatedAt() { return createdAt; }
     public Instant getUpdatedAt() { return updatedAt; }

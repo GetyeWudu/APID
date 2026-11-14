@@ -32,6 +32,9 @@ public record CoachingSessionDto(
         String actionItems,
         Instant conductedAt,
         List<SessionParticipantDto> participants,
-        Instant createdAt
+        RescheduleProposalDto pendingRescheduleProposal,
+        Instant createdAt,
+        Long seriesId,
+        Integer sequenceNumber,
+        Boolean isExtensionSession
 ) {}
-

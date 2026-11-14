@@ -78,6 +78,15 @@ public class CoachingSession {
     @Column(name = "created_by_user_id", nullable = false)
     private Long createdByUserId;
 
+    @Column(name = "series_id")
+    private Long seriesId;
+
+    @Column(name = "sequence_number")
+    private Integer sequenceNumber;
+
+    @Column(name = "is_extension_session", nullable = false)
+    private boolean isExtensionSession = false;
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
 
@@ -161,6 +170,15 @@ public class CoachingSession {
 
     public Long getCreatedByUserId() { return createdByUserId; }
     public void setCreatedByUserId(Long createdByUserId) { this.createdByUserId = createdByUserId; }
+
+    public Long getSeriesId() { return seriesId; }
+    public void setSeriesId(Long seriesId) { this.seriesId = seriesId; }
+
+    public Integer getSequenceNumber() { return sequenceNumber; }
+    public void setSequenceNumber(Integer sequenceNumber) { this.sequenceNumber = sequenceNumber; }
+
+    public boolean isExtensionSession() { return isExtensionSession; }
+    public void setExtensionSession(boolean extensionSession) { isExtensionSession = extensionSession; }
 
     public Instant getCreatedAt() { return createdAt; }
     public Instant getUpdatedAt() { return updatedAt; }

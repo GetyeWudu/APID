@@ -36,6 +36,20 @@ export interface SessionParticipantItem {
   feedbackRating: number | null;
   feedbackComment: string | null;
   feedbackSubmittedAt: string | null;
+  coacheeProgressNotes: string | null;
+  coacheeProgressSubmittedAt: string | null;
+}
+
+export interface RescheduleProposalItem {
+  id: number;
+  sessionId: number;
+  proposedByEmployeeId: number;
+  proposedByFullName: string;
+  proposedStartTime: string;
+  proposedEndTime: string;
+  reason: string;
+  status: 'PENDING' | 'ACCEPTED' | 'REJECTED';
+  createdAt: string;
 }
 
 export interface CoachingSessionItem {
@@ -64,6 +78,10 @@ export interface CoachingSessionItem {
   actionItems: string | null;
   conductedAt: string | null;
   participants: SessionParticipantItem[];
+  pendingRescheduleProposal?: RescheduleProposalItem | null;
+  seriesId?: number | null;
+  sequenceNumber?: number | null;
+  isExtensionSession?: boolean;
   createdAt: string;
 }
 
@@ -174,9 +192,270 @@ export const coachingSessionApi = {
     return res.data.data;
   },
 
+  async submitCoacheeProgress(id: number, payload: { progressNotes: string }): Promise<CoachingSessionItem> {
+    const res = await apiClient.post<ApiResponse<CoachingSessionItem>>(
+      `/coaching/sessions/${id}/progress-report`,
+      payload
+    );
+    return res.data.data;
+  },
+
+  async respondRescheduleProposal(
+    id: number,
+    proposalId: number,
+    payload: { accept: boolean; responseNotes?: string }
+  ): Promise<CoachingSessionItem> {
+    const res = await apiClient.post<ApiResponse<CoachingSessionItem>>(
+      `/coaching/sessions/${id}/proposals/${proposalId}/respond`,
+      payload
+    );
+    return res.data.data;
+  },
+
+  async respondPendingReschedule(
+    id: number,
+    payload: { accept: boolean; responseNotes?: string }
+  ): Promise<CoachingSessionItem> {
+    const res = await apiClient.post<ApiResponse<CoachingSessionItem>>(
+      `/coaching/sessions/${id}/respond-reschedule`,
+      payload
+    );
+    return res.data.data;
+  },
+
   async getJoinToken(id: number): Promise<SessionJoinToken> {
     const res = await apiClient.get<ApiResponse<SessionJoinToken>>(
       `/coaching/sessions/${id}/join-token`
+    );
+    return res.data.data;
+  },
+};
+
+export type CadenceType = 'WEEKLY' | 'BIWEEKLY' | 'TWICE_WEEKLY' | 'CUSTOM';
+export type TargetStatus = 'PENDING_APPROVAL' | 'APPROVED' | 'EXTENDED' | 'COMPLETED_EARLY' | 'CLOSED';
+export type AdjustmentType = 'INITIAL_PROPOSAL' | 'EXTENSION_REQUEST' | 'EARLY_COMPLETION_REQUEST';
+export type AdjustmentDecision = 'PENDING' | 'APPROVED' | 'REJECTED' | 'AUTO_APPROVED';
+export type SeriesStatus = 'ACTIVE' | 'PAUSED' | 'COMPLETED' | 'CANCELLED';
+
+export interface CoachingPolicyVersionItem {
+  id: number;
+  versionTag: string;
+  policyName: string;
+  pathway: AssignmentPathway;
+  minAppraisalRating: number | null;
+  maxAppraisalRating: number | null;
+  baselineSessions: number;
+  minAllowedSessions: number;
+  maxAllowedSessions: number;
+  defaultCadence: CadenceType;
+  coachAdjustmentAllowed: boolean;
+  requiresPmsApprovalOutsideRange: boolean;
+  allowExtensions: boolean;
+  allowEarlyCompletion: boolean;
+  isActive: boolean;
+  createdAt: string;
+}
+
+export interface CoachingTargetAdjustmentItem {
+  id: number;
+  sessionTargetId: number;
+  adjustmentType: AdjustmentType;
+  requestedByEmployeeId: number;
+  requestedByFullName: string;
+  previousTarget: number;
+  proposedTarget: number;
+  reason: string;
+  pmsReviewerId: number | null;
+  pmsReviewerFullName: string | null;
+  pmsDecision: AdjustmentDecision;
+  decisionNotes: string | null;
+  decidedAt: string | null;
+  createdAt: string;
+}
+
+export interface CoachingSessionTargetItem {
+  id: number;
+  assignmentId: number | null;
+  skillRequestId: number | null;
+  policyVersionId: number | null;
+  policyName: string;
+  policyBaseline: number;
+  approvedTarget: number;
+  plannedOccurrences: number;
+  completedSessions: number;
+  remainingApprovedSessions: number;
+  status: TargetStatus;
+  justificationNotes: string | null;
+  approvedByUserId: number | null;
+  approvedAt: string | null;
+  earlyCompletionReason: string | null;
+  earlyCompletedAt: string | null;
+  adjustmentHistory: CoachingTargetAdjustmentItem[];
+  createdAt: string;
+}
+
+export interface GeneratedDatePreviewItem {
+  sequenceNumber: number;
+  sessionDate: string;
+  dayOfWeek: string;
+  startTime: string;
+  endTime: string;
+  weekNumber: number;
+  isBufferWeek: boolean;
+  note: string;
+}
+
+export interface SeriesPreviewRequestPayload {
+  firstSessionDate: string;
+  quarterEndDate?: string;
+  cadenceType: CadenceType;
+  daysOfWeek: string;
+  preferredStartTime: string;
+  durationMinutes: number;
+  targetOccurrences: number;
+}
+
+export interface SeriesPreviewResponseData {
+  targetOccurrences: number;
+  generatedOccurrences: number;
+  shortfall: number;
+  hasShortfall: boolean;
+  shortfallMessage: string;
+  previewDates: GeneratedDatePreviewItem[];
+}
+
+export interface CreateScheduleSeriesPayload {
+  assignmentId?: number;
+  skillRequestId?: number;
+  title: string;
+  cadenceType: CadenceType;
+  daysOfWeek: string;
+  preferredStartTime: string;
+  durationMinutes: number;
+  meetingMode?: SessionMeetingMode;
+  meetingLocation?: string;
+  firstSessionDate: string;
+  quarterEndDate?: string;
+  targetOccurrences: number;
+  targetPmsGoalId?: number;
+}
+
+export interface ScheduleSeriesItem {
+  id: number;
+  assignmentId: number | null;
+  skillRequestId: number | null;
+  coachEmployeeId: number;
+  coachFullName: string;
+  title: string;
+  cadenceType: CadenceType;
+  daysOfWeek: string;
+  preferredStartTime: string;
+  durationMinutes: number;
+  meetingMode: SessionMeetingMode;
+  meetingLocation: string | null;
+  firstSessionDate: string;
+  targetOccurrences: number;
+  generatedOccurrences: number;
+  status: SeriesStatus;
+  createdAt: string;
+}
+
+export const coachingGovernanceApi = {
+  async getPolicies(pathway?: string): Promise<CoachingPolicyVersionItem[]> {
+    const res = await apiClient.get<ApiResponse<CoachingPolicyVersionItem[]>>(
+      `/coaching/governance/policies`,
+      { params: { pathway } }
+    );
+    return res.data.data;
+  },
+
+  async updatePolicy(
+    id: number,
+    payload: Partial<CoachingPolicyVersionItem>
+  ): Promise<CoachingPolicyVersionItem> {
+    const res = await apiClient.put<ApiResponse<CoachingPolicyVersionItem>>(
+      `/coaching/governance/policies/${id}`,
+      payload
+    );
+    return res.data.data;
+  },
+
+  async createPolicy(
+    payload: Partial<CoachingPolicyVersionItem>
+  ): Promise<CoachingPolicyVersionItem> {
+    const res = await apiClient.post<ApiResponse<CoachingPolicyVersionItem>>(
+      `/coaching/governance/policies`,
+      payload
+    );
+    return res.data.data;
+  },
+
+  async getTarget(params: { assignmentId?: number; skillRequestId?: number }): Promise<CoachingSessionTargetItem> {
+    const res = await apiClient.get<ApiResponse<CoachingSessionTargetItem>>(
+      `/coaching/governance/target`,
+      { params }
+    );
+    return res.data.data;
+  },
+
+  async proposeTarget(payload: {
+    assignmentId?: number;
+    skillRequestId?: number;
+    proposedTarget: number;
+    justificationReason: string;
+  }): Promise<CoachingSessionTargetItem> {
+    const res = await apiClient.post<ApiResponse<CoachingSessionTargetItem>>(
+      `/coaching/governance/target/propose`,
+      payload
+    );
+    return res.data.data;
+  },
+
+  async reviewAdjustment(
+    adjustmentId: number,
+    payload: { decision: AdjustmentDecision; decisionNotes?: string }
+  ): Promise<CoachingSessionTargetItem> {
+    const res = await apiClient.post<ApiResponse<CoachingSessionTargetItem>>(
+      `/coaching/governance/adjustments/${adjustmentId}/review`,
+      payload
+    );
+    return res.data.data;
+  },
+
+  async requestExtension(
+    targetId: number,
+    payload: { additionalSessions: number; reason: string; remainingObjectivesSummary?: string }
+  ): Promise<CoachingSessionTargetItem> {
+    const res = await apiClient.post<ApiResponse<CoachingSessionTargetItem>>(
+      `/coaching/governance/target/${targetId}/extend`,
+      payload
+    );
+    return res.data.data;
+  },
+
+  async requestEarlyCompletion(
+    targetId: number,
+    payload: { reason: string; masteryEvidenceSummary?: string }
+  ): Promise<CoachingSessionTargetItem> {
+    const res = await apiClient.post<ApiResponse<CoachingSessionTargetItem>>(
+      `/coaching/governance/target/${targetId}/early-complete`,
+      payload
+    );
+    return res.data.data;
+  },
+
+  async previewSeries(payload: SeriesPreviewRequestPayload): Promise<SeriesPreviewResponseData> {
+    const res = await apiClient.post<ApiResponse<SeriesPreviewResponseData>>(
+      `/coaching/governance/series/preview`,
+      payload
+    );
+    return res.data.data;
+  },
+
+  async createSeries(payload: CreateScheduleSeriesPayload): Promise<ScheduleSeriesItem> {
+    const res = await apiClient.post<ApiResponse<ScheduleSeriesItem>>(
+      `/coaching/governance/series`,
+      payload
     );
     return res.data.data;
   },

@@ -90,7 +90,7 @@ public class CoachingSessionController {
         return ApiResponse.ok(sessionService.completeSession(id, request, actor));
     }
 
-    @PostMapping("/{id}/feedback")
+    @PostMapping("/{id:\\d+}/feedback")
     @PreAuthorize("hasAuthority('EMPLOYEE_PORTAL_ACCESS')")
     public ApiResponse<CoachingSessionDto> submitFeedback(
             @PathVariable Long id,
@@ -98,6 +98,37 @@ public class CoachingSessionController {
             @AuthenticationPrincipal ApidUserPrincipal actor
     ) {
         return ApiResponse.ok(sessionService.submitFeedback(id, request, actor));
+    }
+
+    @PostMapping("/{id:\\d+}/progress-report")
+    @PreAuthorize("hasAuthority('EMPLOYEE_PORTAL_ACCESS')")
+    public ApiResponse<CoachingSessionDto> submitCoacheeProgress(
+            @PathVariable Long id,
+            @Valid @RequestBody SubmitProgressReportRequest request,
+            @AuthenticationPrincipal ApidUserPrincipal actor
+    ) {
+        return ApiResponse.ok(sessionService.submitCoacheeProgress(id, request, actor));
+    }
+
+    @PostMapping("/{id:\\d+}/proposals/{proposalId:\\d+}/respond")
+    @PreAuthorize("hasAuthority('EMPLOYEE_PORTAL_ACCESS')")
+    public ApiResponse<CoachingSessionDto> respondRescheduleProposal(
+            @PathVariable Long id,
+            @PathVariable Long proposalId,
+            @Valid @RequestBody RespondRescheduleProposalRequest request,
+            @AuthenticationPrincipal ApidUserPrincipal actor
+    ) {
+        return ApiResponse.ok(sessionService.respondRescheduleProposal(id, proposalId, request, actor));
+    }
+
+    @PostMapping("/{id:\\d+}/respond-reschedule")
+    @PreAuthorize("hasAuthority('EMPLOYEE_PORTAL_ACCESS')")
+    public ApiResponse<CoachingSessionDto> respondPendingReschedule(
+            @PathVariable Long id,
+            @Valid @RequestBody RespondRescheduleProposalRequest request,
+            @AuthenticationPrincipal ApidUserPrincipal actor
+    ) {
+        return ApiResponse.ok(sessionService.respondPendingReschedule(id, request, actor));
     }
 
     @GetMapping("/{id}/join-token")

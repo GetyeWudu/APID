@@ -264,8 +264,12 @@ public class CoachingSessionService {
             participant.setInvitationStatus(InvitationStatus.ACCEPTED);
             participant.setInvitationDeclineReason(null);
         } else {
+            String reason = request.declineReason() != null ? request.declineReason().trim() : "";
+            if (reason.length() < 5) {
+                throw new BusinessException("DECLINE_REASON_REQUIRED", "Please provide a brief reason why you cannot attend this session.");
+            }
             participant.setInvitationStatus(InvitationStatus.DECLINED);
-            participant.setInvitationDeclineReason(request.declineReason());
+            participant.setInvitationDeclineReason(reason);
         }
         participant.setRespondedAt(Instant.now());
         participantRepository.save(participant);
@@ -295,6 +299,11 @@ public class CoachingSessionService {
         boolean isParticipant = participantRepository.existsBySessionIdAndEmployeeId(sessionId, callerEmp.id());
         if (!isAdmin(actor) && !isParticipant) {
             throw new AccessDeniedException("Only participants can propose rescheduling.");
+        }
+
+        long priorProposals = proposalRepository.countBySessionId(sessionId);
+        if (priorProposals >= 2) {
+            throw new BusinessException("MAX_RESCHEDULES_EXCEEDED", "This session has reached the limit of 2 reschedule requests. Please coordinate directly with your coach.");
         }
 
         Instant newStart = request.proposedStartTime();
@@ -451,6 +460,78 @@ public class CoachingSessionService {
         return toDto(session);
     }
 
+    // ─────────────────────────── 8.1 SUBMIT COACHEE PROGRESS ───────────────────────────
+
+    @Transactional
+    public CoachingSessionDto submitCoacheeProgress(Long sessionId, SubmitProgressReportRequest request, ApidUserPrincipal actor) {
+        EmployeeDto callerEmp = getCallerEmployeeOrThrow(actor);
+        CoachingSession session = sessionRepository.findById(sessionId)
+                .orElseThrow(() -> new ResourceNotFoundException("Coaching session not found"));
+
+        SessionParticipant participant = participantRepository.findBySessionIdAndEmployeeId(sessionId, callerEmp.id())
+                .orElseThrow(() -> new AccessDeniedException("You are not a participant in this coaching session."));
+
+        if (participant.getRole() != ParticipantRole.COACHEE && !isAdmin(actor)) {
+            throw new AccessDeniedException("Only coachee participants can submit a progress reflection.");
+        }
+
+        participant.setCoacheeProgressNotes(request.progressNotes().trim());
+        participant.setCoacheeProgressSubmittedAt(Instant.now());
+        participantRepository.save(participant);
+
+        return toDto(session);
+    }
+
+    // ─────────────────────────── 8.2 RESPOND RESCHEDULE PROPOSAL (COACH) ───────────────────────────
+
+    @Transactional
+    public CoachingSessionDto respondRescheduleProposal(Long sessionId, Long proposalId, RespondRescheduleProposalRequest request, ApidUserPrincipal actor) {
+        EmployeeDto callerEmp = getCallerEmployeeOrThrow(actor);
+        CoachingSession session = sessionRepository.findById(sessionId)
+                .orElseThrow(() -> new ResourceNotFoundException("Coaching session not found"));
+
+        boolean isCoach = session.getCoachEmployeeId().equals(callerEmp.id());
+        if (!isAdmin(actor) && !isCoach) {
+            throw new AccessDeniedException("Only the designated coach can accept or reject reschedule requests.");
+        }
+
+        SessionScheduleProposal proposal = proposalRepository.findById(proposalId)
+                .orElseThrow(() -> new ResourceNotFoundException("Reschedule proposal not found"));
+
+        if (!proposal.getSessionId().equals(sessionId)) {
+            throw new BusinessException("MISMATCH", "Proposal does not belong to this session.");
+        }
+
+        if (proposal.getStatus() != ProposalStatus.PENDING) {
+            throw new BusinessException("ALREADY_RESPONDED", "This reschedule proposal has already been answered.");
+        }
+
+        proposal.setRespondedByEmployeeId(callerEmp.id());
+        proposal.setRespondedAt(Instant.now());
+
+        if (request.accept()) {
+            proposal.setStatus(ProposalStatus.ACCEPTED);
+            session.setScheduledStartTime(proposal.getProposedStartTime());
+            session.setScheduledEndTime(proposal.getProposedEndTime());
+            session.setStatus(SessionStatus.CONFIRMED);
+        } else {
+            proposal.setStatus(ProposalStatus.REJECTED);
+            session.setStatus(SessionStatus.CONFIRMED);
+        }
+        proposalRepository.save(proposal);
+        sessionRepository.save(session);
+
+        return toDto(session);
+    }
+
+    @Transactional
+    public CoachingSessionDto respondPendingReschedule(Long sessionId, RespondRescheduleProposalRequest request, ApidUserPrincipal actor) {
+        SessionScheduleProposal proposal = proposalRepository
+                .findFirstBySessionIdAndStatusOrderByCreatedAtDesc(sessionId, ProposalStatus.PENDING)
+                .orElseThrow(() -> new BusinessException("NO_PENDING_PROPOSAL", "There are no pending reschedule requests for this session."));
+        return respondRescheduleProposal(sessionId, proposal.getId(), request, actor);
+    }
+
     // ─────────────────────────── 9. GET JOIN TOKEN (DAILY.CO) ───────────────────────────
 
     @Transactional(readOnly = true)
@@ -534,9 +615,33 @@ public class CoachingSessionService {
                     p.getIndividualNotes(),
                     p.getFeedbackRating(),
                     p.getFeedbackComment(),
-                    p.getFeedbackSubmittedAt()
+                    p.getFeedbackSubmittedAt(),
+                    p.getCoacheeProgressNotes(),
+                    p.getCoacheeProgressSubmittedAt()
             );
         }).toList();
+
+        RescheduleProposalDto pendingProposalDto = null;
+        if (s.getStatus() == SessionStatus.RESCHEDULE_PENDING) {
+            Optional<SessionScheduleProposal> pendingOpt = proposalRepository
+                    .findFirstBySessionIdAndStatusOrderByCreatedAtDesc(s.getId(), ProposalStatus.PENDING);
+            if (pendingOpt.isPresent()) {
+                SessionScheduleProposal p = pendingOpt.get();
+                String proposerName = employeeRepository.findById(p.getProposedByEmployeeId())
+                        .map(Employee::getFullName).orElse("Participant");
+                pendingProposalDto = new RescheduleProposalDto(
+                        p.getId(),
+                        p.getSessionId(),
+                        p.getProposedByEmployeeId(),
+                        proposerName,
+                        p.getProposedStartTime(),
+                        p.getProposedEndTime(),
+                        p.getReason(),
+                        p.getStatus(),
+                        p.getCreatedAt()
+                );
+            }
+        }
 
         return new CoachingSessionDto(
                 s.getId(),
@@ -564,7 +669,11 @@ public class CoachingSessionService {
                 s.getActionItems(),
                 s.getConductedAt(),
                 partDtos,
-                s.getCreatedAt()
+                pendingProposalDto,
+                s.getCreatedAt(),
+                s.getSeriesId(),
+                s.getSequenceNumber(),
+                s.isExtensionSession()
         );
     }
 

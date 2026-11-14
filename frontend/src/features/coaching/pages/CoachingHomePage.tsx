@@ -129,11 +129,28 @@ export function CoachingHomePage() {
             description={`Your account "${user?.username ?? ''}" is not linked to an HR employee profile yet, so your personal coach and direct reports cannot be resolved.`}
             icon={<ShieldAlert size={34} />}
             action={
-              hasPermission('HIERARCHY_MANAGE') ? (
-                <Link to="/admin?tab=organization" className="apid-btn apid-btn-primary apid-btn-sm">
-                  Go to Employees &amp; Org
-                </Link>
-              ) : undefined
+              <div style={{ display: 'flex', gap: '0.6rem', flexWrap: 'wrap', justifyContent: 'center' }}>
+                {hasAnyPermission([
+                  'COACHING_ASSIGNMENT_VIEW_ALL',
+                  'COACHING_INITIATIVE_CREATE',
+                  'ADMIN_PORTAL_ACCESS',
+                  'PMS_ADMIN_ACCESS',
+                ]) && (
+                  <>
+                    <Link to="/coaching/pms?tab=policies" className="apid-btn apid-btn-primary apid-btn-sm">
+                      Coaching Rules &amp; Policies
+                    </Link>
+                    <Link to="/coaching/pms" className="apid-btn apid-btn-outline apid-btn-sm">
+                      PMS Coaching Overview
+                    </Link>
+                  </>
+                )}
+                {hasPermission('HIERARCHY_MANAGE') && (
+                  <Link to="/admin?tab=organization" className="apid-btn apid-btn-outline apid-btn-sm">
+                    Go to Employees &amp; Org
+                  </Link>
+                )}
+              </div>
             }
           />
         </div>
@@ -144,20 +161,20 @@ export function CoachingHomePage() {
   const viewMeta =
     activeView === 'skills'
       ? {
-          title: 'Skill-Development Coaching',
-          subtitle: 'Request skill coaching for direct & team staff, designate coaches (line manager, higher manager, or specialist), and track PMS approvals.',
-        }
+        title: 'Skill-Development Coaching',
+        subtitle: 'Request skill coaching for direct & team staff, designate coaches (line manager, higher manager, or specialist), and track PMS approvals.',
+      }
       : activeView === 'coachees'
-      ? {
+        ? {
           title: 'People I Coach & Team',
           subtitle: 'Manage assigned coachees, review team progress, and support direct reports.',
         }
-      : activeView === 'sessions'
-        ? {
+        : activeView === 'sessions'
+          ? {
             title: 'Sessions & Coaching Channel',
             subtitle: 'Upcoming coaching meetings and private coach ↔ talent communication.',
           }
-        : {
+          : {
             title: 'My Coach & Action Plan',
             subtitle: 'Your current coaching pathway, assigned coach, and triggering performance details.',
           };

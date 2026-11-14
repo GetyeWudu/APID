@@ -14,7 +14,13 @@ public interface CoachingSessionRepository extends JpaRepository<CoachingSession
 
     List<CoachingSession> findAllByAssignmentIdOrderByScheduledStartTimeDesc(Long assignmentId);
 
+    List<CoachingSession> findAllByAssignmentId(Long assignmentId);
+
     List<CoachingSession> findAllBySkillRequestIdOrderByScheduledStartTimeDesc(Long skillRequestId);
+
+    List<CoachingSession> findAllBySkillRequestId(Long skillRequestId);
+
+    List<CoachingSession> findAllBySeriesIdOrderBySequenceNumberAsc(Long seriesId);
 
     List<CoachingSession> findAllByCoachEmployeeIdOrderByScheduledStartTimeDesc(Long coachEmployeeId);
 

@@ -24,6 +24,8 @@ public record SessionParticipantDto(
         String individualNotes,
         Short feedbackRating,
         String feedbackComment,
-        Instant feedbackSubmittedAt
+        Instant feedbackSubmittedAt,
+        String coacheeProgressNotes,
+        Instant coacheeProgressSubmittedAt
 ) {}
 

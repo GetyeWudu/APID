@@ -13,5 +13,7 @@ public interface SessionScheduleProposalRepository extends JpaRepository<Session
 
     Optional<SessionScheduleProposal> findFirstBySessionIdAndStatusOrderByCreatedAtDesc(
             Long sessionId, ProposalStatus status);
+
+    long countBySessionId(Long sessionId);
 }
 
