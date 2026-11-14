@@ -195,6 +195,7 @@ The React frontend renders a **single adaptive application shell** whose navigat
    - **My Coaching (As Talent):** Assigned Coach, objectives, upcoming sessions, Daily.co join, reflection/additional report submission, chat, resources.
    - **My Mentoring (As Trainer):** Approved skills, capacity/availability settings, incoming Trainee requests, active Trainees, sessions, chat, resources.
    - **My Mentoring (As Trainee):** Apply to become a Trainer, browse/search Trainers, skill recommendations, submit learning requests, active mentoring sessions, feedback.
+   - **My Pairing:** An Employee navigation item lists every relationship membership for the logged-in employee as either Mentor or Trainee, including group/class memberships and relationship status.
 2. **PMS Admin Dashboard:** Report uploader + validation preview, import batch history, mandatory & skill-dev assignments table, missing-manager exception queue, Coach replacement modal, skill-dev approval queue, session report audit feed, missed-session/inactivity alerts, quarterly reports & exports.
 3. **HR Admin Dashboard:** Trainer applications queue + certificate viewer, direct Trainer appointment tool, active/suspended/revoked Trainer management, HR-assisted matching queue, mentoring analytics & exports.
 4. **System Admin Dashboard:** User accounts, bulk employee/hierarchy import, org tree/manager editor, dynamic Role & Permission builder, Fiscal Quarter & Threshold settings, Audit Log viewer.
@@ -493,9 +494,10 @@ APID supports **all three** discovery and matching paths concurrently:
 ### 5.6 Trainer–Trainee Relationships & Collaboration (`FR-MENTOR-06`)
 - Accepted/matched requests create a `MentoringRelationship` (`ACTIVE`, `PAUSED`, `COMPLETED`, `CANCELLED`, `REASSIGNED`).
 - **Shared Tools (Isolated from Coaching):**
-  - Appointment scheduling + `MentoringSession` (`SCHEDULED`, `COMPLETED`, `MISSED`, `CANCELLED`, `RESCHEDULED`).
+  - Mentor and accepted trainees can open a relationship detail page that shows its participants, session history, and conversation.
+  - The Mentor schedules sessions for an active relationship; sessions include a title, agenda, start/end time, delivery mode, and optional meeting link. A class relationship shares its schedule with all accepted trainees.
+  - Persistent, paginated relationship chat is shared by all members of a class. Active participants can send messages; closed relationships retain read-only history.
   - Daily.co live sessions + join-time capture + Trainer attendance confirmation.
-  - Scoped REST-polled chat (`MentoringConversation`).
   - Scoped resource sharing (`MentoringResource`).
   - Lightweight session notes / progress milestones.
 - **Closure & Feedback:**
@@ -608,9 +610,9 @@ APID uses **one PostgreSQL 16 database (`apid_db`)** divided into **3 isolated s
 - `mentoring.mentoring_relationships` (`id`, `request_id`, `mentor_user_id`, `status` (`ACTIVE`|`PAUSED`|`COMPLETED`|`CANCELLED`|`REASSIGNED`), `started_at`, `ended_at`); one group request creates one shared class relationship.
 - `mentoring.mentoring_relationship_members` (`id`, `relationship_id`, `request_recipient_id`, `mentor_user_id`, `trainee_user_id`, `status`, `joined_at`, `ended_at`); each approved trainee has a separate membership, while an individual relationship has one member.
 - `mentoring.mentoring_relationship_trainees` (`relationship_id`, `trainee_employee_id`, `rating`, `feedback`, `rated_at`)
-- `mentoring.mentoring_sessions` (`id`, `relationship_id`, `title`, `agenda`, `scheduled_start`, `scheduled_end`, `delivery_mode`, `video_room_id`, `status`, `reminded_24h`, `reminded_15m`, `notes`)
+- `mentoring.mentoring_sessions` (`id`, `relationship_id`, `title`, `agenda`, `scheduled_start`, `scheduled_end`, `delivery_mode`, `meeting_url`, `status`, `notes`, `created_by_user_id`, `created_at`, `updated_at`); the relationship mentor creates sessions, and a class relationship shares them with its trainees.
 - `mentoring.mentoring_session_attendance` (`id`, `session_id`, `trainee_employee_id`, `attendance_status`, `joined_at`, `confirmed_by_trainer_at`)
-- `mentoring.mentoring_messages` (`id`, `relationship_id`, `sender_user_id`, `body`, `attachment_file_id`, `created_at`)
+- `mentoring.mentoring_messages` (`id`, `relationship_id`, `sender_user_id`, `body`, `created_at`); text messages are paginated by relationship.
 - `mentoring.mentoring_resources` (`id`, `relationship_id`, `title`, `resource_type`, `file_id`, `external_url`, `uploaded_by`, `created_at`)
 
 **Database Integrity Rules:**

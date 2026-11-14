@@ -23,6 +23,7 @@ export function MentoringRequestsPanel({
     onSuccess: async (result) => {
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ['mentoring', 'pairing', 'requests'] }),
+        queryClient.invalidateQueries({ queryKey: ['mentoring', 'pairing', 'relationships'] }),
         queryClient.invalidateQueries({ queryKey: ['core', 'notifications'] }),
       ]);
       pushToast({

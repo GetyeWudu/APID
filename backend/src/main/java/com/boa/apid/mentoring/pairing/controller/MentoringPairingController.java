@@ -5,6 +5,7 @@ import com.boa.apid.core.auth.security.ApidUserPrincipal;
 import com.boa.apid.mentoring.pairing.dto.MentorInvitationRequest;
 import com.boa.apid.mentoring.pairing.dto.MentoringEmployeeCandidateDto;
 import com.boa.apid.mentoring.pairing.dto.MentoringPairingDto;
+import com.boa.apid.mentoring.pairing.dto.MentoringRelationshipPairDto;
 import com.boa.apid.mentoring.pairing.dto.MentoringRequestDecision;
 import com.boa.apid.mentoring.pairing.dto.TraineeMentorRequest;
 import com.boa.apid.mentoring.pairing.service.MentoringPairingService;
@@ -37,6 +38,13 @@ public class MentoringPairingController {
             @AuthenticationPrincipal ApidUserPrincipal actor
     ) {
         return ApiResponse.ok(pairingService.listMyRequests(actor));
+    }
+
+    @GetMapping("/relationships")
+    public ApiResponse<List<MentoringRelationshipPairDto>> listMyRelationships(
+            @AuthenticationPrincipal ApidUserPrincipal actor
+    ) {
+        return ApiResponse.ok(pairingService.listMyRelationships(actor));
     }
 
     @PostMapping("/requests/invitations")

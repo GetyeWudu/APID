@@ -17,6 +17,7 @@ import com.boa.apid.core.skills.entity.Skill;
 import com.boa.apid.mentoring.pairing.dto.MentorInvitationRequest;
 import com.boa.apid.mentoring.pairing.dto.MentoringEmployeeCandidateDto;
 import com.boa.apid.mentoring.pairing.dto.MentoringPairingDto;
+import com.boa.apid.mentoring.pairing.dto.MentoringRelationshipPairDto;
 import com.boa.apid.mentoring.pairing.dto.MentoringRequestDecision;
 import com.boa.apid.mentoring.pairing.dto.TraineeMentorRequest;
 import com.boa.apid.mentoring.pairing.entity.MentoringRelationship;
@@ -118,6 +119,51 @@ public class MentoringPairingService {
 
         return recipients.stream()
                 .map(recipient -> toDto(recipient, actor.getUserId(), employeesByUserId))
+                .toList();
+    }
+
+    @Transactional(readOnly = true)
+    public List<MentoringRelationshipPairDto> listMyRelationships(ApidUserPrincipal actor) {
+        List<MentoringRelationshipMember> members =
+                relationshipMemberRepository.findVisibleToUser(actor.getUserId());
+        Map<Long, Employee> employeesByUserId = loadEmployees(members.stream()
+                .flatMap(member -> List.of(
+                        member.getMentorUser().getId(),
+                        member.getTraineeUser().getId()
+                ).stream())
+                .toList());
+
+        return members.stream()
+                .map(member -> {
+                    MentoringRelationship relationship = member.getRelationship();
+                    MentoringRequest request = relationship.getRequest();
+                    User mentor = member.getMentorUser();
+                    User trainee = member.getTraineeUser();
+                    Employee mentorEmployee = employeesByUserId.get(mentor.getId());
+                    Employee traineeEmployee = employeesByUserId.get(trainee.getId());
+                    return new MentoringRelationshipPairDto(
+                            member.getId(),
+                            relationship.getId(),
+                            request.getId(),
+                            request.getRequestType(),
+                            relationship.getStatus(),
+                            member.getStatus(),
+                            mentor.getId().equals(actor.getUserId())
+                                    ? MentoringRelationshipPairDto.ParticipantRole.MENTOR
+                                    : MentoringRelationshipPairDto.ParticipantRole.TRAINEE,
+                            mentor.getId(),
+                            mentorEmployee == null ? mentor.getUsername() : mentorEmployee.getFullName(),
+                            trainee.getId(),
+                            traineeEmployee == null ? trainee.getUsername() : traineeEmployee.getFullName(),
+                            request.getSkill() == null ? null : request.getSkill().getId(),
+                            request.getSkill() == null ? null : request.getSkill().getName(),
+                            request.getMessage(),
+                            relationship.getStartedAt(),
+                            member.getJoinedAt(),
+                            relationship.getEndedAt(),
+                            member.getEndedAt()
+                    );
+                })
                 .toList();
     }
 

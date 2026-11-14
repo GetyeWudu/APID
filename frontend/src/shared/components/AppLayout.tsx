@@ -12,6 +12,7 @@ import {
   ClipboardCheck,
   FileSpreadsheet,
   GitPullRequest,
+  HeartHandshake,
   Home,
   KeyRound,
   LayoutDashboard,
@@ -73,6 +74,12 @@ const EMPLOYEE_NAV_GROUP: NavGroup = {
       icon: <MessageSquare size={17} />,
       requiredAnyPermissions: EMPLOYEE_WORKSPACE_PERMISSIONS,
       matchSearch: '?tab=chat',
+    },
+    {
+      to: '/mentoring/pairing',
+      label: 'My Pairing',
+      icon: <HeartHandshake size={17} />,
+      requiredAnyPermissions: EMPLOYEE_WORKSPACE_PERMISSIONS,
     },
   ],
 };

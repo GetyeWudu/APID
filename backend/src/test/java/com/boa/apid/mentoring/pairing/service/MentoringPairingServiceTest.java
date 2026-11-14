@@ -13,6 +13,7 @@ import com.boa.apid.core.organization.entity.Employee;
 import com.boa.apid.core.organization.entity.EmploymentStatus;
 import com.boa.apid.core.organization.repository.EmployeeRepository;
 import com.boa.apid.mentoring.pairing.dto.MentorInvitationRequest;
+import com.boa.apid.mentoring.pairing.dto.MentoringRelationshipPairDto;
 import com.boa.apid.mentoring.pairing.dto.MentoringRequestDecision;
 import com.boa.apid.mentoring.pairing.entity.MentoringRelationship;
 import com.boa.apid.mentoring.pairing.entity.MentoringRelationshipMember;
@@ -60,6 +61,44 @@ class MentoringPairingServiceTest {
 
     @InjectMocks
     private MentoringPairingService service;
+
+    @Test
+    void listsRelationshipsWhereTheCurrentUserIsEitherMentorOrTrainee() {
+        User currentUser = user(1L, "current.user");
+        User trainee = user(2L, "trainee");
+        User mentor = user(3L, "mentor");
+
+        MentoringRelationship mentorRelationship = relationship(
+                request(currentUser, currentUser, MentoringRequestType.INDIVIDUAL),
+                currentUser,
+                MentoringRelationshipStatus.ACTIVE
+        );
+        MentoringRelationshipMember traineeMembership = member(mentorRelationship, currentUser, trainee);
+
+        MentoringRelationship traineeRelationship = relationship(
+                request(mentor, mentor, MentoringRequestType.INDIVIDUAL),
+                mentor,
+                MentoringRelationshipStatus.COMPLETED
+        );
+        MentoringRelationshipMember mentorMembership = member(traineeRelationship, mentor, currentUser);
+
+        when(relationshipMemberRepository.findVisibleToUser(1L))
+                .thenReturn(List.of(traineeMembership, mentorMembership));
+        when(employeeRepository.findDetailedByUserIdIn(any())).thenReturn(List.of());
+
+        List<MentoringRelationshipPairDto> result = service.listMyRelationships(actor(1L, "current.user"));
+
+        assertEquals(2, result.size());
+        assertEquals(
+                List.of(
+                        MentoringRelationshipPairDto.ParticipantRole.MENTOR,
+                        MentoringRelationshipPairDto.ParticipantRole.TRAINEE
+                ),
+                result.stream().map(MentoringRelationshipPairDto::currentUserRole).toList()
+        );
+        assertEquals("trainee", result.get(0).traineeName());
+        assertEquals("mentor", result.get(1).mentorName());
+    }
 
     @Test
     void mentorCanInviteAGroupAndEachTraineeGetsAnIndividualResponseRecordAndNotification() {
@@ -297,6 +336,30 @@ class MentoringPairingServiceTest {
         recipient.setRecipientUser(recipientUser);
         recipient.setTraineeUser(trainee);
         return recipient;
+    }
+
+    private static MentoringRelationship relationship(
+            MentoringRequest request,
+            User mentor,
+            MentoringRelationshipStatus status
+    ) {
+        MentoringRelationship relationship = new MentoringRelationship();
+        relationship.setRequest(request);
+        relationship.setMentorUser(mentor);
+        relationship.setStatus(status);
+        return relationship;
+    }
+
+    private static MentoringRelationshipMember member(
+            MentoringRelationship relationship,
+            User mentor,
+            User trainee
+    ) {
+        MentoringRelationshipMember member = new MentoringRelationshipMember();
+        member.setRelationship(relationship);
+        member.setMentorUser(mentor);
+        member.setTraineeUser(trainee);
+        return member;
     }
 
     private static User user(Long id, String username) {

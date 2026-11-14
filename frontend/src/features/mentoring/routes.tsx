@@ -16,6 +16,14 @@ const HrMentoringDashboardPage = lazy(() =>
   import('./pages/HrMentoringDashboardPage').then((m) => ({ default: m.HrMentoringDashboardPage }))
 );
 
+const MyPairingPage = lazy(() =>
+  import('./pages/MyPairingPage').then((m) => ({ default: m.MyPairingPage }))
+);
+
+const MentoringPairingDetailPage = lazy(() =>
+  import('./pages/MentoringPairingDetailPage').then((m) => ({ default: m.MentoringPairingDetailPage }))
+);
+
 function MentoringIndexGate() {
   const { hasAnyPermission } = useAuth();
   if (!hasAnyPermission(EMPLOYEE_WORKSPACE_PERMISSIONS)) {
@@ -38,6 +46,22 @@ export const mentoringRoutes: RouteObject[] = [
     element: (
       <ProtectedRoute requiredAnyPermissions={HR_MODULE_PERMISSIONS}>
         <HrMentoringDashboardPage />
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: '/mentoring/pairing',
+    element: (
+      <ProtectedRoute requiredAnyPermissions={EMPLOYEE_WORKSPACE_PERMISSIONS}>
+        <MyPairingPage />
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: '/mentoring/pairing/:relationshipId',
+    element: (
+      <ProtectedRoute requiredAnyPermissions={EMPLOYEE_WORKSPACE_PERMISSIONS}>
+        <MentoringPairingDetailPage />
       </ProtectedRoute>
     ),
   },

@@ -2,6 +2,7 @@ package com.boa.apid.mentoring.pairing.repository;
 
 import com.boa.apid.mentoring.pairing.entity.MentoringRelationship;
 import com.boa.apid.mentoring.pairing.entity.MentoringRelationshipStatus;
+import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -11,6 +12,9 @@ import java.util.Optional;
 public interface MentoringRelationshipRepository extends JpaRepository<MentoringRelationship, Long> {
 
     Optional<MentoringRelationship> findByRequest_Id(Long requestId);
+
+    @EntityGraph(attributePaths = {"request", "request.skill", "mentorUser"})
+    Optional<MentoringRelationship> findDetailedById(Long id);
 
     @Query("""
             SELECT COUNT(member)
