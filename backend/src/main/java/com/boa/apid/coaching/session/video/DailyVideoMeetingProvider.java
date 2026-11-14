@@ -30,9 +30,9 @@ public class DailyVideoMeetingProvider implements VideoMeetingProvider {
     private final ObjectMapper objectMapper;
 
     public DailyVideoMeetingProvider(
-            @Value("${daily.api-base-url:https://api.daily.co/v1}") String apiBaseUrl,
-            @Value("${daily.api-key:}") String apiKey,
-            @Value("${daily.domain-name:amakari}") String domainName,
+            @Value("${apid.daily.api-base-url:${daily.api-base-url:https://api.daily.co/v1}}") String apiBaseUrl,
+            @Value("${apid.daily.api-key:${daily.api-key:}}") String apiKey,
+            @Value("${apid.daily.domain-name:${daily.domain-name:amakari}}") String domainName,
             MockVideoMeetingProvider mockProvider
     ) {
         this.apiBaseUrl = apiBaseUrl;
@@ -85,10 +85,12 @@ public class DailyVideoMeetingProvider implements VideoMeetingProvider {
             headers.setContentType(MediaType.APPLICATION_JSON);
             headers.setBearerAuth(apiKey);
 
+            Instant effectiveExp = (expiresAt != null && expiresAt.isAfter(Instant.now().plusSeconds(300)))
+                    ? expiresAt
+                    : Instant.now().plusSeconds(86400); // 24 hours
+
             Map<String, Object> properties = new HashMap<>();
-            if (expiresAt != null) {
-                properties.put("exp", expiresAt.getEpochSecond());
-            }
+            properties.put("exp", effectiveExp.getEpochSecond());
             properties.put("enable_chat", true);
             properties.put("enable_screenshare", true);
             properties.put("enable_prejoin_ui", false);
@@ -106,13 +108,51 @@ public class DailyVideoMeetingProvider implements VideoMeetingProvider {
                 String returnedName = root.path("name").asText(roomName);
                 String returnedUrl = root.path("url").asText();
                 log.info("Successfully provisioned Daily.co private room: {} ({})", returnedName, returnedUrl);
-                return new MeetingRoomDetails(returnedName, returnedUrl, expiresAt, false);
+                return new MeetingRoomDetails(returnedName, returnedUrl, effectiveExp, false);
             }
         } catch (Exception ex) {
             log.warn("Daily.co API call failed to create room, falling back to mock: {}", ex.getMessage());
         }
 
         return mockProvider.createRoom(roomNamePrefix, expiresAt);
+    }
+
+    private boolean ensureRoomExists(String roomName) {
+        if (!isConfigured() || roomName == null || roomName.isBlank()) return false;
+        try {
+            HttpHeaders headers = new HttpHeaders();
+            headers.setBearerAuth(apiKey);
+            HttpEntity<Void> request = new HttpEntity<>(headers);
+            ResponseEntity<String> response = restTemplate.exchange(apiBaseUrl + "/rooms/" + roomName, HttpMethod.GET, request, String.class);
+            if (response.getStatusCode().is2xxSuccessful()) {
+                return true;
+            }
+        } catch (Exception ex) {
+            // Room does not exist yet on Daily.co, attempt to create it with this name
+            try {
+                HttpHeaders headers = new HttpHeaders();
+                headers.setContentType(MediaType.APPLICATION_JSON);
+                headers.setBearerAuth(apiKey);
+
+                Map<String, Object> properties = new HashMap<>();
+                properties.put("exp", Instant.now().plusSeconds(86400).getEpochSecond());
+                properties.put("enable_chat", true);
+                properties.put("enable_screenshare", true);
+                properties.put("enable_prejoin_ui", false);
+
+                Map<String, Object> body = new HashMap<>();
+                body.put("name", roomName);
+                body.put("privacy", "private");
+                body.put("properties", properties);
+
+                HttpEntity<Map<String, Object>> createReq = new HttpEntity<>(body, headers);
+                ResponseEntity<String> createResp = restTemplate.postForEntity(apiBaseUrl + "/rooms", createReq, String.class);
+                return createResp.getStatusCode().is2xxSuccessful();
+            } catch (Exception createEx) {
+                log.warn("Could not auto-create room {} on Daily.co: {}", roomName, createEx.getMessage());
+            }
+        }
+        return false;
     }
 
     @Override
@@ -128,17 +168,22 @@ public class DailyVideoMeetingProvider implements VideoMeetingProvider {
         }
 
         try {
+            // Ensure room exists on Daily.co
+            ensureRoomExists(roomName);
+
             HttpHeaders headers = new HttpHeaders();
             headers.setContentType(MediaType.APPLICATION_JSON);
             headers.setBearerAuth(apiKey);
+
+            Instant effectiveExp = (expiresAt != null && expiresAt.isAfter(Instant.now().plusSeconds(300)))
+                    ? expiresAt
+                    : Instant.now().plusSeconds(14400); // 4 hours
 
             Map<String, Object> properties = new HashMap<>();
             properties.put("room_name", roomName);
             properties.put("user_name", fullName != null ? fullName : "Employee #" + employeeNumber);
             properties.put("is_owner", isOwner);
-            if (expiresAt != null) {
-                properties.put("exp", expiresAt.getEpochSecond());
-            }
+            properties.put("exp", effectiveExp.getEpochSecond());
 
             Map<String, Object> body = new HashMap<>();
             body.put("properties", properties);
@@ -151,7 +196,7 @@ public class DailyVideoMeetingProvider implements VideoMeetingProvider {
                 String token = root.path("token").asText();
                 String urlWithToken = "https://" + domainName + ".daily.co/" + roomName + "?t=" + token;
                 log.info("Generated Daily.co meeting token for participant: {} (url: {})", employeeNumber, urlWithToken);
-                return new MeetingTokenDetails(token, urlWithToken, expiresAt, false);
+                return new MeetingTokenDetails(token, urlWithToken, effectiveExp, false);
             }
         } catch (Exception ex) {
             log.warn("Daily.co API call failed to create token, falling back to mock: {}", ex.getMessage());

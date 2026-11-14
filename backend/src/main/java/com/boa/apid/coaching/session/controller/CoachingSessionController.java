@@ -31,7 +31,7 @@ public class CoachingSessionController {
         return ApiResponse.ok(sessionService.createSession(request, actor));
     }
 
-    @GetMapping
+    @GetMapping({"", "/my"})
     @PreAuthorize("hasAuthority('EMPLOYEE_PORTAL_ACCESS')")
     public ApiResponse<List<CoachingSessionDto>> getMySessions(
             @RequestParam(value = "upcomingOnly", required = false) Boolean upcomingOnly,
@@ -41,7 +41,7 @@ public class CoachingSessionController {
         return ApiResponse.ok(sessionService.getMySessions(actor, upcomingOnly, pathway));
     }
 
-    @GetMapping("/{id}")
+    @GetMapping("/{id:\\d+}")
     @PreAuthorize("hasAuthority('EMPLOYEE_PORTAL_ACCESS')")
     public ApiResponse<CoachingSessionDto> getSessionDetail(
             @PathVariable Long id,
