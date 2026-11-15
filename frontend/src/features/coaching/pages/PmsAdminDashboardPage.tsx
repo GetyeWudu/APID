@@ -199,6 +199,10 @@ export function PmsAdminDashboardPage() {
         >
           <CoachingRulesTab />
         </PermissionGate>
+      ) : activeTab === 'reports' ? (
+        <PermissionGate permission="COACHING_REPORT_VIEW_ALL">
+          <PmsReportsTab />
+        </PermissionGate>
       ) : (
         <>
           <div className="apid-alert apid-alert-info">
@@ -339,15 +343,6 @@ export function PmsAdminDashboardPage() {
           {activeTab === 'approvals' && (
             <PermissionGate permission="COACHING_REQUEST_APPROVE">
               <SkillDevApprovalTab />
-            </PermissionGate>
-          )}
-
-          {activeTab === 'reports' && (
-            <PermissionGate permission="COACHING_REPORT_VIEW_ALL">
-              <PmsReportsTab
-                directorateCounts={overviewQuery.data.directorateCounts}
-                assignments={mergedAssignments}
-              />
             </PermissionGate>
           )}
         </>
