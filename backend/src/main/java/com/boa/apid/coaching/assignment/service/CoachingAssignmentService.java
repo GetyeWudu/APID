@@ -61,6 +61,8 @@ public class CoachingAssignmentService {
     private final FiscalQuarterRepository fiscalQuarterRepository;
     private final NotificationService notificationService;
     private final AuditService auditService;
+    private final com.boa.apid.coaching.communication.service.ConversationAccessService conversationAccessService;
+    private final com.boa.apid.coaching.communication.service.CoachingCommunicationService coachingCommunicationService;
 
     public CoachingAssignmentService(
             CoachingAssignmentRepository assignmentRepository,
@@ -73,7 +75,9 @@ public class CoachingAssignmentService {
             UserRepository userRepository,
             FiscalQuarterRepository fiscalQuarterRepository,
             NotificationService notificationService,
-            AuditService auditService
+            AuditService auditService,
+            com.boa.apid.coaching.communication.service.ConversationAccessService conversationAccessService,
+            com.boa.apid.coaching.communication.service.CoachingCommunicationService coachingCommunicationService
     ) {
         this.assignmentRepository = assignmentRepository;
         this.participantRepository = participantRepository;
@@ -86,6 +90,8 @@ public class CoachingAssignmentService {
         this.fiscalQuarterRepository = fiscalQuarterRepository;
         this.notificationService = notificationService;
         this.auditService = auditService;
+        this.conversationAccessService = conversationAccessService;
+        this.coachingCommunicationService = coachingCommunicationService;
     }
 
     // ─────────────────────────── 1. ROSTER SEARCH ───────────────────────────
@@ -411,6 +417,11 @@ public class CoachingAssignmentService {
         history.setChangedByUserId(actor.getUserId());
         replacementHistoryRepository.save(history);
 
+        // Ensure direct conversation exists for this coaching assignment
+        coachingCommunicationService.ensureMandatoryAssignmentConversation(
+                saved.getId(), saved.getCoachEmployeeId(), saved.getCoacheeEmployeeId(), actor.getUserId()
+        );
+
         // Audit log
         auditService.record(new AuditService.AuditCommand(
                 null,
@@ -518,6 +529,9 @@ public class CoachingAssignmentService {
         history.setReason(request.reason().trim());
         history.setChangedByUserId(actor.getUserId());
         replacementHistoryRepository.save(history);
+
+        // Update conversation participant: deactivate old coach, add or activate new coach
+        conversationAccessService.handleCoachReplacement(saved.getId(), previousCoachId, newCoach.id(), actor.getUserId());
 
         // Audit log
         auditService.record(new AuditService.AuditCommand(

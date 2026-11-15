@@ -49,6 +49,7 @@ public class SkillCoachingRequestService {
     private final UserRepository userRepository;
     private final NotificationService notificationService;
     private final AuditService auditService;
+    private final com.boa.apid.coaching.communication.service.CoachingCommunicationService coachingCommunicationService;
 
     public SkillCoachingRequestService(
             SkillCoachingRequestRepository requestRepository,
@@ -60,7 +61,8 @@ public class SkillCoachingRequestService {
             FiscalQuarterRepository fiscalQuarterRepository,
             UserRepository userRepository,
             NotificationService notificationService,
-            AuditService auditService
+            AuditService auditService,
+            com.boa.apid.coaching.communication.service.CoachingCommunicationService coachingCommunicationService
     ) {
         this.requestRepository = requestRepository;
         this.targetRepository = targetRepository;
@@ -72,6 +74,7 @@ public class SkillCoachingRequestService {
         this.userRepository = userRepository;
         this.notificationService = notificationService;
         this.auditService = auditService;
+        this.coachingCommunicationService = coachingCommunicationService;
     }
 
     /**
@@ -288,6 +291,13 @@ public class SkillCoachingRequestService {
         req.setReviewNotes(payload.reviewNotes());
         req.setReviewedAt(Instant.now());
         SkillCoachingRequest savedReq = requestRepository.save(req);
+
+        // Provision group conversation for the approved skill cohort
+        try {
+            coachingCommunicationService.provisionSkillCohortGroupConversation(savedReq.getId(), actor.getUserId());
+        } catch (Exception e) {
+            // Keep going, non-fatal if conversation already exists
+        }
 
         // Audit log
         auditService.record(new AuditService.AuditCommand(

@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Award, Building2, ChevronDown, ChevronUp, Eye, MessageSquare, ShieldAlert, UserCheck, UserPlus } from 'lucide-react';
 import { Link, useSearchParams } from 'react-router-dom';
@@ -14,7 +14,7 @@ import {
 } from '../../../shared/components/ui';
 import { coreConfigApi } from '../../admin/config/api/coreConfigApi';
 import { workspaceLiveApi, workspacePreviewAdapter } from '../../workspace/api/workspaceDashboardApi';
-import { IsolatedChatPanel, type ChatMessageItem } from '../../workspace/components/IsolatedChatPanel';
+import { CoachingChatHub } from '../components/chat/CoachingChatHub';
 import { coachingAssignmentApi, type MyCoacheeItem } from '../api/coachingAssignmentApi';
 import { classifyRating, RATING_BAND_METADATA } from '../utils/ratingClassification';
 import { RequestSkillCoachingModal } from '../components/RequestSkillCoachingModal';
@@ -27,10 +27,9 @@ type CoachingViewKey = 'plan' | 'sessions' | 'coachees' | 'skills';
 export function CoachingHomePage() {
   const { user, hasPermission, hasAnyPermission } = useAuth();
   const [searchParams] = useSearchParams();
-  const [coachingChatExtra, setCoachingChatExtra] = useState<ChatMessageItem[]>([]);
   const [isSkillModalOpen, setIsSkillModalOpen] = useState(false);
   const [selectedGoalEmployee, setSelectedGoalEmployee] = useState<{ id: number; name?: string } | null>(null);
-  const [isChatOpen, setIsChatOpen] = useState(false);
+  const [isChatOpen, setIsChatOpen] = useState(true);
 
   const requestedView = searchParams.get('view') as CoachingViewKey | null;
   const activeView: CoachingViewKey =
@@ -69,17 +68,6 @@ export function CoachingHomePage() {
     retry: false,
   });
 
-  const effectiveWorkspace = useMemo(() => {
-    const base = previewQuery.data?.workspace;
-    if (!base) return null;
-    const isCoachDefault =
-      (identityQuery.data?.directReports.length ?? 0) > 0 || base.isAssignedCoach;
-    return {
-      ...base,
-      isAssignedCoach: isCoachDefault,
-    };
-  }, [previewQuery.data, identityQuery.data]);
-
   if (!hasAnyPermission(EMPLOYEE_WORKSPACE_PERMISSIONS)) {
     return (
       <div className="apid-card">
@@ -105,15 +93,6 @@ export function CoachingHomePage() {
   }
 
   const { linkedEmployee, directReports } = identityQuery.data;
-  const workspaceData = effectiveWorkspace;
-  const allCoachingMsgs = [...(workspaceData?.chatCoachingMessages ?? []), ...coachingChatExtra];
-
-  const appendMessage = (body: string) => {
-    setCoachingChatExtra((prev) => [
-      ...prev,
-      { id: `msg-${Date.now()}`, sender: 'You', body, time: 'Just now' },
-    ]);
-  };
 
   if (!linkedEmployee) {
     return (
@@ -801,10 +780,10 @@ export function CoachingHomePage() {
                 </div>
                 <div>
                   <h4 style={{ margin: 0, fontSize: '0.98rem', fontWeight: 700 }}>
-                    Coaching Discussion Channel (Talent ↔ Coach)
+                    Coaching Communication Hub (Talent ↔ Coach & Peer Cohorts)
                   </h4>
                   <p style={{ margin: '0.15rem 0 0', fontSize: '0.8rem', color: 'var(--muted, #64748b)' }}>
-                    Private communication thread with coachees and assigned coaches ({allCoachingMsgs.length} messages)
+                    End-to-end audit logged channel: 1-on-1 remediation, skill cohort discussions, and private peer chats
                   </p>
                 </div>
               </div>
@@ -819,18 +798,16 @@ export function CoachingHomePage() {
                   gap: '0.35rem',
                 }}
               >
-                {isChatOpen ? 'Collapse Channel' : 'Open Channel'}
+                {isChatOpen ? 'Collapse Channels' : 'Open Coaching Hub'}
                 {isChatOpen ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
               </button>
             </div>
 
             {isChatOpen && (
               <div style={{ marginTop: '1rem', paddingTop: '1rem', borderTop: '1px solid var(--border, #f1f5f9)' }}>
-                <IsolatedChatPanel
-                  contextTitle="Coaching Channel (Talent ↔ Coach)"
-                  contextKey="coaching"
-                  messages={allCoachingMsgs}
-                  onSendMessage={appendMessage}
+                <CoachingChatHub
+                  currentEmployeeId={linkedEmployee.id}
+                  currentUserId={user?.id}
                 />
               </div>
             )}
