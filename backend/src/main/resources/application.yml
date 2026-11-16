@@ -24,6 +24,7 @@ spring:
     schemas: core,coaching,mentoring
     default-schema: core
     locations: classpath:db/migration
+    out-of-order: true
 
   data:
     redis:
