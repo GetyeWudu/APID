@@ -11,6 +11,7 @@ import { mentoringRoutes } from '../features/mentoring/routes';
 import { workspaceRoutes } from '../features/workspace/routes';
 import { resolveAuthorizedModules } from '../shared/auth/workspaceResolver';
 import { AppLayout } from '../shared/components/AppLayout';
+import { ErrorBoundary } from '../shared/components/ErrorBoundary';
 import { ProtectedRoute } from '../shared/components/ProtectedRoute';
 import { EmptyState, LoadingSkeleton, ToastProvider } from '../shared/components/ui';
 import { AuthProvider, useAuth } from './AuthContext';
@@ -114,9 +115,11 @@ export function App() {
       <ToastProvider>
         <BrowserRouter>
           <AuthProvider>
-            <AppLayout>
-              <AppRoutes />
-            </AppLayout>
+            <ErrorBoundary>
+              <AppLayout>
+                <AppRoutes />
+              </AppLayout>
+            </ErrorBoundary>
           </AuthProvider>
         </BrowserRouter>
       </ToastProvider>

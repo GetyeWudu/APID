@@ -66,6 +66,7 @@ services:
       APID_STORAGE_PATH: ${APID_STORAGE_PATH:-/app/uploads}
       DAILY_API_BASE_URL: ${DAILY_API_BASE_URL:-https://api.daily.co/v1}
       DAILY_API_KEY: ${DAILY_API_KEY:-}
+      DAILY_DOMAIN_NAME: ${DAILY_DOMAIN_NAME:-amakari}
       DAILY_WEBHOOK_SECRET: ${DAILY_WEBHOOK_SECRET:-}
     volumes:
       - ./uploads:/app/uploads

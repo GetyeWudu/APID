@@ -14,6 +14,11 @@ export interface PublicConfigSettings {
   missedSessionAlertThreshold: number;
   inactivityReminderDays: number;
   maxFileUploadMb: number;
+  coachingMinSessionsPerQuarter?: number;
+  coachingEarlyJoinWindowMinutes?: number;
+  coachingMinRescheduleNoticeHours?: number;
+  coachingMaxReschedulesPerSession?: number;
+  coachingRequireDeclineReason?: boolean;
 }
 
 export interface ActiveConfigSnapshot {

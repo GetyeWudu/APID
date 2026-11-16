@@ -172,6 +172,13 @@ export function AppLayout({ children }: { children: ReactNode }) {
                   },
                 ]
               : []),
+            {
+              to: '/coaching?view=skills',
+              label: 'Skill Development',
+              icon: <Award size={17} />,
+              requiredAnyPermissions: EMPLOYEE_WORKSPACE_PERMISSIONS,
+              matchSearch: '?view=skills',
+            },
           ],
         },
         {
@@ -209,6 +216,18 @@ export function AppLayout({ children }: { children: ReactNode }) {
               icon: <LayoutDashboard size={17} />,
               requiredAnyPermissions: ['COACHING_REPORT_VIEW_ALL'],
               matchSearch: '?tab=reports',
+            },
+            {
+              to: '/coaching/pms?tab=policies',
+              label: 'Coaching Rules & Policies',
+              icon: <SlidersHorizontal size={17} />,
+              requiredAnyPermissions: [
+                'COACHING_ASSIGNMENT_VIEW_ALL',
+                'COACHING_INITIATIVE_CREATE',
+                'ADMIN_PORTAL_ACCESS',
+                'PMS_ADMIN_ACCESS',
+              ],
+              matchSearch: '?tab=policies',
             },
           ],
         },
