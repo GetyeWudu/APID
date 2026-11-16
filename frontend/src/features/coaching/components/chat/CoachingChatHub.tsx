@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   MessageSquare,
@@ -23,18 +23,37 @@ interface CoachingChatHubProps {
   currentEmployeeId: number;
   currentUserId?: number;
   initialConversationId?: number | null;
+  mode?: 'ALL' | 'MANDATORY' | 'SKILL_GROUP' | 'PEER' | 'SKILLS';
 }
 
 export const CoachingChatHub: React.FC<CoachingChatHubProps> = ({
   currentEmployeeId,
   currentUserId,
   initialConversationId,
+  mode = 'ALL',
 }) => {
   const queryClient = useQueryClient();
   const [activeConversationId, setActiveConversationId] = useState<number | null>(initialConversationId ?? null);
   const [replyTarget, setReplyTarget] = useState<MessageDto | null>(null);
   const [isPeerModalOpen, setIsPeerModalOpen] = useState(false);
   const [showParticipantsDrawer, setShowParticipantsDrawer] = useState(false);
+
+  const initialFilter =
+    mode === 'MANDATORY'
+      ? 'MANDATORY'
+      : mode === 'SKILL_GROUP'
+      ? 'SKILL_GROUP'
+      : mode === 'PEER'
+      ? 'PEER'
+      : 'ALL';
+
+  const [filterContext, setFilterContext] = useState<'ALL' | 'MANDATORY' | 'SKILL_GROUP' | 'PEER'>(initialFilter);
+
+  useEffect(() => {
+    if (mode === 'MANDATORY') setFilterContext('MANDATORY');
+    else if (mode === 'SKILL_GROUP') setFilterContext('SKILL_GROUP');
+    else if (mode === 'PEER') setFilterContext('PEER');
+  }, [mode]);
 
   // 1. Fetch conversations list
   const conversationsQuery = useQuery({
@@ -45,37 +64,70 @@ export const CoachingChatHub: React.FC<CoachingChatHubProps> = ({
 
   const conversations = conversationsQuery.data ?? [];
 
-  // Default select first conversation if none selected
-  useEffect(() => {
-    if (!activeConversationId && conversations.length > 0) {
-      setActiveConversationId(conversations[0].id);
-    }
-  }, [conversations, activeConversationId]);
+  // Filtered conversations based on the selected filter context tab
+  const filteredConversations = useMemo(() => {
+    return conversations.filter((c) => {
+      if (filterContext === 'MANDATORY') return c.contextType === 'MANDATORY_ASSIGNMENT';
+      if (filterContext === 'SKILL_GROUP') return c.contextType === 'SKILL_COHORT_GROUP';
+      if (filterContext === 'PEER') return c.contextType === 'SKILL_PEER_DIRECT';
+      return true;
+    });
+  }, [conversations, filterContext]);
 
-  const activeConversation = conversations.find((c) => c.id === activeConversationId) || null;
+  // Active conversation strictly scoped to the active filter tab
+  const activeConversation = useMemo(() => {
+    if (!activeConversationId) return null;
+    return filteredConversations.find((c) => c.id === activeConversationId) || null;
+  }, [filteredConversations, activeConversationId]);
+
+  // Keep activeConversationId synchronized with the current filter tab
+  useEffect(() => {
+    // If current active conversation is already valid within this filter tab, do not change it
+    if (activeConversationId && filteredConversations.some((c) => c.id === activeConversationId)) {
+      return;
+    }
+    // If the active filter tab has matching conversations, select the first one
+    if (filteredConversations.length > 0) {
+      setActiveConversationId(filteredConversations[0].id);
+      setReplyTarget(null);
+    } else {
+      // If the active filter tab has NO conversations, reset to null so the empty page is displayed
+      setActiveConversationId(null);
+      setReplyTarget(null);
+    }
+  }, [filteredConversations, activeConversationId]);
+
+  const handleFilterChange = (newFilter: 'ALL' | 'MANDATORY' | 'SKILL_GROUP' | 'PEER') => {
+    setFilterContext(newFilter);
+    setReplyTarget(null);
+  };
 
   // 2. Fetch messages for active conversation with incremental/polling sync
   const messagesQuery = useQuery({
     queryKey: ['coaching', 'messages', activeConversationId],
     queryFn: () => (activeConversationId ? coachingCommunicationApi.getMessages(activeConversationId, { limit: 60 }) : Promise.resolve([])),
-    enabled: activeConversationId != null,
+    enabled: activeConversationId != null && activeConversation != null,
     refetchInterval: 3500, // Live poll every 3.5s for instant feel
   });
 
   const messages = messagesQuery.data ?? [];
 
-  // 3. Mark read when active conversation has unread messages
+  // 3. Mark read when active conversation has messages
   useEffect(() => {
-    if (activeConversationId && messages.length > 0 && activeConversation && activeConversation.unreadCount > 0) {
+    if (activeConversationId && activeConversation && messages.length > 0) {
       const lastMsg = messages[messages.length - 1];
       if (lastMsg && lastMsg.id) {
+        // Optimistically clear badge immediately in cache
+        queryClient.setQueryData<ConversationSummaryDto[]>(['coaching', 'conversations'], (old) =>
+          old ? old.map((c) => (c.id === activeConversationId ? { ...c, unreadCount: 0 } : c)) : []
+        );
+
         void coachingCommunicationApi.markRead(activeConversationId, lastMsg.id).then(() => {
-          // Invalidate conversations to clear badge
           void queryClient.invalidateQueries({ queryKey: ['coaching', 'conversations'] });
         });
       }
     }
-  }, [activeConversationId, messages, activeConversation, queryClient]);
+  }, [activeConversationId, activeConversation, messages, queryClient]);
 
   // Determine if current user is Coach in the active conversation
   const isCoachOrAdmin = Boolean(
@@ -102,8 +154,9 @@ export const CoachingChatHub: React.FC<CoachingChatHubProps> = ({
   };
 
   const handlePeerConversationCreated = (newConv: ConversationSummaryDto) => {
-    void queryClient.invalidateQueries({ queryKey: ['coaching', 'conversations'] });
+    setFilterContext('PEER');
     setActiveConversationId(newConv.id);
+    void queryClient.invalidateQueries({ queryKey: ['coaching', 'conversations'] });
   };
 
   const getContextBadge = (contextType?: string) => {
@@ -176,9 +229,17 @@ export const CoachingChatHub: React.FC<CoachingChatHubProps> = ({
         <ConversationListSidebar
           conversations={conversations}
           activeConversationId={activeConversationId}
+          filterContext={filterContext}
+          mode={mode}
+          onFilterChange={handleFilterChange}
           onSelectConversation={(c) => {
             setActiveConversationId(c.id);
             setReplyTarget(null);
+            if (c.unreadCount > 0) {
+              queryClient.setQueryData<ConversationSummaryDto[]>(['coaching', 'conversations'], (old) =>
+                old ? old.map((item) => (item.id === c.id ? { ...item, unreadCount: 0 } : item)) : []
+              );
+            }
           }}
           onOpenPeerModal={() => setIsPeerModalOpen(true)}
           currentUserId={currentUserId}
@@ -399,10 +460,22 @@ export const CoachingChatHub: React.FC<CoachingChatHubProps> = ({
           >
             <MessageSquare size={48} style={{ marginBottom: '1rem', opacity: 0.4 }} />
             <h4 style={{ margin: '0 0 0.4rem', fontSize: '1.1rem', color: 'var(--text, #1e293b)' }}>
-              Select a Coaching Channel
+              {filterContext === 'SKILL_GROUP'
+                ? 'No Group Skill Cohorts'
+                : filterContext === 'PEER'
+                ? 'No Peer Chats Yet'
+                : filterContext === 'MANDATORY'
+                ? 'No Mandatory Discussions'
+                : 'Select a Coaching Channel'}
             </h4>
-            <p style={{ margin: 0, fontSize: '0.85rem', maxWidth: '360px', textAlign: 'center' }}>
-              Choose a conversation from the sidebar to inspect messages, share exercises, or start a peer chat.
+            <p style={{ margin: 0, fontSize: '0.85rem', maxWidth: '380px', textAlign: 'center' }}>
+              {filterContext === 'SKILL_GROUP'
+                ? 'Group cohort workshops and discussions will appear here when an approved skill development program is active.'
+                : filterContext === 'PEER'
+                ? 'Use the "+ Peer Chat" button on the left to start a 1-on-1 private discussion with a peer in your approved skill cohort.'
+                : filterContext === 'MANDATORY'
+                ? 'Mandatory 1-on-1 performance remediation discussions with your assigned coach will appear here.'
+                : 'Choose a conversation from the sidebar to inspect messages, share exercises, or start a peer chat.'}
             </p>
           </div>
         )}

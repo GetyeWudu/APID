@@ -57,6 +57,19 @@ public class SkillCoachingRequestController {
     }
 
     /**
+     * Employee views approved skill development cohorts they belong to (as target or coach).
+     * If asTalentOnly=true, only returns cohorts where caller is an enrolled talent and has peers to chat with.
+     */
+    @GetMapping("/my-cohorts")
+    @PreAuthorize("hasAuthority('EMPLOYEE_PORTAL_ACCESS')")
+    public ApiResponse<List<SkillCoachingRequestDto>> getMyApprovedCohorts(
+            @RequestParam(value = "asTalentOnly", required = false, defaultValue = "false") boolean asTalentOnly,
+            @AuthenticationPrincipal ApidUserPrincipal actor
+    ) {
+        return ApiResponse.ok(requestService.getMyApprovedCohorts(actor, asTalentOnly));
+    }
+
+    /**
      * PMS Admin views pending requests queue.
      */
     @GetMapping("/pending")

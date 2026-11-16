@@ -95,6 +95,6 @@ describe('CoachingHomePage test render', () => {
     );
 
     // Wait and check
-    expect(await screen.findByText('People I Coach & Team')).toBeInTheDocument();
+    expect(await screen.findByText('My Coachees & Direct Reports')).toBeInTheDocument();
   });
 });

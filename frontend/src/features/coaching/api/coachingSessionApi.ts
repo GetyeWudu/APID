@@ -82,7 +82,18 @@ export interface CoachingSessionItem {
   seriesId?: number | null;
   sequenceNumber?: number | null;
   isExtensionSession?: boolean;
+  rescheduleCount?: number;
   createdAt: string;
+}
+
+export interface UpdateSessionPayload {
+  title?: string;
+  scheduledStartTime?: string;
+  durationMinutes?: number;
+  meetingMode?: SessionMeetingMode;
+  meetingLocation?: string;
+  targetPmsGoalId?: number;
+  reason?: string;
 }
 
 export interface CreateSessionPayload {
@@ -94,6 +105,7 @@ export interface CreateSessionPayload {
   meetingMode: SessionMeetingMode;
   meetingLocation?: string;
   targetPmsGoalId?: number;
+  additionalAssignmentIds?: number[];
 }
 
 export interface CompleteSessionPayload {
@@ -200,6 +212,14 @@ export const coachingSessionApi = {
     return res.data.data;
   },
 
+  async updateSession(id: number, payload: UpdateSessionPayload): Promise<CoachingSessionItem> {
+    const res = await apiClient.put<ApiResponse<CoachingSessionItem>>(
+      `/coaching/sessions/${id}`,
+      payload
+    );
+    return res.data.data;
+  },
+
   async respondRescheduleProposal(
     id: number,
     proposalId: number,
@@ -231,7 +251,7 @@ export const coachingSessionApi = {
   },
 };
 
-export type CadenceType = 'WEEKLY' | 'BIWEEKLY' | 'TWICE_WEEKLY' | 'CUSTOM';
+export type CadenceType = 'WEEKLY' | 'BIWEEKLY' | 'TWICE_WEEKLY' | 'THRICE_WEEKLY' | 'EVERY_SATURDAY' | 'CUSTOM';
 export type TargetStatus = 'PENDING_APPROVAL' | 'APPROVED' | 'EXTENDED' | 'COMPLETED_EARLY' | 'CLOSED';
 export type AdjustmentType = 'INITIAL_PROPOSAL' | 'EXTENSION_REQUEST' | 'EARLY_COMPLETION_REQUEST';
 export type AdjustmentDecision = 'PENDING' | 'APPROVED' | 'REJECTED' | 'AUTO_APPROVED';
@@ -292,6 +312,9 @@ export interface CoachingSessionTargetItem {
   earlyCompletedAt: string | null;
   adjustmentHistory: CoachingTargetAdjustmentItem[];
   createdAt: string;
+  minAllowedSessions?: number;
+  maxAllowedSessions?: number;
+  coachAdjustmentAllowed?: boolean;
 }
 
 export interface GeneratedDatePreviewItem {
@@ -303,6 +326,15 @@ export interface GeneratedDatePreviewItem {
   weekNumber: number;
   isBufferWeek: boolean;
   note: string;
+  hasConflict?: boolean;
+  conflictDetails?: string | null;
+}
+
+export interface CustomSessionSlot {
+  sequenceNumber?: number;
+  sessionDate: string;
+  startTime: string;
+  endTime?: string;
 }
 
 export interface SeriesPreviewRequestPayload {
@@ -313,6 +345,11 @@ export interface SeriesPreviewRequestPayload {
   preferredStartTime: string;
   durationMinutes: number;
   targetOccurrences: number;
+  assignmentId?: number;
+  skillRequestId?: number;
+  additionalAssignmentIds?: number[];
+  dayStartTimes?: Record<string, string>;
+  customSessions?: CustomSessionSlot[];
 }
 
 export interface SeriesPreviewResponseData {
@@ -321,12 +358,15 @@ export interface SeriesPreviewResponseData {
   shortfall: number;
   hasShortfall: boolean;
   shortfallMessage: string;
+  hasConflict?: boolean;
+  conflictSummary?: string | null;
   previewDates: GeneratedDatePreviewItem[];
 }
 
 export interface CreateScheduleSeriesPayload {
   assignmentId?: number;
   skillRequestId?: number;
+  additionalAssignmentIds?: number[];
   title: string;
   cadenceType: CadenceType;
   daysOfWeek: string;
@@ -338,6 +378,8 @@ export interface CreateScheduleSeriesPayload {
   quarterEndDate?: string;
   targetOccurrences: number;
   targetPmsGoalId?: number;
+  dayStartTimes?: Record<string, string>;
+  customSessions?: CustomSessionSlot[];
 }
 
 export interface ScheduleSeriesItem {

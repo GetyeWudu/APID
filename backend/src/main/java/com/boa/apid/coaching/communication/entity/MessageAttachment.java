@@ -11,7 +11,7 @@ public class MessageAttachment {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @Column(name = "message_id", nullable = false)
+    @Column(name = "message_id", nullable = true)
     private Long messageId;
 
     @Column(name = "file_name", nullable = false)

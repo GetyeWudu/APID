@@ -14,6 +14,7 @@ import {
   X,
   Target,
   Sparkles,
+  Users,
 } from 'lucide-react';
 import { coreConfigApi } from '../../admin/config/api/coreConfigApi';
 import { coachingGovernanceApi, CoachingPolicyVersionItem } from '../api/coachingSessionApi';
@@ -37,6 +38,11 @@ export const CoachingRulesTab: React.FC = () => {
   const [minNoticeHours, setMinNoticeHours] = useState<number>(4);
   const [maxReschedules, setMaxReschedules] = useState<number>(2);
   const [requireDeclineReason, setRequireDeclineReason] = useState<boolean>(true);
+  const [maxSessionsPerWeek, setMaxSessionsPerWeek] = useState<number>(3);
+  const [allowSaturday, setAllowSaturday] = useState<boolean>(true);
+  const [rescheduleScope, setRescheduleScope] = useState<'SAME_DAY_ONLY' | 'SAME_WEEK' | 'QUARTER_FLEXIBLE'>('SAME_WEEK');
+  const [allowJointPmsGroup, setAllowJointPmsGroup] = useState<boolean>(true);
+  const [maxJointGroupSize, setMaxJointGroupSize] = useState<number>(4);
 
   const [savedSuccess, setSavedSuccess] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -88,6 +94,21 @@ export const CoachingRulesTab: React.FC = () => {
       if (cfg.coachingRequireDeclineReason !== undefined) {
         setRequireDeclineReason(cfg.coachingRequireDeclineReason);
       }
+      if (cfg.coachingMaxSessionsPerWeek !== undefined) {
+        setMaxSessionsPerWeek(cfg.coachingMaxSessionsPerWeek);
+      }
+      if (cfg.coachingAllowSaturdayScheduling !== undefined) {
+        setAllowSaturday(cfg.coachingAllowSaturdayScheduling);
+      }
+      if (cfg.coachingRescheduleScope !== undefined) {
+        setRescheduleScope(cfg.coachingRescheduleScope);
+      }
+      if (cfg.coachingAllowJointPmsGroup !== undefined) {
+        setAllowJointPmsGroup(cfg.coachingAllowJointPmsGroup);
+      }
+      if (cfg.coachingMaxJointGroupSize !== undefined) {
+        setMaxJointGroupSize(cfg.coachingMaxJointGroupSize);
+      }
     }
   }, [configSnapshot]);
 
@@ -99,6 +120,11 @@ export const CoachingRulesTab: React.FC = () => {
         { configKey: 'coaching.min_reschedule_notice_hours', configValue: String(minNoticeHours) },
         { configKey: 'coaching.max_reschedules_per_session', configValue: String(maxReschedules) },
         { configKey: 'coaching.require_decline_reason', configValue: String(requireDeclineReason) },
+        { configKey: 'coaching.max_sessions_per_week', configValue: String(maxSessionsPerWeek) },
+        { configKey: 'coaching.allow_saturday_scheduling', configValue: String(allowSaturday) },
+        { configKey: 'coaching.reschedule_scope', configValue: String(rescheduleScope) },
+        { configKey: 'coaching.allow_joint_pms_group', configValue: String(allowJointPmsGroup) },
+        { configKey: 'coaching.max_joint_group_size', configValue: String(maxJointGroupSize) },
       ];
       return coreConfigApi.updateConfigs(updates);
     },
@@ -120,6 +146,11 @@ export const CoachingRulesTab: React.FC = () => {
     setMinNoticeHours(4);
     setMaxReschedules(2);
     setRequireDeclineReason(true);
+    setMaxSessionsPerWeek(3);
+    setAllowSaturday(true);
+    setRescheduleScope('SAME_WEEK');
+    setAllowJointPmsGroup(true);
+    setMaxJointGroupSize(4);
   };
 
   // Open Edit Policy Modal
@@ -582,6 +613,218 @@ export const CoachingRulesTab: React.FC = () => {
             <p style={{ margin: '0.4rem 0 0 0', fontSize: '0.74rem', color: '#94a3b8' }}>
               Enforces clear communication between coach and coachee.
             </p>
+          </div>
+        </div>
+
+        {/* Rule 5: Weekly Pacing & Saturday Branch Scheduling */}
+        <div
+          className="apid-card"
+          style={{
+            background: '#ffffff',
+            borderRadius: '12px',
+            border: '1px solid #e2e8f0',
+            padding: '1.25rem',
+            display: 'flex',
+            flexDirection: 'column',
+            justifyContent: 'space-between',
+          }}
+        >
+          <div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem' }}>
+              <div
+                style={{
+                  width: 28,
+                  height: 28,
+                  borderRadius: '6px',
+                  background: 'rgba(16, 185, 129, 0.1)',
+                  color: '#10b981',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                }}
+              >
+                <Sliders size={15} />
+              </div>
+              <h3 style={{ fontSize: '0.96rem', fontWeight: 700, margin: 0, color: '#0f172a' }}>
+                Weekly Pacing & Saturday Training
+              </h3>
+            </div>
+            <p style={{ margin: '0 0 1rem 0', fontSize: '0.82rem', color: '#64748b', lineHeight: 1.5 }}>
+              Controls the maximum sessions permitted per calendar week and whether Saturday retail branch hours can be utilized for intensive coaching sprints.
+            </p>
+          </div>
+
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+              <select
+                value={maxSessionsPerWeek}
+                onChange={(e) => setMaxSessionsPerWeek(Number(e.target.value))}
+                style={{
+                  padding: '0.4rem 0.6rem',
+                  borderRadius: '6px',
+                  border: '1px solid #cbd5e1',
+                  fontSize: '0.88rem',
+                  fontWeight: 700,
+                }}
+              >
+                <option value={1}>Max 1 Session / Week</option>
+                <option value={2}>Max 2 Sessions / Week</option>
+                <option value={3}>Max 3 Sessions / Week (Sprint)</option>
+                <option value={4}>Max 4 Sessions / Week</option>
+                <option value={6}>Unlimited Flexible Pacing</option>
+              </select>
+              <span style={{ fontSize: '0.8rem', color: '#64748b' }}>Weekly Cap</span>
+            </div>
+
+            <label style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', cursor: 'pointer' }}>
+              <input
+                type="checkbox"
+                checked={allowSaturday}
+                onChange={(e) => setAllowSaturday(e.target.checked)}
+                style={{ width: 18, height: 18, cursor: 'pointer' }}
+              />
+              <span style={{ fontSize: '0.86rem', fontWeight: 600, color: '#1e293b' }}>
+                Allow Saturday Branch Sessions
+              </span>
+            </label>
+            <p style={{ margin: 0, fontSize: '0.74rem', color: '#94a3b8' }}>
+              Enables coaches to book Saturday sessions during weekend operations.
+            </p>
+          </div>
+        </div>
+
+        {/* Rule 6: Reschedule Window Policy */}
+        <div
+          className="apid-card"
+          style={{
+            background: '#ffffff',
+            borderRadius: '12px',
+            border: '1px solid #e2e8f0',
+            padding: '1.25rem',
+            display: 'flex',
+            flexDirection: 'column',
+            justifyContent: 'space-between',
+          }}
+        >
+          <div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem' }}>
+              <div
+                style={{
+                  width: 28,
+                  height: 28,
+                  borderRadius: '6px',
+                  background: 'rgba(245, 158, 11, 0.1)',
+                  color: '#d97706',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                }}
+              >
+                <Clock size={15} />
+              </div>
+              <h3 style={{ fontSize: '0.96rem', fontWeight: 700, margin: 0, color: '#0f172a' }}>
+                Reschedule Window Scope
+              </h3>
+            </div>
+            <p style={{ margin: '0 0 1rem 0', fontSize: '0.82rem', color: '#64748b', lineHeight: 1.5 }}>
+              Defines the date range within which an employee or coach can reschedule a session.
+            </p>
+          </div>
+
+          <div>
+            <select
+              value={rescheduleScope}
+              onChange={(e) => setRescheduleScope(e.target.value as any)}
+              style={{
+                width: '100%',
+                padding: '0.45rem 0.65rem',
+                borderRadius: '6px',
+                border: '1px solid #cbd5e1',
+                fontSize: '0.88rem',
+                fontWeight: 600,
+              }}
+            >
+              <option value="SAME_DAY_ONLY">Same Day Only (Different Time)</option>
+              <option value="SAME_WEEK">Within Same Calendar Week (Mon–Sat)</option>
+              <option value="QUARTER_FLEXIBLE">Flexible Within Entire Quarter</option>
+            </select>
+            <p style={{ margin: '0.4rem 0 0 0', fontSize: '0.74rem', color: '#94a3b8' }}>
+              Recommended: "Within Same Calendar Week" preserves the pacing of the program.
+            </p>
+          </div>
+        </div>
+
+        {/* Rule 7: Multi-Talent Joint PMS Group Remediation */}
+        <div
+          className="apid-card"
+          style={{
+            background: '#ffffff',
+            borderRadius: '12px',
+            border: '1px solid #e2e8f0',
+            padding: '1.25rem',
+            display: 'flex',
+            flexDirection: 'column',
+            justifyContent: 'space-between',
+          }}
+        >
+          <div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem' }}>
+              <div
+                style={{
+                  width: 28,
+                  height: 28,
+                  borderRadius: '6px',
+                  background: 'rgba(99, 102, 241, 0.1)',
+                  color: '#6366f1',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                }}
+              >
+                <Users size={15} />
+              </div>
+              <h3 style={{ fontSize: '0.96rem', fontWeight: 700, margin: 0, color: '#0f172a' }}>
+                Joint PMS Group Remediation
+              </h3>
+            </div>
+            <p style={{ margin: '0 0 1rem 0', fontSize: '0.82rem', color: '#64748b', lineHeight: 1.5 }}>
+              Allows branch managers to coach 2 or more direct reports with PMS score &lt; 3.0 simultaneously in joint sessions.
+            </p>
+          </div>
+
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+            <label style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', cursor: 'pointer' }}>
+              <input
+                type="checkbox"
+                checked={allowJointPmsGroup}
+                onChange={(e) => setAllowJointPmsGroup(e.target.checked)}
+                style={{ width: 18, height: 18, cursor: 'pointer' }}
+              />
+              <span style={{ fontSize: '0.86rem', fontWeight: 600, color: '#1e293b' }}>
+                Enable Joint PMS Group Scheduling
+              </span>
+            </label>
+
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+              <span style={{ fontSize: '0.8rem', color: '#64748b' }}>Max Group Size:</span>
+              <input
+                type="number"
+                min={2}
+                max={8}
+                value={maxJointGroupSize}
+                onChange={(e) => setMaxJointGroupSize(Math.max(2, parseInt(e.target.value) || 2))}
+                style={{
+                  width: '70px',
+                  padding: '0.35rem 0.5rem',
+                  borderRadius: '6px',
+                  border: '1px solid #cbd5e1',
+                  fontSize: '0.88rem',
+                  fontWeight: 700,
+                  textAlign: 'center',
+                }}
+              />
+              <span style={{ fontSize: '0.8rem', color: '#64748b' }}>coachees</span>
+            </div>
           </div>
         </div>
       </div>

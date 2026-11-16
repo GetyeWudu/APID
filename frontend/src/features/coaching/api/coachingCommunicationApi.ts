@@ -1,4 +1,4 @@
-import { apiClient } from '../../../shared/api/apiClient';
+import { apiClient, ApiResponse } from '../../../shared/api/apiClient';
 
 export type ConversationType = 'DIRECT' | 'GROUP';
 export type ConversationContextType = 'MANDATORY_ASSIGNMENT' | 'SKILL_COHORT_GROUP' | 'SKILL_PEER_DIRECT';
@@ -24,7 +24,7 @@ export interface ParticipantDto {
 
 export interface AttachmentDto {
   id: number;
-  messageId: number;
+  messageId?: number | null;
   fileName: string;
   mimeType: string;
   fileSizeBytes: number;
@@ -91,7 +91,7 @@ export const coachingCommunicationApi = {
    * Retrieves all active coaching conversations for the current authenticated user.
    */
   getMyConversations: async (): Promise<ConversationSummaryDto[]> => {
-    const res = await apiClient.get<{ data: ConversationSummaryDto[] }>('/api/v1/coaching/conversations');
+    const res = await apiClient.get<ApiResponse<ConversationSummaryDto[]>>('/coaching/conversations');
     return res.data.data;
   },
 
@@ -99,7 +99,7 @@ export const coachingCommunicationApi = {
    * Retrieves metadata and participants of a specific conversation.
    */
   getConversation: async (id: number): Promise<ConversationSummaryDto> => {
-    const res = await apiClient.get<{ data: ConversationSummaryDto }>(`/api/v1/coaching/conversations/${id}`);
+    const res = await apiClient.get<ApiResponse<ConversationSummaryDto>>(`/coaching/conversations/${id}`);
     return res.data.data;
   },
 
@@ -110,8 +110,8 @@ export const coachingCommunicationApi = {
     conversationId: number,
     params?: { beforeId?: number; afterId?: number; limit?: number }
   ): Promise<MessageDto[]> => {
-    const res = await apiClient.get<{ data: MessageDto[] }>(
-      `/api/v1/coaching/conversations/${conversationId}/messages`,
+    const res = await apiClient.get<ApiResponse<MessageDto[]>>(
+      `/coaching/conversations/${conversationId}/messages`,
       { params }
     );
     return res.data.data;
@@ -121,8 +121,8 @@ export const coachingCommunicationApi = {
    * Sends a message into a conversation.
    */
   sendMessage: async (conversationId: number, request: SendMessageRequest): Promise<MessageDto> => {
-    const res = await apiClient.post<{ data: MessageDto }>(
-      `/api/v1/coaching/conversations/${conversationId}/messages`,
+    const res = await apiClient.post<ApiResponse<MessageDto>>(
+      `/coaching/conversations/${conversationId}/messages`,
       request
     );
     return res.data.data;
@@ -132,15 +132,15 @@ export const coachingCommunicationApi = {
    * Advances the user's read marker in the conversation.
    */
   markRead: async (conversationId: number, lastReadMessageId: number): Promise<void> => {
-    await apiClient.post(`/api/v1/coaching/conversations/${conversationId}/read`, { lastReadMessageId });
+    await apiClient.post(`/coaching/conversations/${conversationId}/read`, { lastReadMessageId });
   },
 
   /**
    * Toggles the pinned status of a message (Coach only).
    */
   togglePinMessage: async (conversationId: number, messageId: number): Promise<MessageDto> => {
-    const res = await apiClient.post<{ data: MessageDto }>(
-      `/api/v1/coaching/conversations/${conversationId}/messages/${messageId}/pin`
+    const res = await apiClient.post<ApiResponse<MessageDto>>(
+      `/coaching/conversations/${conversationId}/messages/${messageId}/pin`
     );
     return res.data.data;
   },
@@ -149,8 +149,8 @@ export const coachingCommunicationApi = {
    * Resolves or starts a private 1-on-1 peer chat between two cohort employees.
    */
   getOrCreatePeerConversation: async (request: CreatePeerConversationRequest): Promise<ConversationSummaryDto> => {
-    const res = await apiClient.post<{ data: ConversationSummaryDto }>(
-      '/api/v1/coaching/conversations/peer',
+    const res = await apiClient.post<ApiResponse<ConversationSummaryDto>>(
+      '/coaching/conversations/peer',
       request
     );
     return res.data.data;
@@ -162,8 +162,8 @@ export const coachingCommunicationApi = {
   uploadAttachment: async (conversationId: number, file: File): Promise<AttachmentDto> => {
     const formData = new FormData();
     formData.append('file', file);
-    const res = await apiClient.post<{ data: AttachmentDto }>(
-      `/api/v1/coaching/conversations/${conversationId}/attachments`,
+    const res = await apiClient.post<ApiResponse<AttachmentDto>>(
+      `/coaching/conversations/${conversationId}/attachments`,
       formData,
       {
         headers: {
@@ -179,6 +179,25 @@ export const coachingCommunicationApi = {
    */
   getAttachmentDownloadUrl: (attachmentId: number): string => {
     return `/api/v1/coaching/conversations/attachments/${attachmentId}`;
+  },
+
+  /**
+   * Downloads an attachment using the authenticated apiClient and triggers browser file save.
+   */
+  downloadAttachment: async (attachmentId: number, fileName: string): Promise<void> => {
+    const res = await apiClient.get<Blob>(
+      `/coaching/conversations/attachments/${attachmentId}`,
+      { responseType: 'blob' }
+    );
+    const blob = new Blob([res.data]);
+    const url = window.URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', fileName);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    window.URL.revokeObjectURL(url);
   },
 };
 

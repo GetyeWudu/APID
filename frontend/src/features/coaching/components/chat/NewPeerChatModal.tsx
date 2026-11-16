@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { X, Users, User, ArrowRight, Loader2, MessageSquare } from 'lucide-react';
 import { coachingCommunicationApi, ConversationSummaryDto } from '../../api/coachingCommunicationApi';
@@ -21,19 +21,23 @@ export const NewPeerChatModal: React.FC<NewPeerChatModalProps> = ({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
-  // Fetch approved skill coaching requests
+  // Fetch approved skill coaching requests where current user is enrolled as talent
   const requestsQuery = useQuery<SkillCoachingRequestItem[]>({
-    queryKey: ['coaching', 'skill-requests', 'approved'],
-    queryFn: () => skillCoachingRequestApi.getAllRequests({ status: 'APPROVED' }),
+    queryKey: ['coaching', 'skill-requests', 'my-cohorts', { asTalentOnly: true }],
+    queryFn: () => skillCoachingRequestApi.getMyApprovedCohorts(true),
     enabled: isOpen,
   });
 
-  if (!isOpen) return null;
+  // Filter cohorts where current user is registered as talent AND there is at least one peer to chat with
+  const myApprovedCohorts = useMemo(() => {
+    return (requestsQuery.data ?? []).filter((req) => {
+      const isTalent = req.targets?.some((t) => t.employeeId === currentEmployeeId);
+      const hasOtherPeers = req.targets?.some((t) => t.employeeId !== currentEmployeeId);
+      return isTalent && hasOtherPeers;
+    });
+  }, [requestsQuery.data, currentEmployeeId]);
 
-  // Filter cohorts where the current employee is an approved target (coachee)
-  const myApprovedCohorts: SkillCoachingRequestItem[] = (requestsQuery.data ?? []).filter((req: SkillCoachingRequestItem) =>
-    req.targets?.some((t: SkillCoachingTargetItem) => t.employeeId === currentEmployeeId)
-  );
+  if (!isOpen) return null;
 
   const activeCohort: SkillCoachingRequestItem | undefined =
     myApprovedCohorts.find((c: SkillCoachingRequestItem) => c.id === selectedRequestId) || myApprovedCohorts[0];

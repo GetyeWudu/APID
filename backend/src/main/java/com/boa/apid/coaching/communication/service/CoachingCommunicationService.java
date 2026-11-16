@@ -189,9 +189,12 @@ public class CoachingCommunicationService {
         accessService.verifyParticipantForRead(conversationId, userId);
 
         ConversationReadState readState = readStateRepository.findByConversationIdAndUserId(conversationId, userId)
-                .orElseGet(() -> new ConversationReadState(conversationId, userId, messageId));
+                .orElse(null);
 
-        if (readState.getLastReadMessageId() == null || (messageId != null && messageId > readState.getLastReadMessageId())) {
+        if (readState == null) {
+            readState = new ConversationReadState(conversationId, userId, messageId);
+            readStateRepository.save(readState);
+        } else if (messageId != null && (readState.getLastReadMessageId() == null || messageId > readState.getLastReadMessageId())) {
             readState.setLastReadMessageId(messageId);
             readState.setLastReadAt(Instant.now());
             readStateRepository.save(readState);

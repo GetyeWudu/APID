@@ -125,6 +125,7 @@ export interface MyCoacheeItem {
   coachingQuarterLabel: string | null;
   performanceQuarterLabel: string | null;
   createdAt: string;
+  appraisalRating?: number | null;
 }
 
 export interface MyCoachingWorkspace {

@@ -50,6 +50,16 @@ public class CoachingSessionController {
         return ApiResponse.ok(sessionService.getSessionDetail(id, actor));
     }
 
+    @PutMapping("/{id:\\d+}")
+    @PreAuthorize("hasAuthority('EMPLOYEE_PORTAL_ACCESS')")
+    public ApiResponse<CoachingSessionDto> updateSession(
+            @PathVariable Long id,
+            @Valid @RequestBody UpdateSessionRequest request,
+            @AuthenticationPrincipal ApidUserPrincipal actor
+    ) {
+        return ApiResponse.ok(sessionService.updateSession(id, request, actor));
+    }
+
     @PostMapping("/{id}/respond")
     @PreAuthorize("hasAuthority('EMPLOYEE_PORTAL_ACCESS')")
     public ApiResponse<CoachingSessionDto> respondInvitation(

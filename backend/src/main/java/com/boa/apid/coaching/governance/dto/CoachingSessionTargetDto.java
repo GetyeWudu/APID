@@ -22,6 +22,8 @@ public record CoachingSessionTargetDto(
         String earlyCompletionReason,
         Instant earlyCompletedAt,
         List<CoachingTargetAdjustmentDto> adjustmentHistory,
-        Instant createdAt
+        Instant createdAt,
+        int minAllowedSessions,
+        int maxAllowedSessions,
+        boolean coachAdjustmentAllowed
 ) {}
-

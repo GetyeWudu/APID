@@ -36,5 +36,6 @@ public record CoachingSessionDto(
         Instant createdAt,
         Long seriesId,
         Integer sequenceNumber,
-        Boolean isExtensionSession
+        Boolean isExtensionSession,
+        Integer rescheduleCount
 ) {}

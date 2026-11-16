@@ -1,4 +1,4 @@
-import React, { useRef, useEffect } from 'react';
+import React, { useRef, useEffect, useState } from 'react';
 import {
   Pin,
   Reply,
@@ -10,8 +10,9 @@ import {
   CheckCheck,
   ShieldCheck,
   Sparkles,
+  Loader2,
 } from 'lucide-react';
-import { MessageDto, AttachmentDto, ConversationParticipantRole } from '../../api/coachingCommunicationApi';
+import { MessageDto, AttachmentDto, ConversationParticipantRole, coachingCommunicationApi } from '../../api/coachingCommunicationApi';
 
 interface MessageThreadViewProps {
   messages: MessageDto[];
@@ -29,6 +30,19 @@ export const MessageThreadView: React.FC<MessageThreadViewProps> = ({
   onTogglePinMessage,
 }) => {
   const bottomRef = useRef<HTMLDivElement>(null);
+  const [downloadingId, setDownloadingId] = useState<number | null>(null);
+
+  const handleDownloadAttachment = async (att: AttachmentDto) => {
+    if (downloadingId === att.id) return;
+    setDownloadingId(att.id);
+    try {
+      await coachingCommunicationApi.downloadAttachment(att.id, att.fileName);
+    } catch (err) {
+      console.error('Failed to download attachment', err);
+    } finally {
+      setDownloadingId(null);
+    }
+  };
 
   // Auto-scroll to bottom when messages update
   useEffect(() => {
@@ -339,12 +353,12 @@ export const MessageThreadView: React.FC<MessageThreadViewProps> = ({
                             </div>
                           </div>
 
-                          <a
-                            href={att.downloadUrl}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            download
+                          <button
+                            type="button"
+                            onClick={() => void handleDownloadAttachment(att)}
+                            disabled={downloadingId === att.id}
                             className="apid-btn apid-btn-outline"
+                            title={`Download ${att.fileName}`}
                             style={{
                               padding: '0.3rem 0.55rem',
                               fontSize: '0.75rem',
@@ -352,14 +366,19 @@ export const MessageThreadView: React.FC<MessageThreadViewProps> = ({
                               alignItems: 'center',
                               gap: '0.3rem',
                               flexShrink: 0,
-                              textDecoration: 'none',
+                              cursor: downloadingId === att.id ? 'wait' : 'pointer',
                               color: '#0284c7',
                               borderColor: '#bae6fd',
+                              background: '#ffffff',
                             }}
                           >
-                            <Download size={13} />
-                            <span>Download</span>
-                          </a>
+                            {downloadingId === att.id ? (
+                              <Loader2 size={13} className="apid-spin" />
+                            ) : (
+                              <Download size={13} />
+                            )}
+                            <span>{downloadingId === att.id ? 'Saving...' : 'Download'}</span>
+                          </button>
                         </div>
                       ))}
                     </div>

@@ -60,7 +60,12 @@ public class ConfigCacheStore {
                 parseIntOrDefault(pub.get("coaching.early_join_window_minutes"), 15),
                 parseIntOrDefault(pub.get("coaching.min_reschedule_notice_hours"), 4),
                 parseIntOrDefault(pub.get("coaching.max_reschedules_per_session"), 2),
-                Boolean.parseBoolean(pub.getOrDefault("coaching.require_decline_reason", "true"))
+                Boolean.parseBoolean(pub.getOrDefault("coaching.require_decline_reason", "true")),
+                parseIntOrDefault(pub.get("coaching.max_sessions_per_week"), 3),
+                Boolean.parseBoolean(pub.getOrDefault("coaching.allow_saturday_scheduling", "true")),
+                pub.getOrDefault("coaching.reschedule_scope", "SAME_WEEK"),
+                Boolean.parseBoolean(pub.getOrDefault("coaching.allow_joint_pms_group", "true")),
+                parseIntOrDefault(pub.get("coaching.max_joint_group_size"), 4)
         );
     }
 

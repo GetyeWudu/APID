@@ -11,7 +11,7 @@ public enum FilePurpose {
     COACHING_RESOURCE("COACHING", "coaching-resources", 25L * 1024 * 1024, Set.of("pdf", "pptx", "docx", "xlsx", "png", "jpg", "jpeg")),
     TRAINER_CERT("MENTORING", "trainer-certs", 10L * 1024 * 1024, Set.of("pdf", "png", "jpg", "jpeg", "docx")),
     MENTORING_RESOURCE("MENTORING", "mentoring-resources", 25L * 1024 * 1024, Set.of("pdf", "pptx", "docx", "xlsx", "png", "jpg", "jpeg")),
-    CHAT_ATTACHMENT("SHARED", "chat-attachments", 10L * 1024 * 1024, Set.of("pdf", "docx", "xlsx", "pptx", "png", "jpg", "jpeg")),
+    CHAT_ATTACHMENT("SHARED", "chat-attachments", 10L * 1024 * 1024, Set.of("pdf", "docx", "xlsx", "pptx", "png", "jpg", "jpeg", "csv", "txt", "doc", "ppt", "webp")),
     HIERARCHY_CSV("CORE", "hierarchy-imports", 10L * 1024 * 1024, Set.of("csv", "xlsx"));
 
     private final String module;

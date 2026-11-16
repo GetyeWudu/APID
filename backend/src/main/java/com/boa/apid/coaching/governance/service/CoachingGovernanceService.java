@@ -465,6 +465,9 @@ public class CoachingGovernanceService {
                 .toList();
 
         String policyName = t.getPolicyVersion() != null ? t.getPolicyVersion().getPolicyName() : "Standard Bank Policy";
+        int minAllowed = t.getPolicyVersion() != null ? t.getPolicyVersion().getMinAllowedSessions() : t.getPolicyBaseline();
+        int maxAllowed = t.getPolicyVersion() != null ? t.getPolicyVersion().getMaxAllowedSessions() : t.getPolicyBaseline();
+        boolean adjustmentAllowed = t.getPolicyVersion() == null || t.getPolicyVersion().isCoachAdjustmentAllowed();
 
         return new CoachingSessionTargetDto(
                 t.getId(),
@@ -484,7 +487,10 @@ public class CoachingGovernanceService {
                 t.getEarlyCompletionReason(),
                 t.getEarlyCompletedAt(),
                 adjDtos,
-                t.getCreatedAt()
+                t.getCreatedAt(),
+                minAllowed,
+                maxAllowed,
+                adjustmentAllowed
         );
     }
 

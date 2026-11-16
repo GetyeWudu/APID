@@ -196,6 +196,55 @@ public class SkillCoachingRequestService {
     }
 
     /**
+     * Lists approved skill development cohorts where the caller is an approved target (coachee) or coach.
+     * When asTalentOnly is true, only cohorts where the caller is an enrolled talent with at least one eligible peer are returned.
+     */
+    public List<SkillCoachingRequestDto> getMyApprovedCohorts(ApidUserPrincipal actor, boolean asTalentOnly) {
+        Employee employee = employeeRepository.findByUserId(actor.getUserId())
+                .orElse(null);
+        if (employee == null) {
+            return Collections.emptyList();
+        }
+
+        List<SkillCoachingRequestTarget> targets = targetRepository.findAllByEmployeeId(employee.getId());
+        Set<Long> requestIds = targets.stream()
+                .filter(t -> t.getRequest() != null)
+                .map(t -> t.getRequest().getId())
+                .collect(Collectors.toSet());
+
+        if (!asTalentOnly) {
+            List<SkillCoachingRequest> coached = requestRepository.findAllByProposedCoachEmployeeIdAndStatus(
+                    employee.getId(), SkillCoachingRequestStatus.APPROVED
+            );
+            for (SkillCoachingRequest req : coached) {
+                requestIds.add(req.getId());
+            }
+        }
+
+        if (requestIds.isEmpty()) {
+            return Collections.emptyList();
+        }
+
+        List<SkillCoachingRequestDto> list = requestRepository.findAllById(requestIds)
+                .stream()
+                .filter(r -> r.getStatus() == SkillCoachingRequestStatus.APPROVED)
+                .map(this::toDto)
+                .collect(Collectors.toList());
+
+        if (asTalentOnly) {
+            list = list.stream()
+                    .filter(req -> req.targets() != null && req.targets().stream().anyMatch(t -> !t.employeeId().equals(employee.getId())))
+                    .collect(Collectors.toList());
+        }
+
+        return list;
+    }
+
+    public List<SkillCoachingRequestDto> getMyApprovedCohorts(ApidUserPrincipal actor) {
+        return getMyApprovedCohorts(actor, false);
+    }
+
+    /**
      * PMS Admin approves a skill development coaching request.
      * Optionally overrides the proposed coach.
      * Generates active SELF_DEVELOPMENT coaching assignments for all target coachees.

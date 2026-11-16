@@ -25,8 +25,19 @@ import com.boa.apid.common.exception.BusinessException;
 import com.boa.apid.common.exception.ResourceNotFoundException;
 import com.boa.apid.core.audit.service.AuditService;
 import com.boa.apid.core.auth.security.ApidUserPrincipal;
+import com.boa.apid.core.config.dto.PublicConfigDto;
+import com.boa.apid.core.config.entity.FiscalQuarter;
+import com.boa.apid.core.config.repository.FiscalQuarterRepository;
+import com.boa.apid.core.config.service.ConfigCacheStore;
 import com.boa.apid.core.organization.dto.EmployeeDto;
 import com.boa.apid.core.organization.service.EmployeeQueryService;
+import com.boa.apid.core.scheduling.config.SchedulingTimezones;
+import com.boa.apid.core.scheduling.dto.AvailabilityCheckRequest;
+import com.boa.apid.core.scheduling.dto.AvailabilityCheckResponse;
+import com.boa.apid.core.scheduling.dto.ConflictDescriptor;
+import com.boa.apid.core.scheduling.dto.CreateReservationCommand;
+import com.boa.apid.core.scheduling.service.ScheduleReservationService;
+import org.springframework.http.HttpStatus;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -46,6 +57,10 @@ public class ScheduleSeriesGeneratorService {
     private final EmployeeQueryService employeeQueryService;
     private final VideoMeetingProvider videoMeetingProvider;
     private final AuditService auditService;
+    private final ScheduleReservationService reservationService;
+    private final ConfigCacheStore configCacheStore;
+    private final CoachingSessionService sessionService;
+    private final FiscalQuarterRepository fiscalQuarterRepository;
 
     public ScheduleSeriesGeneratorService(
             CoachingScheduleSeriesRepository seriesRepository,
@@ -56,7 +71,11 @@ public class ScheduleSeriesGeneratorService {
             SkillCoachingRequestTargetRepository skillRequestTargetRepository,
             EmployeeQueryService employeeQueryService,
             VideoMeetingProvider videoMeetingProvider,
-            AuditService auditService
+            AuditService auditService,
+            ScheduleReservationService reservationService,
+            ConfigCacheStore configCacheStore,
+            CoachingSessionService sessionService,
+            FiscalQuarterRepository fiscalQuarterRepository
     ) {
         this.seriesRepository = seriesRepository;
         this.sessionRepository = sessionRepository;
@@ -67,6 +86,10 @@ public class ScheduleSeriesGeneratorService {
         this.employeeQueryService = employeeQueryService;
         this.videoMeetingProvider = videoMeetingProvider;
         this.auditService = auditService;
+        this.reservationService = reservationService;
+        this.configCacheStore = configCacheStore;
+        this.sessionService = sessionService;
+        this.fiscalQuarterRepository = fiscalQuarterRepository;
     }
 
     public SeriesPreviewResponse previewSeries(SeriesPreviewRequest request) {
@@ -78,56 +101,214 @@ public class ScheduleSeriesGeneratorService {
         List<DayOfWeek> days = parseDaysOfWeek(request.daysOfWeek());
         List<GeneratedDatePreviewDto> generated = new ArrayList<>();
 
-        LocalDate cursor = startDate;
-        int target = request.targetOccurrences();
-        int sequence = 1;
-        int weekIndex = 1;
-
-        if (request.cadenceType() == CadenceType.TWICE_WEEKLY && days.size() < 2) {
-            // Default to Tuesday and Thursday if only 1 day provided for twice weekly
-            days = List.of(DayOfWeek.TUESDAY, DayOfWeek.THURSDAY);
+        // Validate policy governance
+        PublicConfigDto publicConfig = configCacheStore.getPublicConfigCached();
+        if (Boolean.FALSE.equals(publicConfig.getCoachingAllowSaturdayScheduling()) && days.contains(DayOfWeek.SATURDAY)) {
+            throw new BusinessException("SATURDAY_NOT_ALLOWED", "Saturday sessions are currently disabled by Bank Coaching Policy.");
+        }
+        if (Boolean.FALSE.equals(publicConfig.getCoachingAllowJointPmsGroup()) && request.additionalAssignmentIds() != null && !request.additionalAssignmentIds().isEmpty()) {
+            throw new BusinessException("JOINT_PMS_NOT_ALLOWED", "Joint PMS group remediation is currently disabled by Bank Coaching Policy.");
+        }
+        if (request.additionalAssignmentIds() != null && publicConfig.getCoachingMaxJointGroupSize() != null) {
+            int totalSelected = 1 + request.additionalAssignmentIds().size();
+            if (totalSelected > publicConfig.getCoachingMaxJointGroupSize()) {
+                throw new BusinessException("MAX_GROUP_SIZE_EXCEEDED", "Joint PMS groups cannot exceed " + publicConfig.getCoachingMaxJointGroupSize() + " talents per Bank Policy.");
+            }
         }
 
-        // Loop forward across calendar
-        while (!cursor.isAfter(maxDate) && sequence <= target) {
-            for (DayOfWeek targetDay : days) {
-                // Find next matching date on or after cursor
-                LocalDate nextOccurrence = cursor;
-                while (nextOccurrence.getDayOfWeek() != targetDay && !nextOccurrence.isAfter(maxDate)) {
-                    nextOccurrence = nextOccurrence.plusDays(1);
+        // Resolve participating employees for conflict checking
+        List<Long> participantEmpIds = new ArrayList<>();
+        if (request.assignmentId() != null) {
+            assignmentRepository.findById(request.assignmentId()).ifPresent(a -> {
+                if (a.getCoachEmployeeId() != null) participantEmpIds.add(a.getCoachEmployeeId());
+                if (a.getCoacheeEmployeeId() != null) participantEmpIds.add(a.getCoacheeEmployeeId());
+            });
+            if (request.additionalAssignmentIds() != null) {
+                for (Long addId : request.additionalAssignmentIds()) {
+                    assignmentRepository.findById(addId).ifPresent(a -> {
+                        if (a.getCoacheeEmployeeId() != null && !participantEmpIds.contains(a.getCoacheeEmployeeId())) {
+                            participantEmpIds.add(a.getCoacheeEmployeeId());
+                        }
+                    });
+                }
+            }
+        } else if (request.skillRequestId() != null) {
+            skillRequestRepository.findById(request.skillRequestId()).ifPresent(sr -> {
+                if (sr.getProposedCoachEmployeeId() != null) participantEmpIds.add(sr.getProposedCoachEmployeeId());
+                List<SkillCoachingRequestTarget> targets = skillRequestTargetRepository.findAllByRequestId(sr.getId());
+                targets.forEach(t -> participantEmpIds.add(t.getEmployeeId()));
+            });
+        }
+
+        int target = request.targetOccurrences();
+        int sequence = 1;
+
+        if (request.customSessions() != null && !request.customSessions().isEmpty()) {
+            List<CustomSessionSlotDto> sortedSlots = request.customSessions().stream()
+                    .sorted(Comparator.comparing(CustomSessionSlotDto::sessionDate).thenComparing(CustomSessionSlotDto::startTime))
+                    .toList();
+
+            LocalDate baseStart = request.firstSessionDate() != null ? request.firstSessionDate() : sortedSlots.get(0).sessionDate();
+            LocalDate startMonday = baseStart.with(java.time.temporal.TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY));
+
+            FiscalQuarter activeQuarter = fiscalQuarterRepository.findByActiveTrue().orElse(null);
+            LocalDate quarterEnd = (activeQuarter != null && activeQuarter.getEndDate() != null)
+                    ? activeQuarter.getEndDate()
+                    : (request.quarterEndDate() != null ? request.quarterEndDate() : baseStart.plusWeeks(12));
+
+            // Validate Sunday, Saturday policy, and Quarter boundary
+            for (CustomSessionSlotDto slot : sortedSlots) {
+                if (slot.sessionDate().getDayOfWeek() == DayOfWeek.SUNDAY) {
+                    throw new BusinessException("SUNDAY_NOT_ALLOWED", "Sunday sessions are not permitted. Bank operations run Monday to Saturday.");
+                }
+                if (Boolean.FALSE.equals(publicConfig.getCoachingAllowSaturdayScheduling()) && slot.sessionDate().getDayOfWeek() == DayOfWeek.SATURDAY) {
+                    throw new BusinessException("SATURDAY_NOT_ALLOWED", "Saturday sessions are currently disabled by Bank Coaching Policy.");
+                }
+                if (activeQuarter != null) {
+                    if (slot.sessionDate().isAfter(activeQuarter.getEndDate())) {
+                        throw new BusinessException("QUARTER_DEADLINE_EXCEEDED",
+                                "Session date " + slot.sessionDate() + " exceeds the active coaching quarter deadline (" + activeQuarter.getLabel() + " ends " + activeQuarter.getEndDate() + "). Sessions must be held within the active remediation quarter.");
+                    }
+                    if (slot.sessionDate().isBefore(activeQuarter.getStartDate())) {
+                        throw new BusinessException("QUARTER_START_VIOLATION",
+                                "Session date " + slot.sessionDate() + " is earlier than active coaching quarter start (" + activeQuarter.getStartDate() + ").");
+                    }
+                }
+            }
+
+            // Validate weekly pacing quota
+            Map<Integer, Long> weeklyCounts = sortedSlots.stream()
+                    .collect(java.util.stream.Collectors.groupingBy(
+                            s -> (int) java.time.temporal.ChronoUnit.WEEKS.between(startMonday, s.sessionDate().with(java.time.temporal.TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY))) + 1,
+                            java.util.stream.Collectors.counting()
+                    ));
+            if (publicConfig.getCoachingMaxSessionsPerWeek() != null) {
+                for (var entry : weeklyCounts.entrySet()) {
+                    if (entry.getValue() > publicConfig.getCoachingMaxSessionsPerWeek()) {
+                        throw new BusinessException("WEEKLY_QUOTA_EXCEEDED",
+                                "Week " + entry.getKey() + " has " + entry.getValue() + " sessions, exceeding the bank policy maximum of " + publicConfig.getCoachingMaxSessionsPerWeek() + " sessions per week.");
+                    }
+                }
+            }
+
+            for (CustomSessionSlotDto slot : sortedSlots) {
+                LocalTime start = slot.startTime();
+                LocalTime end = slot.endTime() != null ? slot.endTime() : start.plusMinutes(request.durationMinutes());
+
+                LocalDate currentMonday = slot.sessionDate().with(java.time.temporal.TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY));
+                int currentWeek = (int) java.time.temporal.ChronoUnit.WEEKS.between(startMonday, currentMonday) + 1;
+                if (slot.sessionDate().isAfter(quarterEnd) || currentWeek > 12) {
+                    throw new BusinessException("QUARTER_WINDOW_EXCEEDED",
+                            "Session " + sequence + " on " + slot.sessionDate() + " falls outside the active quarter schedule limit (deadline " + quarterEnd + ").");
+                }
+                boolean isBuffer = (currentWeek == 6 || currentWeek == 12);
+                String note = isBuffer ? "Quarter checkpoint / buffer window" : "Standard coaching session";
+
+                Instant startInstant = SchedulingTimezones.toUtcInstant(slot.sessionDate(), start);
+                Instant endInstant = SchedulingTimezones.toUtcInstant(slot.sessionDate(), end);
+
+                boolean hasConflict = false;
+                String conflictDetails = null;
+
+                if (!participantEmpIds.isEmpty()) {
+                    AvailabilityCheckResponse check = reservationService.checkAvailability(new AvailabilityCheckRequest(
+                            participantEmpIds,
+                            startInstant,
+                            endInstant,
+                            "COACHING",
+                            null
+                    ));
+                    if (!check.available()) {
+                        hasConflict = true;
+                        ConflictDescriptor first = check.conflicts().get(0);
+                        conflictDetails = String.format("Conflict for %s (%s as %s)",
+                                first.employeeName(), first.conflictingModule(), first.conflictingRole());
+                    }
                 }
 
-                if (!nextOccurrence.isAfter(maxDate) && sequence <= target) {
+                generated.add(new GeneratedDatePreviewDto(
+                        sequence,
+                        slot.sessionDate(),
+                        slot.sessionDate().getDayOfWeek().name(),
+                        start,
+                        end,
+                        currentWeek,
+                        isBuffer,
+                        note,
+                        hasConflict,
+                        conflictDetails
+                ));
+                sequence++;
+            }
+        } else {
+            if (request.cadenceType() == CadenceType.TWICE_WEEKLY && days.size() < 2) {
+                days = List.of(DayOfWeek.TUESDAY, DayOfWeek.THURSDAY);
+            } else if (request.cadenceType() == CadenceType.THRICE_WEEKLY && days.size() < 3) {
+                days = List.of(DayOfWeek.MONDAY, DayOfWeek.WEDNESDAY, DayOfWeek.FRIDAY);
+            } else if (request.cadenceType() == CadenceType.EVERY_SATURDAY) {
+                days = List.of(DayOfWeek.SATURDAY);
+            }
+
+            LocalDate dateIter = startDate;
+            while (!dateIter.isAfter(maxDate) && sequence <= target) {
+                if (days.contains(dateIter.getDayOfWeek())) {
+                    if (request.cadenceType() == CadenceType.BIWEEKLY) {
+                        long weeksFromStart = java.time.temporal.ChronoUnit.WEEKS.between(startDate, dateIter);
+                        if (weeksFromStart % 2 != 0) {
+                            dateIter = dateIter.plusDays(1);
+                            continue;
+                        }
+                    }
+
                     LocalTime start = request.preferredStartTime();
+                    if (request.dayStartTimes() != null && request.dayStartTimes().containsKey(dateIter.getDayOfWeek().name())) {
+                        start = request.dayStartTimes().get(dateIter.getDayOfWeek().name());
+                    }
                     LocalTime end = start.plusMinutes(request.durationMinutes());
-                    
-                    int currentWeek = (int) (java.time.temporal.ChronoUnit.DAYS.between(startDate, nextOccurrence) / 7) + 1;
+
+                    LocalDate startMonday = startDate.with(java.time.temporal.TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY));
+                    LocalDate currentMonday = dateIter.with(java.time.temporal.TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY));
+                    int currentWeek = (int) java.time.temporal.ChronoUnit.WEEKS.between(startMonday, currentMonday) + 1;
                     boolean isBuffer = (currentWeek == 6 || currentWeek == 12);
                     String note = isBuffer ? "Quarter checkpoint / buffer window" : "Standard coaching session";
 
+                    Instant startInstant = SchedulingTimezones.toUtcInstant(dateIter, start);
+                    Instant endInstant = SchedulingTimezones.toUtcInstant(dateIter, end);
+
+                    boolean hasConflict = false;
+                    String conflictDetails = null;
+
+                    if (!participantEmpIds.isEmpty()) {
+                        AvailabilityCheckResponse check = reservationService.checkAvailability(new AvailabilityCheckRequest(
+                                participantEmpIds,
+                                startInstant,
+                                endInstant,
+                                "COACHING",
+                                null
+                        ));
+                        if (!check.available()) {
+                            hasConflict = true;
+                            ConflictDescriptor first = check.conflicts().get(0);
+                            conflictDetails = String.format("Conflict for %s (%s as %s)",
+                                    first.employeeName(), first.conflictingModule(), first.conflictingRole());
+                        }
+                    }
+
                     generated.add(new GeneratedDatePreviewDto(
                             sequence,
-                            nextOccurrence,
-                            targetDay.name(),
+                            dateIter,
+                            dateIter.getDayOfWeek().name(),
                             start,
                             end,
                             currentWeek,
                             isBuffer,
-                            note
+                            note,
+                            hasConflict,
+                            conflictDetails
                     ));
                     sequence++;
                 }
-            }
-
-            // Advance cursor according to cadence
-            if (request.cadenceType() == CadenceType.WEEKLY) {
-                cursor = cursor.plusWeeks(1);
-            } else if (request.cadenceType() == CadenceType.BIWEEKLY) {
-                cursor = cursor.plusWeeks(2);
-            } else if (request.cadenceType() == CadenceType.TWICE_WEEKLY) {
-                cursor = cursor.plusWeeks(1);
-            } else {
-                cursor = cursor.plusWeeks(1);
+                dateIter = dateIter.plusDays(1);
             }
         }
 
@@ -138,12 +319,19 @@ public class ScheduleSeriesGeneratorService {
                 ? "Only " + generatedCount + " of " + target + " sessions fit before the quarter end date (" + maxDate + "). Consider selecting an additional weekday or starting earlier."
                 : "All " + target + " sessions successfully distributed across the 12-week schedule window.";
 
+        boolean hasAnyConflict = generated.stream().anyMatch(GeneratedDatePreviewDto::hasConflict);
+        String conflictSummary = hasAnyConflict
+                ? "Schedule conflict detected: one or more dates overlap with an existing session in Coaching or Mentoring."
+                : null;
+
         return new SeriesPreviewResponse(
                 target,
                 generatedCount,
                 shortfall,
                 hasShortfall,
                 shortfallMessage,
+                hasAnyConflict,
+                conflictSummary,
                 generated
         );
     }
@@ -178,6 +366,15 @@ public class ScheduleSeriesGeneratorService {
             }
             pathway = AssignmentPathway.MANDATORY_PMS;
             coacheeEmpIds.add(assignment.getCoacheeEmployeeId());
+            if (request.additionalAssignmentIds() != null) {
+                for (Long addId : request.additionalAssignmentIds()) {
+                    assignmentRepository.findById(addId).ifPresent(addAss -> {
+                        if (addAss.getCoacheeEmployeeId() != null && !coacheeEmpIds.contains(addAss.getCoacheeEmployeeId())) {
+                            coacheeEmpIds.add(addAss.getCoacheeEmployeeId());
+                        }
+                    });
+                }
+            }
         } else {
             SkillCoachingRequest skillReq = skillRequestRepository.findById(request.skillRequestId())
                     .orElseThrow(() -> new ResourceNotFoundException("Skill request not found"));
@@ -193,7 +390,7 @@ public class ScheduleSeriesGeneratorService {
             targets.forEach(t -> coacheeEmpIds.add(t.getEmployeeId()));
         }
 
-        // Preview occurrences
+        // Preview occurrences with participant conflict check
         SeriesPreviewResponse preview = previewSeries(new SeriesPreviewRequest(
                 request.firstSessionDate(),
                 request.quarterEndDate(),
@@ -201,11 +398,20 @@ public class ScheduleSeriesGeneratorService {
                 request.daysOfWeek(),
                 request.preferredStartTime(),
                 request.durationMinutes(),
-                request.targetOccurrences()
+                request.targetOccurrences(),
+                request.assignmentId(),
+                request.skillRequestId(),
+                request.additionalAssignmentIds(),
+                request.dayStartTimes(),
+                request.customSessions()
         ));
 
         if (preview.generatedOccurrences() == 0) {
             throw new BusinessException("NO_OCCURRENCES_POSSIBLE", "No valid session dates could be generated with the given schedule window.");
+        }
+
+        if (preview.hasConflict()) {
+            throw new BusinessException("SCHEDULE_CONFLICT", preview.conflictSummary(), HttpStatus.CONFLICT);
         }
 
         // Save Series
@@ -227,14 +433,12 @@ public class ScheduleSeriesGeneratorService {
         series.setCreatedByUserId(actor.getUserId());
         CoachingScheduleSeries savedSeries = seriesRepository.save(series);
 
-        // Batch Generate Sessions
-        ZoneId zone = ZoneId.of("UTC"); // Standard UTC representation for DB timestamp
+        // Batch Generate Sessions and register in Core Scheduling Reservation Authority
         List<CoachingSessionDto> generatedSessions = new ArrayList<>();
 
         for (GeneratedDatePreviewDto p : preview.previewDates()) {
-            ZonedDateTime zdtStart = ZonedDateTime.of(p.sessionDate(), p.startTime(), zone);
-            Instant startInstant = zdtStart.toInstant();
-            Instant endInstant = startInstant.plus(Duration.ofMinutes(request.durationMinutes()));
+            Instant startInstant = SchedulingTimezones.toUtcInstant(p.sessionDate(), p.startTime());
+            Instant endInstant = SchedulingTimezones.toUtcInstant(p.sessionDate(), p.endTime());
 
             String dailyRoomName = null;
             String dailyRoomUrl = null;
@@ -267,7 +471,7 @@ public class ScheduleSeriesGeneratorService {
 
             CoachingSession savedSession = sessionRepository.save(session);
 
-            // Add Coach participant
+            // Add Coach participant in coaching schema
             SessionParticipant coachPart = new SessionParticipant();
             coachPart.setSessionId(savedSession.getId());
             coachPart.setEmployeeId(coachEmpId);
@@ -276,7 +480,7 @@ public class ScheduleSeriesGeneratorService {
             coachPart.setRespondedAt(Instant.now());
             participantRepository.save(coachPart);
 
-            // Add Coachee participants
+            // Add Coachee participants in coaching schema
             for (Long coacheeId : coacheeEmpIds) {
                 SessionParticipant coacheePart = new SessionParticipant();
                 coacheePart.setSessionId(savedSession.getId());
@@ -285,6 +489,30 @@ public class ScheduleSeriesGeneratorService {
                 coacheePart.setInvitationStatus(InvitationStatus.PENDING);
                 participantRepository.save(coacheePart);
             }
+
+            // Register immutable reservation in Core Scheduling Authority
+            List<CreateReservationCommand.ParticipantReservationInput> resParts = new ArrayList<>();
+            resParts.add(new CreateReservationCommand.ParticipantReservationInput(
+                    coachEmpId, com.boa.apid.core.scheduling.entity.ParticipationRole.COACH));
+            for (Long coacheeId : coacheeEmpIds) {
+                resParts.add(new CreateReservationCommand.ParticipantReservationInput(
+                        coacheeId, com.boa.apid.core.scheduling.entity.ParticipationRole.TALENT));
+            }
+
+            reservationService.reserve(new CreateReservationCommand(
+                    "COACHING",
+                    savedSession.getId(),
+                    savedSession.getTitle(),
+                    startInstant,
+                    endInstant,
+                    SchedulingTimezones.DEFAULT_ZONE_ID,
+                    series.getMeetingMode().name(),
+                    series.getMeetingLocation(),
+                    dailyRoomUrl,
+                    resParts
+            ));
+
+            generatedSessions.add(sessionService.toDto(savedSession));
         }
 
         auditService.record(new AuditService.AuditCommand(

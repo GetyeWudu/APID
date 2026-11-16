@@ -7,9 +7,12 @@ import {
   BarChart3,
   BookOpen,
   Building2,
+  Calendar,
+  CheckCircle2,
   ChevronLeft,
   ChevronRight,
   ClipboardCheck,
+  Clock,
   FileSpreadsheet,
   GitPullRequest,
   Home,
@@ -17,11 +20,13 @@ import {
   LayoutDashboard,
   LogOut,
   Menu,
+  MessageCircle,
   MessageSquare,
   RefreshCw,
   Settings2,
   ShieldCheck,
   SlidersHorizontal,
+  TrendingUp,
   UserCheck,
   Users,
   X,
@@ -108,44 +113,106 @@ export function AppLayout({ children }: { children: ReactNode }) {
     () => ({
       coaching: [
         {
-          id: 'coaching-personal',
-          label: 'My Coaching',
+          id: 'coaching-workspace',
+          label: 'My Workspace',
           items: [
             {
-              to: '/coaching',
-              label: 'My Coach & Plan',
-              icon: <ClipboardCheck size={17} />,
+              to: '/coaching?view=calendar',
+              label: 'Weekly Calendar',
+              icon: <Calendar size={17} />,
               requiredAnyPermissions: EMPLOYEE_WORKSPACE_PERMISSIONS,
-            },
-            {
-              to: '/coaching?view=sessions',
-              label: 'Sessions & Channel',
-              icon: <MessageSquare size={17} />,
-              requiredAnyPermissions: EMPLOYEE_WORKSPACE_PERMISSIONS,
-              matchSearch: '?view=sessions',
-            },
-            ...(canCoachDirectReports
-              ? [
-                  {
-                    to: '/coaching?view=coachees',
-                    label: 'People I Coach',
-                    icon: <UserCheck size={17} />,
-                    requiredAnyPermissions: EMPLOYEE_WORKSPACE_PERMISSIONS,
-                    matchSearch: '?view=coachees',
-                  },
-                ]
-              : []),
-            {
-              to: '/coaching?view=skills',
-              label: 'Skill Development',
-              icon: <Award size={17} />,
-              requiredAnyPermissions: EMPLOYEE_WORKSPACE_PERMISSIONS,
-              matchSearch: '?view=skills',
+              matchSearch: '?view=calendar',
             },
           ],
         },
         {
           id: 'coaching-pms',
+          label: '1-on-1 PMS Coaching',
+          items: [
+            ...(canCoachDirectReports
+              ? [
+                {
+                  to: '/coaching?view=coachees',
+                  label: 'My Coachees',
+                  icon: <UserCheck size={17} />,
+                  requiredAnyPermissions: EMPLOYEE_WORKSPACE_PERMISSIONS,
+                  matchSearch: '?view=coachees',
+                },
+              ]
+              : []),
+            {
+              to: '/coaching?view=plan',
+              label: 'My Remediation Plan',
+              icon: <ClipboardCheck size={17} />,
+              requiredAnyPermissions: EMPLOYEE_WORKSPACE_PERMISSIONS,
+              matchSearch: '?view=plan',
+            },
+            {
+              to: '/coaching?view=sessions',
+              label: 'Sessions & Scheduling',
+              icon: <Clock size={17} />,
+              requiredAnyPermissions: EMPLOYEE_WORKSPACE_PERMISSIONS,
+              matchSearch: '?view=sessions',
+            },
+            {
+              to: '/coaching?view=channel',
+              label: 'Coaching Channel',
+              icon: <MessageSquare size={17} />,
+              requiredAnyPermissions: EMPLOYEE_WORKSPACE_PERMISSIONS,
+              matchSearch: '?view=channel',
+            },
+            {
+              to: '/coaching?view=progress',
+              label: 'Progress & Feedback',
+              icon: <TrendingUp size={17} />,
+              requiredAnyPermissions: EMPLOYEE_WORKSPACE_PERMISSIONS,
+              matchSearch: '?view=progress',
+            },
+          ],
+        },
+        {
+          id: 'coaching-skills',
+          label: 'Skill Development',
+          items: [
+            {
+              to: '/coaching?view=skills&sub=cohorts',
+              label: 'My Skills & Cohorts',
+              icon: <Award size={17} />,
+              requiredAnyPermissions: EMPLOYEE_WORKSPACE_PERMISSIONS,
+              matchSearch: '?view=skills&sub=cohorts',
+            },
+            {
+              to: '/coaching?view=skills&sub=workshops',
+              label: 'Workshops & Scheduling',
+              icon: <Calendar size={17} />,
+              requiredAnyPermissions: EMPLOYEE_WORKSPACE_PERMISSIONS,
+              matchSearch: '?view=skills&sub=workshops',
+            },
+            {
+              to: '/coaching?view=skills&sub=discussions',
+              label: 'Cohort Discussions',
+              icon: <Users size={17} />,
+              requiredAnyPermissions: EMPLOYEE_WORKSPACE_PERMISSIONS,
+              matchSearch: '?view=skills&sub=discussions',
+            },
+            {
+              to: '/coaching?view=skills&sub=peers',
+              label: 'Peer Conversations',
+              icon: <MessageCircle size={17} />,
+              requiredAnyPermissions: EMPLOYEE_WORKSPACE_PERMISSIONS,
+              matchSearch: '?view=skills&sub=peers',
+            },
+            {
+              to: '/coaching?view=skills&sub=progress',
+              label: 'Individual Progress',
+              icon: <CheckCircle2 size={17} />,
+              requiredAnyPermissions: EMPLOYEE_WORKSPACE_PERMISSIONS,
+              matchSearch: '?view=skills&sub=progress',
+            },
+          ],
+        },
+        {
+          id: 'coaching-admin',
           label: 'PMS Administration',
           items: [
             {
@@ -378,7 +445,12 @@ export function AppLayout({ children }: { children: ReactNode }) {
     const basePath = item.to.split('?')[0];
     if (location.pathname !== basePath) return false;
     if (item.matchSearch) {
-      return location.search === item.matchSearch;
+      if (location.search === item.matchSearch) return true;
+      // Fallback for My Skills & Cohorts when ?view=skills is accessed without sub
+      if (item.matchSearch === '?view=skills&sub=cohorts' && location.search === '?view=skills') {
+        return true;
+      }
+      return false;
     }
     return !location.search.includes('tab=') && !location.search.includes('view=');
   };

@@ -8,5 +8,7 @@ import java.util.List;
 public interface SkillCoachingRequestTargetRepository extends JpaRepository<SkillCoachingRequestTarget, Long> {
 
     List<SkillCoachingRequestTarget> findAllByRequestId(Long requestId);
+
+    List<SkillCoachingRequestTarget> findAllByEmployeeId(Long employeeId);
 }
 

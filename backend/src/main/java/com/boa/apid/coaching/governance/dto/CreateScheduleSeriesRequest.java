@@ -7,6 +7,8 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import java.time.LocalDate;
 import java.time.LocalTime;
+import java.util.List;
+import java.util.Map;
 
 public record CreateScheduleSeriesRequest(
         Long assignmentId,
@@ -21,6 +23,8 @@ public record CreateScheduleSeriesRequest(
         @NotNull LocalDate firstSessionDate,
         LocalDate quarterEndDate,
         @NotNull @Min(1) Integer targetOccurrences,
-        Long targetPmsGoalId
+        Long targetPmsGoalId,
+        List<Long> additionalAssignmentIds,
+        Map<String, LocalTime> dayStartTimes,
+        List<CustomSessionSlotDto> customSessions
 ) {}
-

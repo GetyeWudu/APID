@@ -13,6 +13,8 @@ public interface SkillCoachingRequestRepository extends JpaRepository<SkillCoach
 
     List<SkillCoachingRequest> findAllByStatusOrderByCreatedAtDesc(SkillCoachingRequestStatus status);
 
+    List<SkillCoachingRequest> findAllByProposedCoachEmployeeIdAndStatus(Long proposedCoachEmployeeId, SkillCoachingRequestStatus status);
+
     List<SkillCoachingRequest> findAllByOrderByCreatedAtDesc();
 }
 

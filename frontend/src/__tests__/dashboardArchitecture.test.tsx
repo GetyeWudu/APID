@@ -220,10 +220,10 @@ describe('Portal Home module cards & scoped sidebar isolation', () => {
       '/coaching'
     );
 
-    expect(screen.getByText('My Coaching')).toBeInTheDocument();
-    expect(screen.getByText('My Coach & Plan')).toBeInTheDocument();
-    expect(screen.getByText('Sessions & Channel')).toBeInTheDocument();
-    expect(screen.getByText('People I Coach')).toBeInTheDocument();
+    expect(screen.getByText('1-on-1 PMS Coaching')).toBeInTheDocument();
+    expect(screen.getByText('My Remediation Plan')).toBeInTheDocument();
+    expect(screen.getByText('Sessions & Scheduling')).toBeInTheDocument();
+    expect(screen.getByText('My Coachees')).toBeInTheDocument();
     expect(screen.getByText('All Modules')).toBeInTheDocument();
 
     // Scoped away on Coaching page
@@ -636,7 +636,7 @@ describe('Phase 4 live SystemConfigPanel, NotificationBellPopover & AppLayout qu
           fiscalYear: '2026/27',
           quarter: 1,
           label: 'FY 2026/27 · Q1',
-          startDate: '2026-06-01',
+          startDate: '2026-07-01',
           endDate: '2026-09-30',
           active: false,
           locked: true,
@@ -665,7 +665,7 @@ describe('Phase 4 live SystemConfigPanel, NotificationBellPopover & AppLayout qu
       fiscalYear: '2026/27',
       quarter: 1,
       label: 'FY 2026/27 · Q1',
-      startDate: '2026-06-01',
+      startDate: '2026-07-01',
       endDate: '2026-09-30',
       active: true,
       locked: true,

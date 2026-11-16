@@ -19,6 +19,11 @@ export interface PublicConfigSettings {
   coachingMinRescheduleNoticeHours?: number;
   coachingMaxReschedulesPerSession?: number;
   coachingRequireDeclineReason?: boolean;
+  coachingMaxSessionsPerWeek?: number;
+  coachingAllowSaturdayScheduling?: boolean;
+  coachingRescheduleScope?: 'SAME_DAY_ONLY' | 'SAME_WEEK' | 'QUARTER_FLEXIBLE';
+  coachingAllowJointPmsGroup?: boolean;
+  coachingMaxJointGroupSize?: number;
 }
 
 export interface ActiveConfigSnapshot {

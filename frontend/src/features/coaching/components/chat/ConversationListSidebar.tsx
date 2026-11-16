@@ -13,26 +13,43 @@ import { ConversationSummaryDto } from '../../api/coachingCommunicationApi';
 interface ConversationListSidebarProps {
   conversations: ConversationSummaryDto[];
   activeConversationId: number | null;
+  filterContext: 'ALL' | 'MANDATORY' | 'SKILL_GROUP' | 'PEER';
+  onFilterChange: (filter: 'ALL' | 'MANDATORY' | 'SKILL_GROUP' | 'PEER') => void;
   onSelectConversation: (conv: ConversationSummaryDto) => void;
   onOpenPeerModal: () => void;
   currentUserId?: number;
+  mode?: 'ALL' | 'MANDATORY' | 'SKILL_GROUP' | 'PEER' | 'SKILLS';
 }
 
 export const ConversationListSidebar: React.FC<ConversationListSidebarProps> = ({
   conversations,
   activeConversationId,
+  filterContext,
+  onFilterChange,
   onSelectConversation,
   onOpenPeerModal,
+  mode = 'ALL',
 }) => {
   const [search, setSearch] = useState('');
-  const [filterContext, setFilterContext] = useState<'ALL' | 'MANDATORY' | 'SKILL_GROUP' | 'PEER'>('ALL');
 
   const filtered = useMemo(() => {
     return conversations.filter((c) => {
-      // Type filter
-      if (filterContext === 'MANDATORY' && c.contextType !== 'MANDATORY_ASSIGNMENT') return false;
-      if (filterContext === 'SKILL_GROUP' && c.contextType !== 'SKILL_COHORT_GROUP') return false;
-      if (filterContext === 'PEER' && c.contextType !== 'SKILL_PEER_DIRECT') return false;
+      // Type filter based on mode or filterContext
+      if (mode === 'MANDATORY') {
+        if (c.contextType !== 'MANDATORY_ASSIGNMENT') return false;
+      } else if (mode === 'SKILL_GROUP') {
+        if (c.contextType !== 'SKILL_COHORT_GROUP') return false;
+      } else if (mode === 'PEER') {
+        if (c.contextType !== 'SKILL_PEER_DIRECT') return false;
+      } else if (mode === 'SKILLS') {
+        if (c.contextType === 'MANDATORY_ASSIGNMENT') return false;
+        if (filterContext === 'SKILL_GROUP' && c.contextType !== 'SKILL_COHORT_GROUP') return false;
+        if (filterContext === 'PEER' && c.contextType !== 'SKILL_PEER_DIRECT') return false;
+      } else {
+        if (filterContext === 'MANDATORY' && c.contextType !== 'MANDATORY_ASSIGNMENT') return false;
+        if (filterContext === 'SKILL_GROUP' && c.contextType !== 'SKILL_COHORT_GROUP') return false;
+        if (filterContext === 'PEER' && c.contextType !== 'SKILL_PEER_DIRECT') return false;
+      }
 
       // Search query
       if (!search.trim()) return true;
@@ -142,26 +159,36 @@ export const ConversationListSidebar: React.FC<ConversationListSidebarProps> = (
       <div style={{ padding: '0.85rem 1rem', borderBottom: '1px solid var(--border, #e2e8f0)' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.65rem' }}>
           <h4 style={{ margin: 0, fontSize: '0.92rem', fontWeight: 700, color: 'var(--text, #0f172a)' }}>
-            Coaching Channels
+            {mode === 'MANDATORY'
+              ? 'PMS Coaching Channel'
+              : mode === 'SKILL_GROUP'
+              ? 'Cohort Discussions'
+              : mode === 'PEER'
+              ? 'Peer Conversations'
+              : mode === 'SKILLS'
+              ? 'Skill Channels'
+              : 'Coaching Channels'}
           </h4>
-          <button
-            type="button"
-            className="apid-btn apid-btn-outline"
-            onClick={onOpenPeerModal}
-            title="Start private 1-on-1 chat with a fellow cohort member"
-            style={{
-              padding: '0.25rem 0.55rem',
-              fontSize: '0.75rem',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '0.3rem',
-              borderColor: 'var(--brand-gold, #f59e0b)',
-              color: '#b45309',
-            }}
-          >
-            <PlusCircle size={13} />
-            <span>Peer Chat</span>
-          </button>
+          {(mode === 'ALL' || mode === 'PEER' || mode === 'SKILLS') && (
+            <button
+              type="button"
+              className="apid-btn apid-btn-outline"
+              onClick={onOpenPeerModal}
+              title="Start private 1-on-1 chat with a fellow cohort member"
+              style={{
+                padding: '0.25rem 0.55rem',
+                fontSize: '0.75rem',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '0.3rem',
+                borderColor: 'var(--brand-gold, #f59e0b)',
+                color: '#b45309',
+              }}
+            >
+              <PlusCircle size={13} />
+              <span>Peer Chat</span>
+            </button>
+          )}
         </div>
 
         {/* Search */}
@@ -194,40 +221,45 @@ export const ConversationListSidebar: React.FC<ConversationListSidebarProps> = (
           />
         </div>
 
-        {/* Filter Pills */}
-        <div style={{ display: 'flex', gap: '0.35rem', marginTop: '0.6rem', overflowX: 'auto' }}>
-          {(['ALL', 'MANDATORY', 'SKILL_GROUP', 'PEER'] as const).map((filter) => {
-            const label =
-              filter === 'ALL'
-                ? 'All'
-                : filter === 'MANDATORY'
-                ? 'Mandatory'
-                : filter === 'SKILL_GROUP'
-                ? 'Cohorts'
-                : 'Peers';
-            const isActive = filterContext === filter;
-            return (
-              <button
-                key={filter}
-                type="button"
-                onClick={() => setFilterContext(filter)}
-                style={{
-                  padding: '0.18rem 0.55rem',
-                  fontSize: '0.72rem',
-                  fontWeight: isActive ? 700 : 500,
-                  borderRadius: '20px',
-                  border: isActive ? '1px solid #0284c7' : '1px solid var(--border, #e2e8f0)',
-                  background: isActive ? 'rgba(2, 132, 199, 0.1)' : 'var(--surface, #ffffff)',
-                  color: isActive ? '#0284c7' : 'var(--muted, #64748b)',
-                  cursor: 'pointer',
-                  whiteSpace: 'nowrap',
-                }}
-              >
-                {label}
-              </button>
-            );
-          })}
-        </div>
+        {/* Filter Pills (Only shown when mode allows multiple contexts) */}
+        {(mode === 'ALL' || mode === 'SKILLS') && (
+          <div style={{ display: 'flex', gap: '0.35rem', marginTop: '0.6rem', overflowX: 'auto' }}>
+            {(mode === 'SKILLS'
+              ? (['SKILL_GROUP', 'PEER'] as const)
+              : (['ALL', 'MANDATORY', 'SKILL_GROUP', 'PEER'] as const)
+            ).map((filter) => {
+              const label =
+                filter === 'ALL'
+                  ? 'All'
+                  : filter === 'MANDATORY'
+                  ? 'Mandatory'
+                  : filter === 'SKILL_GROUP'
+                  ? 'Cohorts'
+                  : 'Peers';
+              const isActive = filterContext === filter;
+              return (
+                <button
+                  key={filter}
+                  type="button"
+                  onClick={() => onFilterChange(filter)}
+                  style={{
+                    padding: '0.18rem 0.55rem',
+                    fontSize: '0.72rem',
+                    fontWeight: isActive ? 700 : 500,
+                    borderRadius: '20px',
+                    border: isActive ? '1px solid #0284c7' : '1px solid var(--border, #e2e8f0)',
+                    background: isActive ? 'rgba(2, 132, 199, 0.1)' : 'var(--surface, #ffffff)',
+                    color: isActive ? '#0284c7' : 'var(--muted, #64748b)',
+                    cursor: 'pointer',
+                    whiteSpace: 'nowrap',
+                  }}
+                >
+                  {label}
+                </button>
+              );
+            })}
+          </div>
+        )}
       </div>
 
       {/* Conversation List */}

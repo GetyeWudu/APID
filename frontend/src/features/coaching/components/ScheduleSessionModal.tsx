@@ -4,26 +4,30 @@ import { Calendar, Video, Phone, MapPin, X, Target, AlertTriangle } from 'lucide
 import { coachingSessionApi, CreateSessionPayload, SessionMeetingMode } from '../api/coachingSessionApi';
 import { coachingAssignmentApi, MyCoacheeItem } from '../api/coachingAssignmentApi';
 import { skillCoachingRequestApi, SkillCoachingRequestItem } from '../api/skillCoachingRequestApi';
+import { BANK_OPERATING_TIME_OPTIONS, toEthiopianTime } from '../utils/ethiopianTimeUtils';
 
 interface ScheduleSessionModalProps {
   isOpen: boolean;
   onClose: () => void;
   myCoachees: MyCoacheeItem[];
+  mode?: 'MANDATORY_PMS' | 'SELF_DEVELOPMENT';
 }
 
 export const ScheduleSessionModal: React.FC<ScheduleSessionModalProps> = ({
   isOpen,
   onClose,
   myCoachees,
+  mode,
 }) => {
   const queryClient = useQueryClient();
 
-  const [sessionType, setSessionType] = useState<'MANDATORY_PMS' | 'SELF_DEVELOPMENT'>('MANDATORY_PMS');
+  const [sessionType, setSessionType] = useState<'MANDATORY_PMS' | 'SELF_DEVELOPMENT'>(mode ?? 'MANDATORY_PMS');
   const [selectedAssignmentId, setSelectedAssignmentId] = useState<number | ''>('');
+  const [additionalAssignmentIds, setAdditionalAssignmentIds] = useState<number[]>([]);
   const [selectedSkillRequestId, setSelectedSkillRequestId] = useState<number | ''>('');
   const [title, setTitle] = useState('');
   const [startDate, setStartDate] = useState('');
-  const [startTime, setStartTime] = useState('');
+  const [startTime, setStartTime] = useState('15:00');
   const [duration, setDuration] = useState<number>(45);
   const [meetingMode, setMeetingMode] = useState<SessionMeetingMode>('VIRTUAL_VIDEO');
   const [meetingLocation, setMeetingLocation] = useState('');
@@ -96,6 +100,12 @@ export const ScheduleSessionModal: React.FC<ScheduleSessionModalProps> = ({
       return;
     }
 
+    const dateObj = new Date(`${startDate}T12:00:00`);
+    if (dateObj.getDay() === 0) {
+      setError('Sunday sessions are not permitted. Bank operations run Monday to Saturday.');
+      return;
+    }
+
     const scheduledStartTime = new Date(`${startDate}T${startTime}:00`).toISOString();
 
     const payload: CreateSessionPayload = {
@@ -105,6 +115,7 @@ export const ScheduleSessionModal: React.FC<ScheduleSessionModalProps> = ({
       meetingMode,
       meetingLocation: meetingLocation.trim() || undefined,
       targetPmsGoalId: selectedGoalId ? Number(selectedGoalId) : undefined,
+      additionalAssignmentIds: sessionType === 'MANDATORY_PMS' && additionalAssignmentIds.length > 0 ? additionalAssignmentIds : undefined,
     };
 
     if (sessionType === 'MANDATORY_PMS') {
@@ -174,10 +185,18 @@ export const ScheduleSessionModal: React.FC<ScheduleSessionModalProps> = ({
             <Calendar size={22} color="var(--gold-primary)" />
             <div>
               <h3 className="boa-card-title" style={{ margin: 0, fontSize: '1.2rem' }}>
-                Schedule Coaching Session
+                {mode === 'MANDATORY_PMS'
+                  ? 'Schedule PMS Remediation Session'
+                  : mode === 'SELF_DEVELOPMENT'
+                  ? 'Schedule Skill Development Workshop'
+                  : 'Schedule Coaching Session'}
               </h3>
               <p className="boa-card-subtitle" style={{ margin: 0 }}>
-                Set up a 1-on-1 PMS touchpoint or group skill-development session.
+                {mode === 'MANDATORY_PMS'
+                  ? 'Set up a mandatory performance appraisal remediation meeting.'
+                  : mode === 'SELF_DEVELOPMENT'
+                  ? 'Set up a skill development workshop for your approved cohort.'
+                  : 'Set up a 1-on-1 PMS touchpoint or group skill-development session.'}
               </p>
             </div>
           </div>
@@ -195,69 +214,173 @@ export const ScheduleSessionModal: React.FC<ScheduleSessionModalProps> = ({
             </div>
           )}
 
-          {/* Session Pathway Picker */}
-          <div className="apid-field" style={{ marginBottom: '1rem' }}>
-            <label style={{ fontWeight: 600 }}>Coaching Pathway</label>
-            <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.25rem' }}>
-              <button
-                type="button"
-                className={`apid-btn ${sessionType === 'MANDATORY_PMS' ? 'apid-btn-primary' : 'apid-btn-secondary'}`}
-                style={{ flex: 1 }}
-                onClick={() => {
-                  setSessionType('MANDATORY_PMS');
-                  setSelectedSkillRequestId('');
-                  if (mandatoryCoachees.length > 0 && !selectedAssignmentId) {
-                    setSelectedAssignmentId(mandatoryCoachees[0].assignmentId);
-                    setTitle(`PMS 1-on-1 Coaching: ${mandatoryCoachees[0].coacheeFullName}`);
-                  }
-                }}
-              >
-                1-on-1 Mandatory PMS
-              </button>
-              <button
-                type="button"
-                className={`apid-btn ${sessionType === 'SELF_DEVELOPMENT' ? 'apid-btn-primary' : 'apid-btn-secondary'}`}
-                style={{ flex: 1 }}
-                onClick={() => {
-                  setSessionType('SELF_DEVELOPMENT');
-                  setSelectedAssignmentId('');
-                  if (approvedSkillRequests.length > 0 && !selectedSkillRequestId) {
-                    setSelectedSkillRequestId(approvedSkillRequests[0].id);
-                    setTitle(`Skill Cohort: ${approvedSkillRequests[0].skillTitle}`);
-                  }
-                }}
-              >
-                Skill Development Cohort
-              </button>
+          {/* Session Pathway Picker (Only shown when mode is not preset) */}
+          {!mode && (
+            <div className="apid-field" style={{ marginBottom: '1rem' }}>
+              <label style={{ fontWeight: 600 }}>Coaching Pathway</label>
+              <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.25rem' }}>
+                <button
+                  type="button"
+                  className={`apid-btn ${sessionType === 'MANDATORY_PMS' ? 'apid-btn-primary' : 'apid-btn-secondary'}`}
+                  style={{ flex: 1 }}
+                  onClick={() => {
+                    setSessionType('MANDATORY_PMS');
+                    setSelectedSkillRequestId('');
+                    if (mandatoryCoachees.length > 0 && !selectedAssignmentId) {
+                      setSelectedAssignmentId(mandatoryCoachees[0].assignmentId);
+                      setTitle(`PMS 1-on-1 Coaching: ${mandatoryCoachees[0].coacheeFullName}`);
+                    }
+                  }}
+                >
+                  1-on-1 Mandatory PMS
+                </button>
+                <button
+                  type="button"
+                  className={`apid-btn ${sessionType === 'SELF_DEVELOPMENT' ? 'apid-btn-primary' : 'apid-btn-secondary'}`}
+                  style={{ flex: 1 }}
+                  onClick={() => {
+                    setSessionType('SELF_DEVELOPMENT');
+                    setSelectedAssignmentId('');
+                    if ((skillRequestsQuery.data || []).length > 0) {
+                      const first = skillRequestsQuery.data![0];
+                      setSelectedSkillRequestId(first.id);
+                      setTitle(`Skill Cohort: ${first.skillTitle}`);
+                    }
+                  }}
+                >
+                  Skill Development Cohort
+                </button>
+              </div>
             </div>
-          </div>
+          )}
 
           {/* Target Coachee or Skill Cohort */}
           {sessionType === 'MANDATORY_PMS' ? (
             <div className="apid-field" style={{ marginBottom: '1rem' }}>
-              <label htmlFor="select-coachee" style={{ fontWeight: 600 }}>
-                Select Assigned Coachee *
-              </label>
-              <select
-                id="select-coachee"
-                className="apid-input"
-                value={selectedAssignmentId}
-                onChange={(e) => {
-                  const val = Number(e.target.value);
-                  setSelectedAssignmentId(val);
-                  const found = mandatoryCoachees.find((c) => c.assignmentId === val);
-                  if (found) setTitle(`PMS 1-on-1 Coaching: ${found.coacheeFullName}`);
+              <div
+                style={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  marginBottom: '0.4rem',
                 }}
-                required
               >
-                <option value="">-- Select assigned coachee --</option>
-                {coacheesQuery.isLoading && <option value="" disabled>Loading assigned coachees...</option>}
-                {mandatoryCoachees.map((c) => (
-                  <option key={c.assignmentId} value={c.assignmentId}>
-                    {c.coacheeFullName} ({c.coacheeEmployeeNumber}) · {c.coacheeDepartment ?? 'Branch'}
-                  </option>
-                ))}
-              </select>
+                <label style={{ fontWeight: 600 }}>
+                  Select Assigned Coachee(s) *
+                </label>
+                <span
+                  style={{
+                    fontSize: '0.78rem',
+                    fontWeight: 700,
+                    padding: '0.15rem 0.5rem',
+                    borderRadius: '12px',
+                    background: selectedAssignmentId
+                      ? additionalAssignmentIds.length > 0
+                        ? 'rgba(99, 102, 241, 0.15)'
+                        : 'rgba(245, 158, 11, 0.15)'
+                      : 'rgba(239, 68, 68, 0.1)',
+                    color: selectedAssignmentId
+                      ? additionalAssignmentIds.length > 0
+                        ? '#6366f1'
+                        : 'var(--gold-primary)'
+                      : '#ef4444',
+                  }}
+                >
+                  {!selectedAssignmentId
+                    ? '⚠️ Select at least 1 coachee'
+                    : additionalAssignmentIds.length === 0
+                    ? '👤 1-on-1 PMS Session'
+                    : `👥 Joint Group Remediation (${1 + additionalAssignmentIds.length} Coachees)`}
+                </span>
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '0.5rem' }}>
+                {mandatoryCoachees.map((c) => {
+                  const isPrimary = Number(selectedAssignmentId) === c.assignmentId;
+                  const isAdditional = additionalAssignmentIds.includes(c.assignmentId);
+                  const isSelected = isPrimary || isAdditional;
+
+                  return (
+                    <div
+                      key={c.assignmentId}
+                      onClick={() => {
+                        if (isSelected) {
+                          if (isPrimary) {
+                            if (additionalAssignmentIds.length > 0) {
+                              const nextPrimary = additionalAssignmentIds[0];
+                              setSelectedAssignmentId(nextPrimary);
+                              setAdditionalAssignmentIds((prev) => prev.slice(1));
+                              const found = mandatoryCoachees.find((m) => m.assignmentId === nextPrimary);
+                              if (found) setTitle(`PMS 1-on-1 Coaching: ${found.coacheeFullName}`);
+                            } else {
+                              setSelectedAssignmentId('');
+                              setTitle('');
+                            }
+                          } else {
+                            const remaining = additionalAssignmentIds.filter((id) => id !== c.assignmentId);
+                            setAdditionalAssignmentIds(remaining);
+                            const primaryC = mandatoryCoachees.find((m) => m.assignmentId === Number(selectedAssignmentId));
+                            if (remaining.length === 0 && primaryC) {
+                              setTitle(`PMS 1-on-1 Coaching: ${primaryC.coacheeFullName}`);
+                            } else if (primaryC) {
+                              const others = mandatoryCoachees.filter((m) => remaining.includes(m.assignmentId));
+                              setTitle(`PMS Joint Coaching: ${primaryC.coacheeFullName}, ${others.map((o) => o.coacheeFullName).join(', ')}`);
+                            }
+                          }
+                        } else {
+                          if (!selectedAssignmentId) {
+                            setSelectedAssignmentId(c.assignmentId);
+                            setTitle(`PMS 1-on-1 Coaching: ${c.coacheeFullName}`);
+                          } else {
+                            const newAdditional = [...additionalAssignmentIds, c.assignmentId];
+                            setAdditionalAssignmentIds(newAdditional);
+                            const primaryC = mandatoryCoachees.find((m) => m.assignmentId === Number(selectedAssignmentId));
+                            const others = mandatoryCoachees.filter((m) => newAdditional.includes(m.assignmentId));
+                            setTitle(`PMS Joint Coaching: ${primaryC?.coacheeFullName || ''}, ${others.map((o) => o.coacheeFullName).join(', ')}`);
+                          }
+                        }
+                      }}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '0.65rem',
+                        padding: '0.6rem 0.8rem',
+                        borderRadius: '8px',
+                        border: isSelected ? '2px solid var(--gold-primary)' : '1px solid var(--border)',
+                        background: isSelected ? 'rgba(245, 158, 11, 0.08)' : 'var(--surface)',
+                        cursor: 'pointer',
+                      }}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={isSelected}
+                        onChange={() => {}} // handled by div
+                        style={{ width: 17, height: 17, cursor: 'pointer' }}
+                      />
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                          <strong style={{ fontSize: '0.86rem', color: 'var(--text)' }}>{c.coacheeFullName}</strong>
+                          <span
+                            style={{
+                              fontSize: '0.7rem',
+                              padding: '0.1rem 0.35rem',
+                              borderRadius: '4px',
+                              background: 'rgba(239, 68, 68, 0.1)',
+                              color: '#ef4444',
+                              fontWeight: 700,
+                            }}
+                          >
+                            Score &lt; 3.0
+                          </span>
+                        </div>
+                        <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                          {c.coacheeEmployeeNumber} • {c.coacheeDepartment || 'Branch Operations'}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
             </div>
           ) : (
             <div className="apid-field" style={{ marginBottom: '1rem' }}>
@@ -327,7 +450,7 @@ export const ScheduleSessionModal: React.FC<ScheduleSessionModalProps> = ({
           )}
 
           {/* Date, Time & Duration */}
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '0.75rem', marginBottom: '1rem' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1.3fr 1fr', gap: '0.75rem', marginBottom: '1rem' }}>
             <div className="apid-field">
               <label htmlFor="session-date" style={{ fontWeight: 600 }}>Date *</label>
               <input
@@ -341,15 +464,25 @@ export const ScheduleSessionModal: React.FC<ScheduleSessionModalProps> = ({
             </div>
 
             <div className="apid-field">
-              <label htmlFor="session-time" style={{ fontWeight: 600 }}>Start Time *</label>
-              <input
+              <label htmlFor="session-time" style={{ fontWeight: 600 }}>Time (የኢትዮጵያ ሰዓት) *</label>
+              <select
                 id="session-time"
-                type="time"
                 className="apid-input"
                 value={startTime}
                 onChange={(e) => setStartTime(e.target.value)}
                 required
-              />
+              >
+                {BANK_OPERATING_TIME_OPTIONS.map((opt) => (
+                  <option key={opt.timeValue24} value={opt.timeValue24}>
+                    {opt.labelDual}
+                  </option>
+                ))}
+              </select>
+              {startTime && (
+                <div style={{ marginTop: '0.2rem', fontSize: '0.72rem', color: 'var(--gold-primary)', fontWeight: 600 }}>
+                  የኢትዮጵያ ሰዓት: {toEthiopianTime(startTime).formattedDual}
+                </div>
+              )}
             </div>
 
             <div className="apid-field">

@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { Award, Building2, ChevronDown, ChevronUp, Eye, MessageSquare, ShieldAlert, UserCheck, UserPlus } from 'lucide-react';
+import { Building2, Eye, MessageSquare, ShieldAlert, UserCheck } from 'lucide-react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../../../app/AuthContext';
 import { EMPLOYEE_WORKSPACE_PERMISSIONS } from '../../../shared/auth/workspaceResolver';
@@ -18,22 +18,27 @@ import { CoachingChatHub } from '../components/chat/CoachingChatHub';
 import { coachingAssignmentApi, type MyCoacheeItem } from '../api/coachingAssignmentApi';
 import { classifyRating, RATING_BAND_METADATA } from '../utils/ratingClassification';
 import { RequestSkillCoachingModal } from '../components/RequestSkillCoachingModal';
-import { SkillCoachingRequestsList } from '../components/SkillCoachingRequestsList';
 import { EmployeeGoalsModal } from '../components/EmployeeGoalsModal';
 import { CoachingSessionsTab } from '../components/CoachingSessionsTab';
+import { UnifiedCalendarTab } from '../components/calendar/UnifiedCalendarTab';
+import { SkillCohortHubTab } from '../components/skills/SkillCohortHubTab';
 
-type CoachingViewKey = 'plan' | 'sessions' | 'coachees' | 'skills';
+type CoachingViewKey = 'plan' | 'sessions' | 'channel' | 'progress' | 'calendar' | 'coachees' | 'skills';
 
 export function CoachingHomePage() {
   const { user, hasPermission, hasAnyPermission } = useAuth();
   const [searchParams] = useSearchParams();
   const [isSkillModalOpen, setIsSkillModalOpen] = useState(false);
   const [selectedGoalEmployee, setSelectedGoalEmployee] = useState<{ id: number; name?: string } | null>(null);
-  const [isChatOpen, setIsChatOpen] = useState(true);
 
   const requestedView = searchParams.get('view') as CoachingViewKey | null;
   const activeView: CoachingViewKey =
-    requestedView === 'sessions' || requestedView === 'coachees' || requestedView === 'skills'
+    requestedView === 'sessions' ||
+    requestedView === 'channel' ||
+    requestedView === 'progress' ||
+    requestedView === 'calendar' ||
+    requestedView === 'coachees' ||
+    requestedView === 'skills'
       ? requestedView
       : 'plan';
 
@@ -56,7 +61,7 @@ export function CoachingHomePage() {
   const myCoachingQuery = useQuery({
     queryKey: ['coaching', 'my-coaching'],
     queryFn: coachingAssignmentApi.getMyCoaching,
-    enabled: activeView === 'plan' || activeView === 'skills',
+    enabled: activeView === 'plan' || activeView === 'skills' || activeView === 'progress',
     retry: false,
   });
 
@@ -64,7 +69,7 @@ export function CoachingHomePage() {
   const myCoacheesQuery = useQuery({
     queryKey: ['coaching', 'my-coachees'],
     queryFn: coachingAssignmentApi.getMyCoachees,
-    enabled: activeView === 'coachees' || activeView === 'skills' || activeView === 'sessions',
+    enabled: activeView === 'coachees' || activeView === 'skills' || activeView === 'sessions' || activeView === 'progress',
     retry: false,
   });
 
@@ -140,23 +145,38 @@ export function CoachingHomePage() {
   const viewMeta =
     activeView === 'skills'
       ? {
-        title: 'Skill-Development Coaching',
-        subtitle: 'Request skill coaching for direct & team staff, designate coaches (line manager, higher manager, or specialist), and track PMS approvals.',
-      }
+          title: 'Skill Development (Cohort Hub)',
+          subtitle: 'Collaborative capability building, workshops, and cohort discussions.',
+        }
       : activeView === 'coachees'
-        ? {
-          title: 'People I Coach & Team',
+      ? {
+          title: 'My Coachees & Direct Reports',
           subtitle: 'Manage assigned coachees, review team progress, and support direct reports.',
         }
-        : activeView === 'sessions'
-          ? {
-            title: 'Sessions & Coaching Channel',
-            subtitle: 'Upcoming coaching meetings and private coach ↔ talent communication.',
-          }
-          : {
-            title: 'My Coach & Action Plan',
-            subtitle: 'Your current coaching pathway, assigned coach, and triggering performance details.',
-          };
+      : activeView === 'calendar'
+      ? {
+          title: 'Weekly Schedule & Calendar',
+          subtitle: 'Unified weekly timetable across Coaching & Mentoring with local Ethiopian Time (EAT).',
+        }
+      : activeView === 'sessions'
+      ? {
+          title: 'PMS Remediation Sessions & Scheduling',
+          subtitle: 'Scheduled 1-on-1 and small group mandatory performance coaching sessions.',
+        }
+      : activeView === 'channel'
+      ? {
+          title: 'PMS Coaching Channel',
+          subtitle: 'Confidential audit-logged communication between Coach and Coachee for mandatory appraisal remediation.',
+        }
+      : activeView === 'progress'
+      ? {
+          title: 'Appraisal Progress & Feedback',
+          subtitle: 'Formal evaluation records, remediation outcomes, and quarter milestones.',
+        }
+      : {
+          title: 'My Remediation Plan & Coach',
+          subtitle: 'Your active performance coaching pathway, assigned coach, and triggering appraisal details.',
+        };
 
   // Render live plan panel (Mandatory PMS appraisal coaching only)
   const renderMyPlan = () => {
@@ -504,215 +524,15 @@ export function CoachingHomePage() {
         </div>
       )}
 
-      {/* Skills View: Dedicated Skill-Development Coaching Hub */}
+      {/* Skills View: Dedicated Skill-Development Cohort Hub */}
       {activeView === 'skills' && (
-        <div className="boa-stack">
-          {/* For Managers: Action Banner to Request Skill Coaching */}
-          {directReports.length > 0 && (
-            <div
-              className="apid-card"
-              style={{
-                background: 'linear-gradient(135deg, rgba(202, 138, 4, 0.08) 0%, rgba(15, 23, 42, 0.03) 100%)',
-                border: '1px solid rgba(202, 138, 4, 0.25)',
-              }}
-            >
-              <div
-                style={{
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  alignItems: 'center',
-                  flexWrap: 'wrap',
-                  gap: '1rem',
-                }}
-              >
-                <div>
-                  <h3
-                    style={{
-                      margin: 0,
-                      fontSize: '1.1rem',
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '0.45rem',
-                    }}
-                  >
-                    <Award size={20} style={{ color: 'var(--brand-gold, #ca8a04)' }} />
-                    Targeted Skill Development Hub
-                  </h3>
-                  <p className="boa-muted" style={{ margin: '0.35rem 0 0 0', fontSize: '0.86rem', maxWidth: 640 }}>
-                    Nominate staff for mandatory or strategic capability growth. You can coach direct reports yourself as Line Manager, or designate your Higher Manager or a Bank Specialist to coach. All requests flow to PMS Admin for formal approval.
-                  </p>
-                </div>
-                <button
-                  type="button"
-                  className="apid-btn apid-btn-primary"
-                  onClick={() => setIsSkillModalOpen(true)}
-                >
-                  <UserPlus size={15} style={{ marginRight: '0.35rem' }} />
-                  Request Skill Coaching
-                </button>
-              </div>
-            </div>
-          )}
-
-          {/* Enrolled Skill Coaching Courses (For employees receiving skill coaching, e.g. Lidia & Azeb) */}
-          {(() => {
-            const enrolledSkills = (myCoachingQuery.data?.activePlans ?? []).filter(
-              (p) => p.pathway === 'SELF_DEVELOPMENT'
-            );
-            if (enrolledSkills.length === 0 && directReports.length === 0) {
-              return (
-                <div className="apid-card">
-                  <div className="boa-card-header">
-                    <div>
-                      <h3 className="boa-card-title">My Enrolled Skill Coaching</h3>
-                      <p className="boa-card-subtitle">Active skill-development coaching plans assigned to you.</p>
-                    </div>
-                    <DataSourceBadge source="live" />
-                  </div>
-                  <EmptyState
-                    title="No Skill Development Assigned"
-                    description="You are not currently enrolled in any skill development coaching programs. When your line manager requests skill training for you and it is approved by PMS, it will appear here."
-                    icon={<Award size={32} />}
-                  />
-                </div>
-              );
-            }
-            if (enrolledSkills.length > 0) {
-              return (
-                <div className="boa-stack">
-                  {enrolledSkills.map((plan) => (
-                    <div key={plan.assignmentId} className="apid-card">
-                      <div className="boa-card-header">
-                        <div>
-                          <h3 className="boa-card-title">My Enrolled Skill Coaching</h3>
-                          <p className="boa-card-subtitle">
-                            Pathway: <strong>SELF DEVELOPMENT</strong> · Cycle:{' '}
-                            <strong>{plan.coachingQuarterLabel ?? 'Current'}</strong>
-                          </p>
-                        </div>
-                        <div style={{ display: 'flex', gap: '0.4rem', alignItems: 'center' }}>
-                          <DataSourceBadge source="live" />
-                          <StatusPill
-                            label={plan.atRisk ? 'AT RISK' : plan.status}
-                            tone={plan.atRisk ? 'err' : plan.status === 'ACTIVE' ? 'ok' : 'warn'}
-                          />
-                        </div>
-                      </div>
-
-                      {/* Coach details */}
-                      <div
-                        style={{
-                          background: 'var(--surface-subtle)',
-                          padding: '1rem',
-                          borderRadius: 8,
-                          border: '1px solid var(--border)',
-                          marginTop: '0.5rem',
-                        }}
-                      >
-                        <div style={{ fontSize: '0.78rem', fontWeight: 600, color: 'var(--muted)' }}>
-                          ASSIGNED COACH
-                        </div>
-                        {plan.coachFullName ? (
-                          <div style={{ marginTop: '0.25rem' }}>
-                            <div style={{ fontWeight: 700, fontSize: '1.05rem' }}>{plan.coachFullName}</div>
-                            <div className="boa-muted" style={{ fontSize: '0.84rem' }}>
-                              {plan.coachJobTitle ? `${plan.coachJobTitle} · ` : ''}
-                              {plan.coachDepartment ?? 'Bank of Abyssinia'}
-                            </div>
-                          </div>
-                        ) : (
-                          <div className="apid-alert apid-alert-warn" style={{ marginTop: '0.4rem' }}>
-                            A coach has not been designated for your assignment yet.
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              );
-            }
-            return null;
-          })()}
-
-          {/* Staff I Coach in Skill Development (Direct view showing Azeb, Lidia, etc. assigned to this coach) */}
-          {(() => {
-            const skillCoachees = (Array.isArray(myCoacheesQuery.data) ? myCoacheesQuery.data : []).filter(
-              (c) => c.pathway === 'SELF_DEVELOPMENT'
-            );
-            if (skillCoachees.length === 0) return null;
-            return (
-              <div className="apid-card" style={{ marginTop: '1rem' }}>
-                <div className="boa-card-header">
-                  <div>
-                    <h3 className="boa-card-title">Staff I Coach in Skill Development</h3>
-                    <p className="boa-card-subtitle">
-                      Employees currently assigned to you for quarterly skill-growth coaching ({skillCoachees.length} staff).
-                    </p>
-                  </div>
-                  <DataSourceBadge source="live" />
-                </div>
-                <div className="apid-table-wrap">
-                  <table className="apid-table">
-                    <thead>
-                      <tr>
-                        <th>Emp #</th>
-                        <th>Coachee Name</th>
-                        <th>Department</th>
-                        <th>Position</th>
-                        <th>Quarter</th>
-                        <th>Status</th>
-                        <th style={{ textAlign: 'right' }}>Actions</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {skillCoachees.map((c) => (
-                        <tr
-                          key={c.assignmentId}
-                          style={{ cursor: 'pointer' }}
-                          onClick={() => setSelectedGoalEmployee({ id: c.coacheeEmployeeId, name: c.coacheeFullName })}
-                          title="Click row to view detailed individual PMS goals"
-                        >
-                          <td className="tabular-nums">
-                            <strong>{c.coacheeEmployeeNumber}</strong>
-                          </td>
-                          <td>
-                            <div style={{ fontWeight: 600 }}>{c.coacheeFullName}</div>
-                          </td>
-                          <td>{c.coacheeDepartment ?? '—'}</td>
-                          <td>{c.coacheeJobTitle ?? '—'}</td>
-                          <td>{c.coachingQuarterLabel ?? 'Current'}</td>
-                          <td>
-                            <StatusPill
-                              label={c.atRisk ? 'AT RISK' : c.status}
-                              tone={c.atRisk ? 'err' : c.status === 'ACTIVE' ? 'ok' : 'warn'}
-                            />
-                          </td>
-                          <td style={{ textAlign: 'right' }}>
-                            <button
-                              type="button"
-                              className="apid-btn apid-btn-outline"
-                              style={{ padding: '0.25rem 0.6rem', fontSize: '0.78rem' }}
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setSelectedGoalEmployee({ id: c.coacheeEmployeeId, name: c.coacheeFullName });
-                              }}
-                            >
-                              <Eye size={13} style={{ marginRight: '0.3rem' }} />
-                              View Goals
-                            </button>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            );
-          })()}
-
-          {/* For Managers Only: Submitted Skill Development Requests Tracker */}
-          {directReports.length > 0 && <SkillCoachingRequestsList />}
-        </div>
+        <SkillCohortHubTab
+          currentEmployee={linkedEmployee}
+          directReports={directReports}
+          myCoachees={Array.isArray(myCoacheesQuery.data) ? myCoacheesQuery.data : []}
+          activeQuarterId={activeConfigQuery.data?.activeQuarter?.quarterId}
+          activeQuarterLabel={activeConfigQuery.data?.activeQuarter?.label}
+        />
       )}
 
       {/* Employee Individual PMS Goals Breakdown Modal */}
@@ -723,8 +543,8 @@ export function CoachingHomePage() {
         onClose={() => setSelectedGoalEmployee(null)}
       />
 
-      {/* Request Skill Coaching Modal */}
-      {(activeView === 'coachees' || activeView === 'skills') && activeConfigQuery.data?.activeQuarter && (
+      {/* Request Skill Coaching Modal (When triggered from People I Coach) */}
+      {activeView === 'coachees' && activeConfigQuery.data?.activeQuarter && (
         <RequestSkillCoachingModal
           isOpen={isSkillModalOpen}
           onClose={() => setIsSkillModalOpen(false)}
@@ -735,15 +555,25 @@ export function CoachingHomePage() {
         />
       )}
 
-      {/* Sessions View: Sessions List, Scheduling & Private Coach Channel */}
+      {/* Unified Calendar View */}
+      {activeView === 'calendar' && (
+        <UnifiedCalendarTab />
+      )}
+
+      {/* Sessions View: PMS Remediation Sessions List & Scheduling */}
       {activeView === 'sessions' && (
         <div className="boa-stack">
           <CoachingSessionsTab
             myCoachees={Array.isArray(myCoacheesQuery.data) ? myCoacheesQuery.data : []}
             currentEmployeeId={linkedEmployee.id}
+            mode="PMS"
           />
+        </div>
+      )}
 
-          {/* Collapsible Coaching Discussion Channel */}
+      {/* Dedicated Confidential PMS Coaching Channel */}
+      {activeView === 'channel' && (
+        <div className="boa-stack">
           <div
             className="apid-card"
             style={{
@@ -751,67 +581,46 @@ export function CoachingHomePage() {
               background: 'var(--surface, #ffffff)',
               borderRadius: '12px',
               border: '1px solid var(--border, #e2e8f0)',
-              marginTop: '0.5rem',
             }}
           >
-            <div
-              style={{
-                display: 'flex',
-                justifyContent: 'space-between',
-                alignItems: 'center',
-                cursor: 'pointer',
-              }}
-              onClick={() => setIsChatOpen((prev) => !prev)}
-            >
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem' }}>
-                <div
-                  style={{
-                    width: 34,
-                    height: 34,
-                    borderRadius: '8px',
-                    background: 'rgba(2, 132, 199, 0.1)',
-                    color: '#0284c7',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                  }}
-                >
-                  <MessageSquare size={18} />
-                </div>
-                <div>
-                  <h4 style={{ margin: 0, fontSize: '0.98rem', fontWeight: 700 }}>
-                    Coaching Communication Hub (Talent ↔ Coach & Peer Cohorts)
-                  </h4>
-                  <p style={{ margin: '0.15rem 0 0', fontSize: '0.8rem', color: 'var(--muted, #64748b)' }}>
-                    End-to-end audit logged channel: 1-on-1 remediation, skill cohort discussions, and private peer chats
-                  </p>
-                </div>
-              </div>
-              <button
-                type="button"
-                className="apid-btn apid-btn-outline"
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem', marginBottom: '1rem' }}>
+              <div
                 style={{
-                  padding: '0.35rem 0.75rem',
-                  fontSize: '0.8rem',
+                  width: 36,
+                  height: 36,
+                  borderRadius: '8px',
+                  background: 'rgba(245, 158, 11, 0.12)',
+                  color: '#d97706',
                   display: 'flex',
                   alignItems: 'center',
-                  gap: '0.35rem',
+                  justifyContent: 'center',
                 }}
               >
-                {isChatOpen ? 'Collapse Channels' : 'Open Coaching Hub'}
-                {isChatOpen ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
-              </button>
+                <MessageSquare size={18} />
+              </div>
+              <div>
+                <h4 style={{ margin: 0, fontSize: '1rem', fontWeight: 700, color: 'var(--text-primary)' }}>
+                  1-on-1 PMS Coaching Channel (Confidential)
+                </h4>
+                <p style={{ margin: '0.15rem 0 0', fontSize: '0.8rem', color: 'var(--muted, #64748b)' }}>
+                  End-to-end audit logged channel between Coach and Coachee for mandatory appraisal remediation.
+                </p>
+              </div>
             </div>
 
-            {isChatOpen && (
-              <div style={{ marginTop: '1rem', paddingTop: '1rem', borderTop: '1px solid var(--border, #f1f5f9)' }}>
-                <CoachingChatHub
-                  currentEmployeeId={linkedEmployee.id}
-                  currentUserId={user?.id}
-                />
-              </div>
-            )}
+            <CoachingChatHub
+              currentEmployeeId={linkedEmployee.id}
+              currentUserId={user?.id}
+              mode="MANDATORY"
+            />
           </div>
+        </div>
+      )}
+
+      {/* Dedicated PMS Progress & Feedback */}
+      {activeView === 'progress' && (
+        <div className="boa-stack">
+          {renderMyPlan()}
         </div>
       )}
     </div>

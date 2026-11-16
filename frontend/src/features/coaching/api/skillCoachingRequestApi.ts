@@ -74,6 +74,14 @@ export const skillCoachingRequestApi = {
     return res.data.data;
   },
 
+  async getMyApprovedCohorts(asTalentOnly = false): Promise<SkillCoachingRequestItem[]> {
+    const res = await apiClient.get<ApiResponse<SkillCoachingRequestItem[]>>(
+      '/coaching/skill-requests/my-cohorts',
+      { params: asTalentOnly ? { asTalentOnly: true } : undefined }
+    );
+    return res.data.data;
+  },
+
   async getAllRequests(filters?: {
     status?: SkillRequestStatus;
     fiscalQuarterId?: number;

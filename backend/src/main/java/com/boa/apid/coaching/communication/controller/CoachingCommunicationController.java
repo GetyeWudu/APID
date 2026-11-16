@@ -159,7 +159,7 @@ public class CoachingCommunicationController {
         StoredFileDto stored = fileStorageService.store(file, FilePurpose.CHAT_ATTACHMENT, actor);
 
         MessageAttachment attachment = new MessageAttachment();
-        attachment.setMessageId(0L); // Will be linked when the message is submitted
+        attachment.setMessageId(null); // Linked when the message is submitted
         attachment.setFileName(stored.originalFilename());
         attachment.setStorageKey(stored.id().toString());
         attachment.setMimeType(stored.contentType() != null ? stored.contentType() : "application/octet-stream");

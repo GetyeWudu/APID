@@ -33,14 +33,17 @@ import { ScheduleSeriesModal } from './ScheduleSeriesModal';
 import { TargetActionModal } from './TargetActionModal';
 import { CompleteSessionModal } from './CompleteSessionModal';
 import { RescheduleModal } from './RescheduleModal';
+import { EditSessionModal } from './EditSessionModal';
 import { SessionFeedbackModal } from './SessionFeedbackModal';
 import { DailyVideoModal } from './DailyVideoModal';
 import { DeclineInvitationModal } from './DeclineInvitationModal';
 import { TalentProgressModal } from './TalentProgressModal';
+import { toEthiopianTime } from '../utils/ethiopianTimeUtils';
 
 interface CoachingSessionsTabProps {
   myCoachees: MyCoacheeItem[];
   currentEmployeeId?: number;
+  mode?: 'PMS' | 'SKILLS' | 'ALL';
 }
 
 type StreamFilter = 'all' | 'pms' | 'skills';
@@ -49,6 +52,7 @@ type StatusFilter = 'all' | 'upcoming' | 'completed';
 export const CoachingSessionsTab: React.FC<CoachingSessionsTabProps> = ({
   myCoachees,
   currentEmployeeId,
+  mode = 'PMS',
 }) => {
   const queryClient = useQueryClient();
   const { hasAnyPermission } = useAuth();
@@ -58,7 +62,9 @@ export const CoachingSessionsTab: React.FC<CoachingSessionsTabProps> = ({
     hasAnyPermission(['ADMIN_PORTAL_ACCESS', 'PMS_ADMIN_ACCESS', 'HR_ADMIN_ACCESS', 'COACHING_INITIATIVE_CREATE']);
 
   // Primary stream filter: 'all' | 'pms' | 'skills'
-  const [streamFilter, setStreamFilter] = useState<StreamFilter>('all');
+  const [streamFilter, setStreamFilter] = useState<StreamFilter>(
+    mode === 'PMS' ? 'pms' : mode === 'SKILLS' ? 'skills' : 'all'
+  );
 
   // Secondary lifecycle filter: 'all' | 'upcoming' | 'completed'
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
@@ -71,6 +77,7 @@ export const CoachingSessionsTab: React.FC<CoachingSessionsTabProps> = ({
     mode: 'EXTENSION' | 'EARLY_COMPLETION';
   }>({ isOpen: false, mode: 'EXTENSION' });
   const [selectedForComplete, setSelectedForComplete] = useState<CoachingSessionItem | null>(null);
+  const [selectedForEdit, setSelectedForEdit] = useState<CoachingSessionItem | null>(null);
   const [selectedForReschedule, setSelectedForReschedule] = useState<CoachingSessionItem | null>(null);
   const [selectedForFeedback, setSelectedForFeedback] = useState<CoachingSessionItem | null>(null);
   const [selectedForVideo, setSelectedForVideo] = useState<CoachingSessionItem | null>(null);
@@ -210,7 +217,8 @@ export const CoachingSessionsTab: React.FC<CoachingSessionsTabProps> = ({
     const day = d.getDate();
     const weekday = d.toLocaleString('en-US', { weekday: 'short' });
     const time = d.toLocaleString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
-    return { month, day, weekday, time };
+    const eth = toEthiopianTime(d);
+    return { month, day, weekday, time, eth };
   };
 
   const getInitials = (fullName?: string | null) => {
@@ -228,7 +236,7 @@ export const CoachingSessionsTab: React.FC<CoachingSessionsTabProps> = ({
       ? session.participants.find((p) => p.employeeId === currentEmployeeId)
       : null;
     const isExpanded = !!expandedSessionIds[session.id];
-    const { month, day, weekday, time } = parseDateParts(session.scheduledStartTime);
+    const { month, day, weekday, time, eth } = parseDateParts(session.scheduledStartTime);
     const coachees = session.participants.filter((p) => p.role === 'COACHEE');
 
     // Time window calculations for Smart Video & Log Minutes
@@ -406,7 +414,7 @@ export const CoachingSessionsTab: React.FC<CoachingSessionsTabProps> = ({
               }}
             >
               <Clock size={12} style={{ color: themeColor }} />
-              {time}
+              {eth.periodAmharic} {eth.ethiopianHour.toString().padStart(2, '0')}:{eth.minute.toString().padStart(2, '0')}
             </div>
             <div
               style={{
@@ -415,7 +423,7 @@ export const CoachingSessionsTab: React.FC<CoachingSessionsTabProps> = ({
                 marginTop: '0.15rem',
               }}
             >
-              {session.durationMinutes} minutes
+              {time} EAT ({session.durationMinutes}m)
             </div>
           </div>
 
@@ -985,14 +993,14 @@ export const CoachingSessionsTab: React.FC<CoachingSessionsTabProps> = ({
                   <button
                     type="button"
                     className="apid-btn apid-btn-outline"
-                    onClick={() => setSelectedForReschedule(session)}
+                    onClick={() => (isCoach ? setSelectedForEdit(session) : setSelectedForReschedule(session))}
                     style={{
                       padding: '0.4rem 0.8rem',
                       fontSize: '0.82rem',
                       fontWeight: 600,
                     }}
                   >
-                    Reschedule
+                    {isCoach ? '✏️ Edit / Reschedule' : '🔄 Propose Reschedule'}
                   </button>
                 )}
 
@@ -1379,7 +1387,7 @@ export const CoachingSessionsTab: React.FC<CoachingSessionsTabProps> = ({
 
     const cleanTitle = sorted[0].title.replace(/\s*—\s*Session\s*\d+$/i, '');
     const isPms = sorted[0].pathway === 'MANDATORY_PMS';
-    const { weekday, time } = parseDateParts(sorted[0].scheduledStartTime);
+    const { weekday, time, eth } = parseDateParts(sorted[0].scheduledStartTime);
     const duration = sorted[0].durationMinutes || 45;
     const coachName = sorted[0].coachFullName || 'Designated Coach';
     const coachees = sorted[0].participants.filter((p) => p.role === 'COACHEE');
@@ -1469,7 +1477,7 @@ export const CoachingSessionsTab: React.FC<CoachingSessionsTabProps> = ({
                 }}
               >
                 <Clock size={12} style={{ color: themeColor }} />
-                Weekly • Every {weekday} at {time} ({duration}m)
+                Weekly • Every {weekday} at {eth.periodAmharic} {eth.ethiopianHour.toString().padStart(2, '0')}:{eth.minute.toString().padStart(2, '0')} ({time} EAT, {duration}m)
               </span>
             </div>
 
@@ -1655,6 +1663,7 @@ export const CoachingSessionsTab: React.FC<CoachingSessionsTabProps> = ({
                 </thead>
                 <tbody>
                   {sorted.map((occ) => {
+                    const isCoach = currentEmployeeId ? occ.coachEmployeeId === currentEmployeeId : true;
                     const occParts = parseDateParts(occ.scheduledStartTime);
                     const isNext = occ.id === nextSession.id;
                     const isCompleted = occ.status === 'COMPLETED';
@@ -1788,11 +1797,11 @@ export const CoachingSessionsTab: React.FC<CoachingSessionsTabProps> = ({
                               <button
                                 type="button"
                                 className="apid-btn apid-btn-outline"
-                                onClick={() => setSelectedForReschedule(occ)}
+                                onClick={() => (isCoach ? setSelectedForEdit(occ) : setSelectedForReschedule(occ))}
                                 style={{ padding: '0.2rem 0.5rem', fontSize: '0.74rem' }}
-                                title="Reschedule This Occurrence"
+                                title={isCoach ? 'Edit or Reschedule this session' : 'Propose a new time for this session'}
                               >
-                                Reschedule
+                                {isCoach ? 'Edit / Reschedule' : 'Propose Reschedule'}
                               </button>
                             )}
                           </div>
@@ -1849,11 +1858,19 @@ export const CoachingSessionsTab: React.FC<CoachingSessionsTabProps> = ({
                 <Calendar size={18} />
               </div>
               <h2 style={{ fontSize: '1.25rem', fontWeight: 800, margin: 0, color: 'var(--text-primary, #0f172a)' }}>
-                Coaching Sessions & Scheduling
+                {mode === 'PMS'
+                  ? 'PMS Remediation Sessions & Scheduling'
+                  : mode === 'SKILLS'
+                  ? 'Skill Development Workshops & Sessions'
+                  : 'Coaching Sessions & Scheduling'}
               </h2>
             </div>
             <p className="boa-muted" style={{ margin: '0.25rem 0 0 0', fontSize: '0.86rem' }}>
-              Structured sessions across 1-on-1 mandatory appraisal remediation and team skill development cohorts.
+              {mode === 'PMS'
+                ? 'Structured sessions across 1-on-1 and small group mandatory appraisal remediation.'
+                : mode === 'SKILLS'
+                ? 'Workshops and targeted capability development sessions for approved cohorts.'
+                : 'Structured sessions across 1-on-1 mandatory appraisal remediation and team skill development cohorts.'}
             </p>
           </div>
 
@@ -1874,10 +1891,11 @@ export const CoachingSessionsTab: React.FC<CoachingSessionsTabProps> = ({
                   fontWeight: 700,
                   padding: '0.5rem 1rem',
                   borderRadius: '8px',
-                  boxShadow: '0 4px 12px rgba(202, 138, 4, 0.25)',
+                  boxShadow: '0 2px 4px rgba(202, 138, 4, 0.25)',
                 }}
               >
-                <Calendar size={16} /> Set Meeting Rhythm
+                <Sparkles size={16} />
+                <span>{mode === 'SKILLS' ? 'Schedule Workshop Rhythm' : 'Set Meeting Rhythm'}</span>
               </button>
             </div>
           )}
@@ -2083,118 +2101,139 @@ export const CoachingSessionsTab: React.FC<CoachingSessionsTabProps> = ({
             borderTop: '1px solid var(--border, #f1f5f9)',
           }}
         >
-          {/* Stream Segment Switcher (Separates PMS from Skill Dev) */}
-          <div
-            style={{
-              display: 'inline-flex',
-              background: 'var(--surface-subtle, #f1f5f9)',
-              padding: '0.25rem',
-              borderRadius: '8px',
-              gap: '0.25rem',
-            }}
-          >
-            {/* All Streams */}
-            <button
-              type="button"
-              onClick={() => setStreamFilter('all')}
+          {/* Stream Segment Switcher (Only shown when mode is ALL) */}
+          {mode === 'ALL' ? (
+            <div
               style={{
                 display: 'inline-flex',
-                alignItems: 'center',
-                gap: '0.4rem',
-                padding: '0.4rem 0.85rem',
-                fontSize: '0.84rem',
-                fontWeight: 700,
-                border: 'none',
-                borderRadius: '6px',
-                cursor: 'pointer',
-                background: streamFilter === 'all' ? '#ffffff' : 'transparent',
-                color: streamFilter === 'all' ? 'var(--text-primary, #0f172a)' : 'var(--muted, #64748b)',
-                boxShadow: streamFilter === 'all' ? '0 1px 4px rgba(0,0,0,0.08)' : 'none',
+                background: 'var(--surface-subtle, #f1f5f9)',
+                padding: '0.25rem',
+                borderRadius: '8px',
+                gap: '0.25rem',
               }}
             >
-              <Layers size={14} />
-              <span>All Streams</span>
-              <span
+              {/* All Streams */}
+              <button
+                type="button"
+                onClick={() => setStreamFilter('all')}
                 style={{
-                  fontSize: '0.72rem',
-                  padding: '0.1rem 0.4rem',
-                  borderRadius: '10px',
-                  background: streamFilter === 'all' ? '#0f172a' : 'rgba(100, 116, 139, 0.15)',
-                  color: streamFilter === 'all' ? '#ffffff' : 'var(--muted, #64748b)',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '0.4rem',
+                  padding: '0.4rem 0.85rem',
+                  fontSize: '0.84rem',
+                  fontWeight: 700,
+                  border: 'none',
+                  borderRadius: '6px',
+                  cursor: 'pointer',
+                  background: streamFilter === 'all' ? '#ffffff' : 'transparent',
+                  color: streamFilter === 'all' ? 'var(--text-primary, #0f172a)' : 'var(--muted, #64748b)',
+                  boxShadow: streamFilter === 'all' ? '0 1px 4px rgba(0,0,0,0.08)' : 'none',
                 }}
               >
-                {sessions.length}
-              </span>
-            </button>
+                <Layers size={14} />
+                <span>All Streams</span>
+                <span
+                  style={{
+                    fontSize: '0.72rem',
+                    padding: '0.1rem 0.4rem',
+                    borderRadius: '10px',
+                    background: streamFilter === 'all' ? '#0f172a' : 'rgba(100, 116, 139, 0.15)',
+                    color: streamFilter === 'all' ? '#ffffff' : 'var(--muted, #64748b)',
+                  }}
+                >
+                  {sessions.length}
+                </span>
+              </button>
 
-            {/* Mandatory PMS 1-on-1 */}
-            <button
-              type="button"
-              onClick={() => setStreamFilter('pms')}
-              style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '0.4rem',
-                padding: '0.4rem 0.85rem',
-                fontSize: '0.84rem',
-                fontWeight: 700,
-                border: 'none',
-                borderRadius: '6px',
-                cursor: 'pointer',
-                background: streamFilter === 'pms' ? '#ffffff' : 'transparent',
-                color: streamFilter === 'pms' ? 'var(--brand-gold, #ca8a04)' : 'var(--muted, #64748b)',
-                boxShadow: streamFilter === 'pms' ? '0 1px 4px rgba(0,0,0,0.08)' : 'none',
-              }}
-            >
-              <Target size={14} />
-              <span>Mandatory PMS (1-on-1)</span>
-              <span
+              {/* Mandatory PMS 1-on-1 */}
+              <button
+                type="button"
+                onClick={() => setStreamFilter('pms')}
                 style={{
-                  fontSize: '0.72rem',
-                  padding: '0.1rem 0.4rem',
-                  borderRadius: '10px',
-                  background: streamFilter === 'pms' ? 'var(--brand-gold, #ca8a04)' : 'rgba(202, 138, 4, 0.15)',
-                  color: streamFilter === 'pms' ? '#ffffff' : 'var(--brand-gold, #ca8a04)',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '0.4rem',
+                  padding: '0.4rem 0.85rem',
+                  fontSize: '0.84rem',
+                  fontWeight: 700,
+                  border: 'none',
+                  borderRadius: '6px',
+                  cursor: 'pointer',
+                  background: streamFilter === 'pms' ? '#ffffff' : 'transparent',
+                  color: streamFilter === 'pms' ? 'var(--brand-gold, #ca8a04)' : 'var(--muted, #64748b)',
+                  boxShadow: streamFilter === 'pms' ? '0 1px 4px rgba(0,0,0,0.08)' : 'none',
                 }}
               >
-                {pmsSessions.length}
-              </span>
-            </button>
+                <Target size={14} />
+                <span>Mandatory PMS (1-on-1)</span>
+                <span
+                  style={{
+                    fontSize: '0.72rem',
+                    padding: '0.1rem 0.4rem',
+                    borderRadius: '10px',
+                    background: streamFilter === 'pms' ? 'var(--brand-gold, #ca8a04)' : 'rgba(202, 138, 4, 0.15)',
+                    color: streamFilter === 'pms' ? '#ffffff' : 'var(--brand-gold, #ca8a04)',
+                  }}
+                >
+                  {pmsSessions.length}
+                </span>
+              </button>
 
-            {/* Skill Development Cohorts */}
-            <button
-              type="button"
-              onClick={() => setStreamFilter('skills')}
-              style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '0.4rem',
-                padding: '0.4rem 0.85rem',
-                fontSize: '0.84rem',
-                fontWeight: 700,
-                border: 'none',
-                borderRadius: '6px',
-                cursor: 'pointer',
-                background: streamFilter === 'skills' ? '#ffffff' : 'transparent',
-                color: streamFilter === 'skills' ? '#2563eb' : 'var(--muted, #64748b)',
-                boxShadow: streamFilter === 'skills' ? '0 1px 4px rgba(0,0,0,0.08)' : 'none',
-              }}
-            >
-              <Sparkles size={14} />
-              <span>Skill Cohorts</span>
-              <span
+              {/* Skill Development Cohorts */}
+              <button
+                type="button"
+                onClick={() => setStreamFilter('skills')}
                 style={{
-                  fontSize: '0.72rem',
-                  padding: '0.1rem 0.4rem',
-                  borderRadius: '10px',
-                  background: streamFilter === 'skills' ? '#2563eb' : 'rgba(37, 99, 235, 0.15)',
-                  color: streamFilter === 'skills' ? '#ffffff' : '#2563eb',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '0.4rem',
+                  padding: '0.4rem 0.85rem',
+                  fontSize: '0.84rem',
+                  fontWeight: 700,
+                  border: 'none',
+                  borderRadius: '6px',
+                  cursor: 'pointer',
+                  background: streamFilter === 'skills' ? '#ffffff' : 'transparent',
+                  color: streamFilter === 'skills' ? '#2563eb' : 'var(--muted, #64748b)',
+                  boxShadow: streamFilter === 'skills' ? '0 1px 4px rgba(0,0,0,0.08)' : 'none',
                 }}
               >
-                {skillSessions.length}
+                <Sparkles size={14} />
+                <span>Skill Cohorts</span>
+                <span
+                  style={{
+                    fontSize: '0.72rem',
+                    padding: '0.1rem 0.4rem',
+                    borderRadius: '10px',
+                    background: streamFilter === 'skills' ? '#2563eb' : 'rgba(37, 99, 235, 0.15)',
+                    color: streamFilter === 'skills' ? '#ffffff' : '#2563eb',
+                  }}
+                >
+                  {skillSessions.length}
+                </span>
+              </button>
+            </div>
+          ) : (
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+              <span
+                className="boa-pill"
+                style={{
+                  fontSize: '0.82rem',
+                  fontWeight: 700,
+                  padding: '0.25rem 0.75rem',
+                  borderRadius: '6px',
+                  background: mode === 'PMS' ? 'rgba(202, 138, 4, 0.12)' : 'rgba(37, 99, 235, 0.12)',
+                  color: mode === 'PMS' ? 'var(--brand-gold, #ca8a04)' : '#2563eb',
+                  border: `1px solid ${mode === 'PMS' ? 'rgba(202, 138, 4, 0.3)' : 'rgba(37, 99, 235, 0.3)'}`,
+                }}
+              >
+                {mode === 'PMS'
+                  ? `Mandatory Appraisal Remediation (${pmsSessions.length} Scheduled)`
+                  : `Skill Development Cohort Workshops (${skillSessions.length} Scheduled)`}
               </span>
-            </button>
-          </div>
+            </div>
+          )}
 
           {/* Lifecycle Status Filter */}
           <div
@@ -2503,6 +2542,7 @@ export const CoachingSessionsTab: React.FC<CoachingSessionsTabProps> = ({
         isOpen={isScheduleOpen}
         onClose={() => setIsScheduleOpen(false)}
         myCoachees={myCoachees}
+        mode={mode === 'PMS' ? 'MANDATORY_PMS' : mode === 'SKILLS' ? 'SELF_DEVELOPMENT' : undefined}
       />
 
       {/* Schedule Recurring Rhythm Series Modal */}
@@ -2510,6 +2550,7 @@ export const CoachingSessionsTab: React.FC<CoachingSessionsTabProps> = ({
         isOpen={isSeriesOpen}
         onClose={() => setIsSeriesOpen(false)}
         myCoachees={myCoachees}
+        mode={mode === 'PMS' ? 'MANDATORY_PMS' : mode === 'SKILLS' ? 'SELF_DEVELOPMENT' : undefined}
       />
 
       {/* Target Action Modal (Extension or Early Completion) */}
@@ -2533,15 +2574,32 @@ export const CoachingSessionsTab: React.FC<CoachingSessionsTabProps> = ({
         }}
       />
 
+      {/* Coach Direct Edit Modal */}
+      <EditSessionModal
+        session={selectedForEdit}
+        isOpen={selectedForEdit !== null}
+        onClose={() => setSelectedForEdit(null)}
+        onSuccess={() => {
+          setSelectedForEdit(null);
+          queryClient.invalidateQueries({ queryKey: ['coaching-sessions'] });
+          refetch();
+        }}
+        publicConfig={activeConfig?.publicConfig}
+        activeQuarter={activeConfig?.activeQuarter}
+      />
+
       {/* Reschedule Proposal Modal */}
       <RescheduleModal
         session={selectedForReschedule}
         isOpen={selectedForReschedule !== null}
         onClose={() => setSelectedForReschedule(null)}
         onSuccess={() => {
+          setSelectedForReschedule(null);
           queryClient.invalidateQueries({ queryKey: ['coaching-sessions'] });
           refetch();
         }}
+        publicConfig={activeConfig?.publicConfig}
+        activeQuarter={activeConfig?.activeQuarter}
       />
 
       {/* Feedback Modal */}

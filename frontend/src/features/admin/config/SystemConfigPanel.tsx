@@ -401,7 +401,7 @@ export function SystemConfigPanel() {
           <div>
             <h3 className="boa-card-title">Fiscal Quarters Schedule</h3>
             <p className="boa-card-subtitle">
-              BoA performance year runs Q1 (Jun–Sep), Q2 (Oct–Dec), Q3 (Jan–Mar), Q4 (Apr–May). Date ranges cannot overlap.
+              BoA performance year runs Q1 (Jul–Sep), Q2 (Oct–Dec), Q3 (Jan–Mar), Q4 (Apr–Jun). Date ranges cannot overlap.
             </p>
           </div>
           <button type="button" className="apid-btn apid-btn-primary" onClick={openCreateQuarter}>

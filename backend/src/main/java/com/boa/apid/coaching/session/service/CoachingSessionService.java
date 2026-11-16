@@ -23,16 +23,22 @@ import com.boa.apid.common.exception.BusinessException;
 import com.boa.apid.common.exception.ResourceNotFoundException;
 import com.boa.apid.core.audit.service.AuditService;
 import com.boa.apid.core.auth.security.ApidUserPrincipal;
+import com.boa.apid.core.config.dto.PublicConfigDto;
+import com.boa.apid.core.config.entity.FiscalQuarter;
+import com.boa.apid.core.config.repository.FiscalQuarterRepository;
+import com.boa.apid.core.config.service.ConfigCacheStore;
 import com.boa.apid.core.organization.dto.EmployeeDto;
 import com.boa.apid.core.organization.entity.Employee;
 import com.boa.apid.core.organization.repository.EmployeeRepository;
 import com.boa.apid.core.organization.service.EmployeeQueryService;
+import com.boa.apid.core.scheduling.config.SchedulingTimezones;
+import com.boa.apid.core.scheduling.dto.CreateReservationCommand;
+import com.boa.apid.core.scheduling.service.ScheduleReservationService;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.time.Duration;
-import java.time.Instant;
+import java.time.*;
 import java.util.*;
 import java.util.stream.Collectors;
 
@@ -50,6 +56,9 @@ public class CoachingSessionService {
     private final EmployeeQueryService employeeQueryService;
     private final VideoMeetingProvider videoMeetingProvider;
     private final AuditService auditService;
+    private final ScheduleReservationService reservationService;
+    private final ConfigCacheStore configCacheStore;
+    private final FiscalQuarterRepository fiscalQuarterRepository;
 
     public CoachingSessionService(
             CoachingSessionRepository sessionRepository,
@@ -62,7 +71,10 @@ public class CoachingSessionService {
             EmployeeRepository employeeRepository,
             EmployeeQueryService employeeQueryService,
             VideoMeetingProvider videoMeetingProvider,
-            AuditService auditService
+            AuditService auditService,
+            ScheduleReservationService reservationService,
+            ConfigCacheStore configCacheStore,
+            FiscalQuarterRepository fiscalQuarterRepository
     ) {
         this.sessionRepository = sessionRepository;
         this.participantRepository = participantRepository;
@@ -75,6 +87,9 @@ public class CoachingSessionService {
         this.employeeQueryService = employeeQueryService;
         this.videoMeetingProvider = videoMeetingProvider;
         this.auditService = auditService;
+        this.reservationService = reservationService;
+        this.configCacheStore = configCacheStore;
+        this.fiscalQuarterRepository = fiscalQuarterRepository;
     }
 
     // ─────────────────────────── 1. CREATE SESSION ───────────────────────────
@@ -97,6 +112,15 @@ public class CoachingSessionService {
 
         if (startTime.isBefore(Instant.now().minus(Duration.ofMinutes(5)))) {
             throw new BusinessException("INVALID_START_TIME", "Cannot schedule a coaching session in the past.");
+        }
+
+        ZonedDateTime zdt = startTime.atZone(ZoneId.of("Africa/Addis_Ababa"));
+        if (zdt.getDayOfWeek() == DayOfWeek.SUNDAY) {
+            throw new BusinessException("SUNDAY_NOT_ALLOWED", "Sunday sessions are not permitted. Bank operations run Monday to Saturday.");
+        }
+        PublicConfigDto publicConfig = configCacheStore.getPublicConfigCached();
+        if (Boolean.FALSE.equals(publicConfig.getCoachingAllowSaturdayScheduling()) && zdt.getDayOfWeek() == DayOfWeek.SATURDAY) {
+            throw new BusinessException("SATURDAY_NOT_ALLOWED", "Saturday sessions are currently disabled by Bank Coaching Policy.");
         }
 
         Long coachEmpId;
@@ -124,6 +148,15 @@ public class CoachingSessionService {
 
             pathway = AssignmentPathway.MANDATORY_PMS;
             coacheeEmpIds.add(assignment.getCoacheeEmployeeId());
+            if (request.additionalAssignmentIds() != null) {
+                for (Long addId : request.additionalAssignmentIds()) {
+                    assignmentRepository.findById(addId).ifPresent(addAss -> {
+                        if (addAss.getCoacheeEmployeeId() != null && !coacheeEmpIds.contains(addAss.getCoacheeEmployeeId())) {
+                            coacheeEmpIds.add(addAss.getCoacheeEmployeeId());
+                        }
+                    });
+                }
+            }
         } else {
             SkillCoachingRequest skillReq = skillRequestRepository.findById(request.skillRequestId())
                     .orElseThrow(() -> new ResourceNotFoundException("Skill coaching request not found"));
@@ -202,6 +235,28 @@ public class CoachingSessionService {
             coacheePart.setInvitationStatus(InvitationStatus.PENDING);
             participantRepository.save(coacheePart);
         }
+
+        // Register reservation in Core Scheduling Authority
+        List<CreateReservationCommand.ParticipantReservationInput> resParts = new ArrayList<>();
+        resParts.add(new CreateReservationCommand.ParticipantReservationInput(
+                coachEmpId, com.boa.apid.core.scheduling.entity.ParticipationRole.COACH));
+        for (Long coacheeId : coacheeEmpIds) {
+            resParts.add(new CreateReservationCommand.ParticipantReservationInput(
+                    coacheeId, com.boa.apid.core.scheduling.entity.ParticipationRole.TALENT));
+        }
+
+        reservationService.reserve(new CreateReservationCommand(
+                "COACHING",
+                savedSession.getId(),
+                savedSession.getTitle(),
+                startTime,
+                endTime,
+                SchedulingTimezones.DEFAULT_ZONE_ID,
+                savedSession.getMeetingMode().name(),
+                savedSession.getMeetingLocation(),
+                savedSession.getDailyRoomUrl(),
+                resParts
+        ));
 
         auditService.record(new AuditService.AuditCommand(
                 null, actor.getUserId(), actor.getUsername(), null,
@@ -283,7 +338,81 @@ public class CoachingSessionService {
         return toDto(session);
     }
 
-    // ─────────────────────────── 5. PROPOSE RESCHEDULE ───────────────────────────
+    // ─────────────────────────── 5. UPDATE & RESCHEDULE SESSION ───────────────────────────
+
+    @Transactional
+    public CoachingSessionDto updateSession(Long sessionId, UpdateSessionRequest request, ApidUserPrincipal actor) {
+        EmployeeDto callerEmp = getCallerEmployeeOrThrow(actor);
+        CoachingSession session = sessionRepository.findById(sessionId)
+                .orElseThrow(() -> new ResourceNotFoundException("Coaching session not found"));
+
+        if (session.getStatus() == SessionStatus.COMPLETED || session.getStatus() == SessionStatus.CANCELLED) {
+            throw new BusinessException("INVALID_STATE", "Cannot modify a completed or cancelled session.");
+        }
+
+        boolean isCoach = session.getCoachEmployeeId().equals(callerEmp.id());
+        if (!isAdmin(actor) && !isCoach) {
+            throw new AccessDeniedException("Only the designated coach or an administrator can modify this session.");
+        }
+
+        PublicConfigDto publicConfig = configCacheStore.getPublicConfigCached();
+        ZoneId eatZone = ZoneId.of("Africa/Addis_Ababa");
+
+        // 1. Metadata updates
+        if (request.title() != null && !request.title().isBlank()) {
+            session.setTitle(request.title().trim());
+        }
+        if (request.meetingMode() != null) {
+            session.setMeetingMode(request.meetingMode());
+        }
+        if (request.meetingLocation() != null) {
+            session.setMeetingLocation(request.meetingLocation().trim());
+        }
+        if (request.targetPmsGoalId() != null) {
+            session.setTargetPmsGoalId(request.targetPmsGoalId());
+        }
+
+        // 2. Schedule & Duration validation
+        Instant newStart = request.scheduledStartTime() != null ? request.scheduledStartTime() : session.getScheduledStartTime();
+        int newDuration = request.durationMinutes() != null && request.durationMinutes() > 0 ? request.durationMinutes() : session.getDurationMinutes();
+        Instant newEnd = newStart.plus(Duration.ofMinutes(newDuration));
+
+        boolean isTimeChanged = !newStart.equals(session.getScheduledStartTime()) || newDuration != session.getDurationMinutes();
+
+        if (isTimeChanged) {
+            validateRescheduleRules(session, newStart, newEnd, publicConfig, eatZone);
+
+            SessionScheduleProposal proposal = new SessionScheduleProposal();
+            proposal.setSessionId(sessionId);
+            proposal.setProposedByEmployeeId(callerEmp.id());
+            proposal.setProposedStartTime(newStart);
+            proposal.setProposedEndTime(newEnd);
+            proposal.setReason(request.reason() != null && !request.reason().isBlank() ? request.reason().trim() : "Coach directly updated session schedule");
+            proposal.setStatus(ProposalStatus.ACCEPTED);
+            proposal.setRespondedByEmployeeId(callerEmp.id());
+            proposal.setRespondedAt(Instant.now());
+            proposalRepository.save(proposal);
+
+            session.setScheduledStartTime(newStart);
+            session.setScheduledEndTime(newEnd);
+            session.setDurationMinutes(newDuration);
+            session.setStatus(SessionStatus.CONFIRMED);
+
+            reservationService.reschedule("COACHING", sessionId, newStart, newEnd);
+
+            // Reset coachee RSVPs to PENDING
+            List<SessionParticipant> parts = participantRepository.findAllBySessionIdOrderByRoleAsc(sessionId);
+            for (SessionParticipant p : parts) {
+                if (p.getRole() == ParticipantRole.COACHEE) {
+                    p.setInvitationStatus(InvitationStatus.PENDING);
+                    participantRepository.save(p);
+                }
+            }
+        }
+
+        sessionRepository.save(session);
+        return toDto(session);
+    }
 
     @Transactional
     public CoachingSessionDto proposeReschedule(Long sessionId, ProposeRescheduleRequest request, ApidUserPrincipal actor) {
@@ -301,18 +430,20 @@ public class CoachingSessionService {
             throw new AccessDeniedException("Only participants can propose rescheduling.");
         }
 
-        long priorProposals = proposalRepository.countBySessionId(sessionId);
-        if (priorProposals >= 2) {
-            throw new BusinessException("MAX_RESCHEDULES_EXCEEDED", "This session has reached the limit of 2 reschedule requests. Please coordinate directly with your coach.");
+        PublicConfigDto publicConfig = configCacheStore.getPublicConfigCached();
+        ZoneId eatZone = ZoneId.of("Africa/Addis_Ababa");
+
+        // Mandatory reason check
+        if (Boolean.TRUE.equals(publicConfig.getCoachingRequireDeclineReason())) {
+            if (request.reason() == null || request.reason().isBlank()) {
+                throw new BusinessException("REASON_REQUIRED", "Bank policy requires an explanatory reason when proposing a reschedule.");
+            }
         }
 
         Instant newStart = request.proposedStartTime();
         Instant newEnd = newStart.plus(Duration.ofMinutes(session.getDurationMinutes()));
 
-        // Double booking check for coach
-        if (sessionRepository.hasOverlappingCoachSession(session.getCoachEmployeeId(), newStart, newEnd, session.getId())) {
-            throw new BusinessException("COACH_DOUBLE_BOOKED", "Coach already has another confirmed session at that proposed time.");
-        }
+        validateRescheduleRules(session, newStart, newEnd, publicConfig, eatZone);
 
         SessionScheduleProposal proposal = new SessionScheduleProposal();
         proposal.setSessionId(sessionId);
@@ -332,6 +463,7 @@ public class CoachingSessionService {
             session.setScheduledEndTime(newEnd);
             session.setStatus(SessionStatus.CONFIRMED);
             sessionRepository.save(session);
+            reservationService.reschedule("COACHING", sessionId, newStart, newEnd);
 
             // Reset coachee RSVPs to PENDING
             List<SessionParticipant> parts = participantRepository.findAllBySessionIdOrderByRoleAsc(sessionId);
@@ -351,6 +483,94 @@ public class CoachingSessionService {
         }
 
         return toDto(session);
+    }
+
+    private void validateRescheduleRules(
+            CoachingSession session,
+            Instant newStart,
+            Instant newEnd,
+            PublicConfigDto publicConfig,
+            ZoneId eatZone
+    ) {
+        // Enforce Notice Period
+        int minNoticeHours = publicConfig.getCoachingMinRescheduleNoticeHours() != null ? publicConfig.getCoachingMinRescheduleNoticeHours() : 4;
+        if (Instant.now().plus(Duration.ofHours(minNoticeHours)).isAfter(session.getScheduledStartTime())) {
+            throw new BusinessException("NOTICE_PERIOD_VIOLATED",
+                    "Rescheduling is only permitted at least " + minNoticeHours + " hours prior to the scheduled session start time.");
+        }
+
+        // Cannot reschedule to the past
+        if (newStart.isBefore(Instant.now())) {
+            throw new BusinessException("PAST_DATE_NOT_ALLOWED", "Cannot schedule or reschedule a session in the past.");
+        }
+
+        // Enforce Max Reschedules Per Session
+        int maxReschedules = publicConfig.getCoachingMaxReschedulesPerSession() != null ? publicConfig.getCoachingMaxReschedulesPerSession() : 2;
+        long priorProposals = proposalRepository.countBySessionId(session.getId());
+        if (priorProposals >= maxReschedules) {
+            throw new BusinessException("MAX_RESCHEDULES_EXCEEDED",
+                    "This session has reached the bank limit of " + maxReschedules + " reschedule(s). Please coordinate directly with your coach.");
+        }
+
+        ZonedDateTime currentZdt = session.getScheduledStartTime().atZone(eatZone);
+        ZonedDateTime newZdt = newStart.atZone(eatZone);
+
+        // Sunday lockout
+        if (newZdt.getDayOfWeek() == DayOfWeek.SUNDAY) {
+            throw new BusinessException("SUNDAY_NOT_ALLOWED", "Bank policy strictly prohibits scheduling sessions on Sundays.");
+        }
+
+        // Saturday toggle
+        if (Boolean.FALSE.equals(publicConfig.getCoachingAllowSaturdayScheduling()) && newZdt.getDayOfWeek() == DayOfWeek.SATURDAY) {
+            throw new BusinessException("SATURDAY_NOT_ALLOWED", "Saturday sessions are currently disabled by Bank Coaching Policy.");
+        }
+
+        // Active Quarter Boundary
+        FiscalQuarter activeQuarter = fiscalQuarterRepository.findByActiveTrue().orElse(null);
+        if (activeQuarter != null) {
+            LocalDate sessionDate = newZdt.toLocalDate();
+            if (sessionDate.isBefore(activeQuarter.getStartDate()) || sessionDate.isAfter(activeQuarter.getEndDate())) {
+                throw new BusinessException("QUARTER_DEADLINE_EXCEEDED",
+                        "Rescheduled session date (" + sessionDate + ") must fall within the active coaching quarter (" + activeQuarter.getStartDate() + " to " + activeQuarter.getEndDate() + ").");
+            }
+        }
+
+        // Reschedule Scope
+        String scope = publicConfig.getCoachingRescheduleScope() != null ? publicConfig.getCoachingRescheduleScope() : "SAME_WEEK";
+        if ("SAME_DAY_ONLY".equalsIgnoreCase(scope)) {
+            if (!currentZdt.toLocalDate().isEqual(newZdt.toLocalDate())) {
+                throw new BusinessException("RESCHEDULE_WINDOW_VIOLATION",
+                        "Bank policy restricts rescheduling to different hours on the same calendar day.");
+            }
+        } else if ("SAME_WEEK".equalsIgnoreCase(scope)) {
+            java.time.temporal.WeekFields weekFields = java.time.temporal.WeekFields.ISO;
+            int currentWeek = currentZdt.get(weekFields.weekOfWeekBasedYear());
+            int newWeek = newZdt.get(weekFields.weekOfWeekBasedYear());
+            int currentYear = currentZdt.get(weekFields.weekBasedYear());
+            int newYear = newZdt.get(weekFields.weekBasedYear());
+            if (currentWeek != newWeek || currentYear != newYear) {
+                throw new BusinessException("RESCHEDULE_WINDOW_VIOLATION",
+                        "Bank policy restricts rescheduling to within the same calendar week (Monday to Saturday).");
+            }
+        }
+
+        // Double Booking - Coach
+        if (sessionRepository.hasOverlappingCoachSession(session.getCoachEmployeeId(), newStart, newEnd, session.getId())) {
+            throw new BusinessException("COACH_DOUBLE_BOOKED", "Coach already has another confirmed session at that proposed time.");
+        }
+
+        // Double Booking - Coachees
+        List<SessionParticipant> participants = participantRepository.findAllBySessionIdOrderByRoleAsc(session.getId());
+        for (SessionParticipant p : participants) {
+            if (p.getRole() == ParticipantRole.COACHEE) {
+                if (participantRepository.hasOverlappingParticipantSession(p.getEmployeeId(), newStart, newEnd, session.getId())) {
+                    String coacheeName = employeeRepository.findById(p.getEmployeeId())
+                            .map(Employee::getFullName).orElse("Coachee");
+                    throw new BusinessException("COACHEE_DOUBLE_BOOKED",
+                            "Participant " + coacheeName + " already has another confirmed session at that proposed time.");
+                }
+            }
+        }
     }
 
     // ─────────────────────────── 6. CANCEL SESSION ───────────────────────────
@@ -375,6 +595,7 @@ public class CoachingSessionService {
         session.setCancelledByEmployeeId(callerEmp.id());
         session.setCancelledAt(Instant.now());
         sessionRepository.save(session);
+        reservationService.release("COACHING", sessionId, request.reason());
 
         auditService.record(new AuditService.AuditCommand(
                 null, actor.getUserId(), actor.getUsername(), null,
@@ -409,6 +630,7 @@ public class CoachingSessionService {
         session.setStatus(SessionStatus.COMPLETED);
         session.setConductedAt(Instant.now());
         sessionRepository.save(session);
+        reservationService.complete("COACHING", sessionId);
 
         // Record attendance and assessment per coachee
         Map<Long, SessionParticipant> partMap = participantRepository.findAllBySessionIdOrderByRoleAsc(sessionId)
@@ -514,6 +736,7 @@ public class CoachingSessionService {
             session.setScheduledStartTime(proposal.getProposedStartTime());
             session.setScheduledEndTime(proposal.getProposedEndTime());
             session.setStatus(SessionStatus.CONFIRMED);
+            reservationService.reschedule("COACHING", sessionId, proposal.getProposedStartTime(), proposal.getProposedEndTime());
         } else {
             proposal.setStatus(ProposalStatus.REJECTED);
             session.setStatus(SessionStatus.CONFIRMED);
@@ -572,7 +795,7 @@ public class CoachingSessionService {
 
     // ─────────────────────────── HELPERS ───────────────────────────
 
-    private CoachingSessionDto toDto(CoachingSession s) {
+    public CoachingSessionDto toDto(CoachingSession s) {
         Employee coach = employeeRepository.findById(s.getCoachEmployeeId()).orElse(null);
         String coachEmpNo = coach != null ? coach.getEmployeeNumber() : null;
         String coachName = coach != null ? coach.getFullName() : null;
@@ -643,6 +866,8 @@ public class CoachingSessionService {
             }
         }
 
+        int rescheduleCount = (int) proposalRepository.countBySessionId(s.getId());
+
         return new CoachingSessionDto(
                 s.getId(),
                 s.getAssignmentId(),
@@ -673,7 +898,8 @@ public class CoachingSessionService {
                 s.getCreatedAt(),
                 s.getSeriesId(),
                 s.getSequenceNumber(),
-                s.isExtensionSession()
+                s.isExtensionSession(),
+                rescheduleCount
         );
     }
 

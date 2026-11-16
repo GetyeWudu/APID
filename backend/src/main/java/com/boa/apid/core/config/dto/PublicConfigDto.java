@@ -15,6 +15,11 @@ public class PublicConfigDto {
     private Integer coachingMinRescheduleNoticeHours;
     private Integer coachingMaxReschedulesPerSession;
     private Boolean coachingRequireDeclineReason;
+    private Integer coachingMaxSessionsPerWeek;
+    private Boolean coachingAllowSaturdayScheduling;
+    private String coachingRescheduleScope;
+    private Boolean coachingAllowJointPmsGroup;
+    private Integer coachingMaxJointGroupSize;
 
     public PublicConfigDto() {
     }
@@ -28,7 +33,12 @@ public class PublicConfigDto {
             Integer coachingEarlyJoinWindowMinutes,
             Integer coachingMinRescheduleNoticeHours,
             Integer coachingMaxReschedulesPerSession,
-            Boolean coachingRequireDeclineReason
+            Boolean coachingRequireDeclineReason,
+            Integer coachingMaxSessionsPerWeek,
+            Boolean coachingAllowSaturdayScheduling,
+            String coachingRescheduleScope,
+            Boolean coachingAllowJointPmsGroup,
+            Integer coachingMaxJointGroupSize
     ) {
         this.mandatoryCutoffRounded = mandatoryCutoffRounded;
         this.missedSessionAlertThreshold = missedSessionAlertThreshold;
@@ -39,6 +49,11 @@ public class PublicConfigDto {
         this.coachingMinRescheduleNoticeHours = coachingMinRescheduleNoticeHours;
         this.coachingMaxReschedulesPerSession = coachingMaxReschedulesPerSession;
         this.coachingRequireDeclineReason = coachingRequireDeclineReason;
+        this.coachingMaxSessionsPerWeek = coachingMaxSessionsPerWeek;
+        this.coachingAllowSaturdayScheduling = coachingAllowSaturdayScheduling;
+        this.coachingRescheduleScope = coachingRescheduleScope;
+        this.coachingAllowJointPmsGroup = coachingAllowJointPmsGroup;
+        this.coachingMaxJointGroupSize = coachingMaxJointGroupSize;
     }
 
     public Integer getMandatoryCutoffRounded() { return mandatoryCutoffRounded; }
@@ -60,5 +75,15 @@ public class PublicConfigDto {
     public void setCoachingMaxReschedulesPerSession(Integer coachingMaxReschedulesPerSession) { this.coachingMaxReschedulesPerSession = coachingMaxReschedulesPerSession; }
     public Boolean getCoachingRequireDeclineReason() { return coachingRequireDeclineReason; }
     public void setCoachingRequireDeclineReason(Boolean coachingRequireDeclineReason) { this.coachingRequireDeclineReason = coachingRequireDeclineReason; }
-}
 
+    public Integer getCoachingMaxSessionsPerWeek() { return coachingMaxSessionsPerWeek; }
+    public void setCoachingMaxSessionsPerWeek(Integer coachingMaxSessionsPerWeek) { this.coachingMaxSessionsPerWeek = coachingMaxSessionsPerWeek; }
+    public Boolean getCoachingAllowSaturdayScheduling() { return coachingAllowSaturdayScheduling; }
+    public void setCoachingAllowSaturdayScheduling(Boolean coachingAllowSaturdayScheduling) { this.coachingAllowSaturdayScheduling = coachingAllowSaturdayScheduling; }
+    public String getCoachingRescheduleScope() { return coachingRescheduleScope; }
+    public void setCoachingRescheduleScope(String coachingRescheduleScope) { this.coachingRescheduleScope = coachingRescheduleScope; }
+    public Boolean getCoachingAllowJointPmsGroup() { return coachingAllowJointPmsGroup; }
+    public void setCoachingAllowJointPmsGroup(Boolean coachingAllowJointPmsGroup) { this.coachingAllowJointPmsGroup = coachingAllowJointPmsGroup; }
+    public Integer getCoachingMaxJointGroupSize() { return coachingMaxJointGroupSize; }
+    public void setCoachingMaxJointGroupSize(Integer coachingMaxJointGroupSize) { this.coachingMaxJointGroupSize = coachingMaxJointGroupSize; }
+}
