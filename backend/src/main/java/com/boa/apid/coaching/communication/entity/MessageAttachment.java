@@ -62,3 +62,4 @@ public class MessageAttachment {
     public void setUploadedByUserId(Long uploadedByUserId) { this.uploadedByUserId = uploadedByUserId; }
     public Instant getCreatedAt() { return createdAt; }
 }
+

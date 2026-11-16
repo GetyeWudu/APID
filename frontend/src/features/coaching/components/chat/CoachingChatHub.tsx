@@ -418,3 +418,4 @@ export const CoachingChatHub: React.FC<CoachingChatHubProps> = ({
     </div>
   );
 };
+

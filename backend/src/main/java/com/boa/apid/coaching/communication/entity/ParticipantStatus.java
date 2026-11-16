@@ -4,3 +4,4 @@ public enum ParticipantStatus {
     ACTIVE,
     REMOVED
 }
+

@@ -102,3 +102,4 @@ public class CoachingMessage {
     public void setEditedByUserId(Long editedByUserId) { this.editedByUserId = editedByUserId; }
     public Instant getCreatedAt() { return createdAt; }
 }
+

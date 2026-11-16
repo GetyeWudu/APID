@@ -4,3 +4,4 @@ public enum ConversationStatus {
     ACTIVE,
     ARCHIVED
 }
+

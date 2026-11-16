@@ -12,3 +12,4 @@ public interface ConversationReadStateRepository extends JpaRepository<Conversat
 
     Optional<ConversationReadState> findByConversationIdAndUserId(Long conversationId, Long userId);
 }
+

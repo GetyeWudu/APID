@@ -33,3 +33,4 @@ public class ConversationReadStateId implements Serializable {
         return Objects.hash(conversationId, userId);
     }
 }
+

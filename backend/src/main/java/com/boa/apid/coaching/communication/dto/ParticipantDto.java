@@ -43,3 +43,4 @@ public class ParticipantDto {
     public Instant getLeftAt() { return leftAt; }
     public void setLeftAt(Instant leftAt) { this.leftAt = leftAt; }
 }
+

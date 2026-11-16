@@ -39,3 +39,4 @@ public interface CoachingMessageRepository extends JpaRepository<CoachingMessage
     // Pinned messages for quick reference banner
     List<CoachingMessage> findByConversationIdAndIsPinnedTrueAndIsDeletedFalseOrderByPinnedAtDesc(Long conversationId);
 }
+

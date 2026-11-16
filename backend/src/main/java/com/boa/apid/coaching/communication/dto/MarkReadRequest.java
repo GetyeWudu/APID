@@ -16,3 +16,4 @@ public class MarkReadRequest {
     public Long getLastReadMessageId() { return lastReadMessageId; }
     public void setLastReadMessageId(Long lastReadMessageId) { this.lastReadMessageId = lastReadMessageId; }
 }
+

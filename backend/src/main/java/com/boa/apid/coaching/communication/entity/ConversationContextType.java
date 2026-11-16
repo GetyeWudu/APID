@@ -5,3 +5,4 @@ public enum ConversationContextType {
     SKILL_COHORT_GROUP,
     SKILL_PEER_DIRECT
 }
+

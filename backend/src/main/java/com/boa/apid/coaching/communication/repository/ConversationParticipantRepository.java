@@ -23,3 +23,4 @@ public interface ConversationParticipantRepository extends JpaRepository<Convers
 
     boolean existsByConversationIdAndEmployeeIdAndStatus(Long conversationId, Long employeeId, ParticipantStatus status);
 }
+

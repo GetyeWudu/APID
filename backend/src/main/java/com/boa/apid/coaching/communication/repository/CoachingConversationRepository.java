@@ -40,3 +40,4 @@ public interface CoachingConversationRepository extends JpaRepository<CoachingCo
             """)
     List<CoachingConversation> findAllActiveForUser(@Param("userId") Long userId);
 }
+

@@ -40,3 +40,4 @@ public class ConversationReadState {
     public Instant getLastReadAt() { return lastReadAt; }
     public void setLastReadAt(Instant lastReadAt) { this.lastReadAt = lastReadAt; }
 }
+

@@ -17,3 +17,4 @@ public class CreatePeerConversationRequest {
     public Long getTargetEmployeeId() { return targetEmployeeId; }
     public void setTargetEmployeeId(Long targetEmployeeId) { this.targetEmployeeId = targetEmployeeId; }
 }
+

@@ -18,3 +18,4 @@ public interface MessageAttachmentRepository extends JpaRepository<MessageAttach
     @Query("SELECT a FROM MessageAttachment a JOIN CoachingMessage m ON a.messageId = m.id WHERE m.conversationId = :conversationId ORDER BY a.createdAt DESC")
     List<MessageAttachment> findAttachmentsByConversationId(@Param("conversationId") Long conversationId);
 }
+

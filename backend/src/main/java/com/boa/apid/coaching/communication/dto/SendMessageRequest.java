@@ -32,3 +32,4 @@ public class SendMessageRequest {
     public List<Long> getAttachmentIds() { return attachmentIds; }
     public void setAttachmentIds(List<Long> attachmentIds) { this.attachmentIds = attachmentIds; }
 }
+

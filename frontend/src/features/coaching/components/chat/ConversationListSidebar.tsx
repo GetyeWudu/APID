@@ -346,3 +346,4 @@ export const ConversationListSidebar: React.FC<ConversationListSidebarProps> = (
     </div>
   );
 };
+

@@ -61,3 +61,4 @@ public class ConversationSummaryDto {
     public List<MessageDto> getPinnedMessages() { return pinnedMessages; }
     public void setPinnedMessages(List<MessageDto> pinnedMessages) { this.pinnedMessages = pinnedMessages; }
 }
+

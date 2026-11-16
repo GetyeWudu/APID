@@ -5,3 +5,4 @@ public enum MessageType {
     FILE,
     RESOURCE_LINK
 }
+

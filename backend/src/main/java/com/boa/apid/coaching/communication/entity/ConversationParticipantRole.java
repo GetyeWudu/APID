@@ -5,3 +5,4 @@ public enum ConversationParticipantRole {
     COACHEE,
     PEER
 }
+
