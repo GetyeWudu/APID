@@ -2,6 +2,8 @@ package com.boa.apid.mentoring.matching.controller;
 
 import com.boa.apid.common.response.ApiResponse;
 import com.boa.apid.core.auth.security.ApidUserPrincipal;
+import com.boa.apid.mentoring.matching.dto.MentoringDirectMatchInput;
+import com.boa.apid.mentoring.matching.dto.MentoringDirectMatchResultDto;
 import com.boa.apid.mentoring.matching.dto.MentoringMatchAssignmentInput;
 import com.boa.apid.mentoring.matching.dto.MentoringMatchRequestDto;
 import com.boa.apid.mentoring.matching.dto.MentoringMatchRequestInput;
@@ -57,6 +59,15 @@ public class MentoringMatchController {
             @AuthenticationPrincipal ApidUserPrincipal actor
     ) {
         return ApiResponse.ok("Trainee matched with trainer", matchService.match(requestId, input, actor));
+    }
+
+    @PostMapping("/hr/direct-matches")
+    @PreAuthorize("hasAuthority('MENTORING_MATCH_MANAGE')")
+    public ApiResponse<MentoringDirectMatchResultDto> directMatch(
+            @Valid @RequestBody MentoringDirectMatchInput input,
+            @AuthenticationPrincipal ApidUserPrincipal actor
+    ) {
+        return ApiResponse.ok("Mentor and trainee matched", matchService.directMatch(input, actor));
     }
 
     @GetMapping("/hr/reassignment-queue")

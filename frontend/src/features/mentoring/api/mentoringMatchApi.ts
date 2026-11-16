@@ -37,6 +37,15 @@ export interface MentoringReassignmentResult {
   reassignedTrainees: number;
 }
 
+export interface MentoringDirectMatchResult {
+  relationshipId: number;
+  mentorUserId: number;
+  mentorName: string;
+  traineeUserId: number;
+  traineeName: string;
+  startedAt: string;
+}
+
 export const mentoringMatchApi = {
   async listMine(): Promise<MentoringMatchRequest[]> {
     const response = await apiClient.get<ApiResponse<MentoringMatchRequest[]>>('/mentoring/match-requests');
@@ -64,6 +73,14 @@ export const mentoringMatchApi = {
   ): Promise<MentoringMatchRequest> {
     const response = await apiClient.post<ApiResponse<MentoringMatchRequest>>(
       `/mentoring/hr/match-requests/${requestId}/match`,
+      input
+    );
+    return response.data.data;
+  },
+
+  async directMatch(input: { mentorUserId: number; traineeUserId: number }): Promise<MentoringDirectMatchResult> {
+    const response = await apiClient.post<ApiResponse<MentoringDirectMatchResult>>(
+      '/mentoring/hr/direct-matches',
       input
     );
     return response.data.data;

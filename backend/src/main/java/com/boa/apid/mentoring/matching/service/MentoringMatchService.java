@@ -15,6 +15,8 @@ import com.boa.apid.core.organization.repository.EmployeeRepository;
 import com.boa.apid.core.skills.entity.Skill;
 import com.boa.apid.core.skills.repository.SkillRepository;
 import com.boa.apid.mentoring.matching.dto.MentoringMatchAssignmentInput;
+import com.boa.apid.mentoring.matching.dto.MentoringDirectMatchInput;
+import com.boa.apid.mentoring.matching.dto.MentoringDirectMatchResultDto;
 import com.boa.apid.mentoring.matching.dto.MentoringMatchRequestDto;
 import com.boa.apid.mentoring.matching.dto.MentoringMatchRequestInput;
 import com.boa.apid.mentoring.matching.dto.MentoringReassignmentCandidateDto;
@@ -326,6 +328,141 @@ public class MentoringMatchService {
                 null
         ));
         return MentoringMatchRequestDto.from(saved, savedRelationship.getId());
+    }
+
+    @Transactional
+    public MentoringDirectMatchResultDto directMatch(
+            MentoringDirectMatchInput input,
+            ApidUserPrincipal actor
+    ) {
+        if (!actor.getPermissions().contains("MENTORING_MATCH_MANAGE")) {
+            throw new AccessDeniedException("Only authorized HR can create mentoring matches.");
+        }
+        if (input.mentorUserId().equals(input.traineeUserId())) {
+            throw new BusinessException("SELF_MENTORING_MATCH", "An employee cannot be matched with themselves.");
+        }
+
+        User mentor = userRepository.findByIdForUpdate(input.mentorUserId())
+                .filter(user -> user.getStatus() == UserStatus.ACTIVE)
+                .orElseThrow(() -> new ResourceNotFoundException("Active mentor account not found"));
+        TrainerAuthorization authorization = trainerAuthorizationRepository.findActiveByUserId(mentor.getId())
+                .stream().findFirst()
+                .orElseThrow(() -> new BusinessException(
+                        "ACTIVE_TRAINER_AUTHORIZATION_REQUIRED",
+                        "Only an active, authorized mentor can be assigned.",
+                        HttpStatus.CONFLICT
+                ));
+        if (authorization.getEmployee().getEmploymentStatus() != EmploymentStatus.ACTIVE) {
+            throw new BusinessException(
+                    "INACTIVE_TRAINER_CANDIDATE",
+                    "Only an active employee can be assigned as a mentor.",
+                    HttpStatus.CONFLICT
+            );
+        }
+        User trainee = userRepository.findByIdForUpdate(input.traineeUserId())
+                .filter(user -> user.getStatus() == UserStatus.ACTIVE)
+                .orElseThrow(() -> new ResourceNotFoundException("Active trainee account not found"));
+        Employee traineeEmployee = employeeRepository.findDetailedByUserId(trainee.getId())
+                .filter(employee -> employee.getEmploymentStatus() == EmploymentStatus.ACTIVE)
+                .orElseThrow(() -> new BusinessException(
+                        "ACTIVE_TRAINEE_REQUIRED",
+                        "Only an active employee can be matched as a trainee.",
+                        HttpStatus.CONFLICT
+                ));
+
+        if (relationshipRepository.existsActivePair(
+                mentor.getId(), trainee.getId(), MentoringRelationshipStatus.ACTIVE)) {
+            throw new BusinessException(
+                    "MENTORING_RELATIONSHIP_EXISTS",
+                    "The selected mentor and trainee already have an active relationship.",
+                    HttpStatus.CONFLICT
+            );
+        }
+        if (recipientRepository.existsByMentorTraineeAndStatus(
+                mentor.getId(), trainee.getId(), MentoringRequestRecipientStatus.PENDING)) {
+            throw new BusinessException(
+                    "MENTORING_PAIR_REQUEST_PENDING",
+                    "A pending mentoring request already exists for this mentor and trainee.",
+                    HttpStatus.CONFLICT
+            );
+        }
+
+        long activeTrainees = relationshipRepository.countActiveTraineesByMentorUserId(
+                mentor.getId(), MentoringRelationshipStatus.ACTIVE);
+        long pendingInvitations = recipientRepository.countByMentorAndStatus(
+                mentor.getId(), MentoringRequestRecipientStatus.PENDING);
+        if (activeTrainees + pendingInvitations >= authorization.getMaxConcurrentTrainees()) {
+            throw new BusinessException(
+                    "MENTOR_CAPACITY_REACHED",
+                    "The selected mentor has no remaining capacity.",
+                    HttpStatus.CONFLICT
+            );
+        }
+
+        User hrUser = userRepository.findById(actor.getUserId())
+                .orElseThrow(() -> new ResourceNotFoundException("HR account not found"));
+        MentoringRequest request = new MentoringRequest();
+        request.setMentorUser(mentor);
+        request.setInitiatedByUser(hrUser);
+        request.setRequestType(MentoringRequestType.INDIVIDUAL);
+        MentoringRequest savedRequest = mentoringRequestRepository.save(request);
+
+        MentoringRequestRecipient recipient = new MentoringRequestRecipient();
+        recipient.setRequest(savedRequest);
+        recipient.setRecipientUser(trainee);
+        recipient.setTraineeUser(trainee);
+        recipient.setStatus(MentoringRequestRecipientStatus.ACCEPTED);
+        recipient.setRespondedAt(Instant.now());
+        recipientRepository.save(recipient);
+
+        MentoringRelationship relationship = new MentoringRelationship();
+        relationship.setRequest(savedRequest);
+        relationship.setMentorUser(mentor);
+        relationship.setStatus(MentoringRelationshipStatus.ACTIVE);
+        MentoringRelationship savedRelationship = relationshipRepository.save(relationship);
+
+        MentoringRelationshipMember member = new MentoringRelationshipMember();
+        member.setRelationship(savedRelationship);
+        member.setRequestRecipient(recipient);
+        member.setMentorUser(mentor);
+        member.setTraineeUser(trainee);
+        member.setStatus(MentoringRelationshipMemberStatus.ACTIVE);
+        memberRepository.save(member);
+
+        String mentorName = authorization.getEmployee().getFullName();
+        String pairingLink = "/mentoring/pairing/" + savedRelationship.getId();
+        notify(trainee.getId(), "MENTORING_HR_MATCHED", "A mentor has been matched",
+                "HR matched you with " + mentorName + ".", pairingLink);
+        notify(mentor.getId(), "MENTORING_HR_MATCHED", "A trainee has been matched",
+                traineeEmployee.getFullName() + " has been matched with you by HR.", pairingLink);
+
+        Map<String, Object> auditDetails = new LinkedHashMap<>();
+        auditDetails.put("mentorUserId", mentor.getId());
+        auditDetails.put("traineeUserId", trainee.getId());
+        auditDetails.put("relationshipId", savedRelationship.getId());
+        auditService.record(new AuditService.AuditCommand(
+                null,
+                actor.getUserId(),
+                actor.getUsername(),
+                trainee.getId(),
+                "MENTORING",
+                "MENTORING_HR_DIRECT_MATCHED",
+                "SUCCESS",
+                null,
+                "MENTORING_RELATIONSHIP",
+                String.valueOf(savedRelationship.getId()),
+                auditDetails,
+                null,
+                null
+        ));
+        return new MentoringDirectMatchResultDto(
+                savedRelationship.getId(),
+                mentor.getId(),
+                mentorName,
+                trainee.getId(),
+                traineeEmployee.getFullName(),
+                savedRelationship.getStartedAt()
+        );
     }
 
     @Transactional

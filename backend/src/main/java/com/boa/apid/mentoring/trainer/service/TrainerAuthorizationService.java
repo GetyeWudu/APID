@@ -201,6 +201,32 @@ public class TrainerAuthorizationService {
                 .toList();
     }
 
+    @Transactional(readOnly = true)
+    public List<TrainerEmployeeCandidateDto> listMatchingEmployees() {
+        List<Employee> employees = employeeRepository.findAllWithDetails().stream()
+                .filter(employee -> employee.getEmploymentStatus() == EmploymentStatus.ACTIVE)
+                .filter(employee -> employee.getUserId() != null)
+                .toList();
+        Set<Long> userIds = employees.stream().map(Employee::getUserId)
+                .collect(java.util.stream.Collectors.toSet());
+        Set<Long> activeUserIds = userRepository.findAllById(userIds).stream()
+                .filter(user -> user.getStatus() == UserStatus.ACTIVE)
+                .map(User::getId)
+                .collect(java.util.stream.Collectors.toSet());
+
+        return employees.stream()
+                .filter(employee -> activeUserIds.contains(employee.getUserId()))
+                .map(employee -> new TrainerEmployeeCandidateDto(
+                        employee.getId(),
+                        employee.getUserId(),
+                        employee.getEmployeeNumber(),
+                        employee.getFullName(),
+                        employee.getDepartmentName()
+                ))
+                .sorted(Comparator.comparing(TrainerEmployeeCandidateDto::fullName, String.CASE_INSENSITIVE_ORDER))
+                .toList();
+    }
+
     @Transactional
     public TrainerRosterDto appoint(TrainerAppointmentRequest request, ApidUserPrincipal actor) {
         List<Long> skillIds = new ArrayList<>(new LinkedHashSet<>(request.skillIds()));

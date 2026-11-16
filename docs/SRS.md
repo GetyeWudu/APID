@@ -481,6 +481,7 @@ APID supports **all three** discovery and matching paths concurrently:
      4. Optional average Trainee feedback rating
 3. **Method 3 — HR-Assisted Manual Matching:**
    - Employee submits an open learning request (`"I want to learn X, please match me"`); HR Admin views matching Trainers and manually pairs the Trainee with a suitable Trainer.
+   - HR Admin can also select an active Mentor and an active employee directly, without a prior learning request. This creates an active relationship immediately; neither participant approval is required, and both are notified.
 
 ### 5.5 Mentoring Requests & Capacity Rules (`FR-MENTOR-05`)
 - Supports **Individual** and **Group** mentoring relationships.
@@ -527,6 +528,7 @@ All notifications write immediately to `core.notifications` (displayed in the to
 | Trainer application submitted | Mentoring | HR Admins | `/hr/applications/{id}` |
 | Trainer application approved / rejected | Mentoring | Applicant employee | `/mentoring/trainer-profile` |
 | Direct HR Trainer appointment | Mentoring | Appointed employee | `/mentoring/trainer-profile` |
+| HR directly matches a Mentor and Trainee | Mentoring | Mentor and Trainee | `/mentoring/pairing/{relationshipId}` |
 | Trainer suspended / revoked / restored | Mentoring | Trainer (+ active Trainees / HR if affected) | `/mentoring/relationships` |
 | New Mentor invitation / trainee mentorship request | Mentoring | Invited Trainee or requested Mentor | `/mentoring?view=trainee` or `/mentoring?view=trainer` |
 | Mentoring request approved / declined | Mentoring | Request initiator | `/mentoring?view=trainer` or `/mentoring?view=trainee` |

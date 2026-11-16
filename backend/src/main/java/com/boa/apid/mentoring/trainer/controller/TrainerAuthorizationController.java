@@ -65,6 +65,12 @@ public class TrainerAuthorizationController {
         return ApiResponse.ok(authorizationService.listAppointmentCandidates());
     }
 
+    @GetMapping("/hr/matching-employees")
+    @PreAuthorize("hasAuthority('MENTORING_MATCH_MANAGE')")
+    public ApiResponse<List<TrainerEmployeeCandidateDto>> listMatchingEmployees() {
+        return ApiResponse.ok(authorizationService.listMatchingEmployees());
+    }
+
     @PostMapping("/hr/trainers")
     @PreAuthorize("hasAuthority('TRAINER_DIRECT_APPOINT')")
     public ApiResponse<TrainerRosterDto> appoint(

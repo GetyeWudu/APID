@@ -3,7 +3,8 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { mentoringMatchApi } from '../features/mentoring/api/mentoringMatchApi';
-import type { TrainerRosterItem } from '../features/mentoring/api/mentoringTrainerApi';
+import type { TrainerEmployeeCandidate, TrainerRosterItem } from '../features/mentoring/api/mentoringTrainerApi';
+import { HrDirectMatchingTab } from '../features/mentoring/components/HrDirectMatchingTab';
 import { HrMatchingTab } from '../features/mentoring/components/HrMatchingTab';
 import { ToastProvider } from '../shared/components/ui';
 
@@ -91,6 +92,73 @@ describe('HrMatchingTab reassignment', () => {
         overrideReason: undefined,
         skillOverrideReason: 'Temporary coverage approved by HR.',
       });
+    });
+  });
+});
+
+describe('HrDirectMatchingTab', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('creates an HR match directly without requesting participant approval', async () => {
+    const directMatch = vi.spyOn(mentoringMatchApi, 'directMatch').mockResolvedValue({
+      relationshipId: 13,
+      mentorUserId: 30,
+      mentorName: 'Assigned Mentor',
+      traineeUserId: 40,
+      traineeName: 'Assigned Trainee',
+      startedAt: '2026-11-16T08:00:00Z',
+    });
+    const employees: TrainerEmployeeCandidate[] = [
+      {
+        employeeId: 5,
+        userId: 40,
+        employeeNumber: '00010040',
+        fullName: 'Assigned Trainee',
+        departmentName: 'Engineering',
+      },
+    ];
+    const trainer: TrainerRosterItem = {
+      id: 4,
+      employeeId: 6,
+      userId: 30,
+      employeeNumber: '00010006',
+      fullName: 'Assigned Mentor',
+      departmentName: 'Engineering',
+      employmentStatus: 'ACTIVE',
+      sourceType: 'APPLICATION',
+      status: 'ACTIVE',
+      activeTrainees: 0,
+      pendingTrainees: 0,
+      maxConcurrentTrainees: 3,
+      bio: null,
+      availabilityNotes: null,
+      skills: [],
+      effectiveFrom: '2026-11-01T08:00:00Z',
+      updatedAt: '2026-11-01T08:00:00Z',
+    };
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <ToastProvider>
+          <MemoryRouter>
+            <HrDirectMatchingTab employees={employees} trainers={[trainer]} />
+          </MemoryRouter>
+        </ToastProvider>
+      </QueryClientProvider>
+    );
+
+    fireEvent.change(screen.getByLabelText('Mentor'), { target: { value: '30' } });
+    fireEvent.change(screen.getByLabelText('Trainee'), { target: { value: '40' } });
+    expect(screen.getByText(/Neither participant needs to approve/)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Match mentor and trainee' }));
+
+    await waitFor(() => {
+      expect(directMatch).toHaveBeenCalledWith({ mentorUserId: 30, traineeUserId: 40 });
     });
   });
 });

@@ -320,6 +320,13 @@ export function AppLayout({ children }: { children: ReactNode }) {
               matchSearch: '?tab=trainers',
             },
             {
+              to: '/mentoring/hr?tab=direct-matching',
+              label: 'Match Mentor & Trainee',
+              icon: <HeartHandshake size={17} />,
+              requiredAnyPermissions: ['MENTORING_MATCH_MANAGE'],
+              matchSearch: '?tab=direct-matching',
+            },
+            {
               to: '/mentoring/hr?tab=matching',
               label: 'Match Requests',
               icon: <GitPullRequest size={17} />,

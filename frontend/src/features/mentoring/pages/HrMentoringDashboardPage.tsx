@@ -17,12 +17,13 @@ import { mentorApplicationApi } from '../api/mentorApplicationApi';
 import { mentoringMatchApi } from '../api/mentoringMatchApi';
 import { mentoringTrainerApi } from '../api/mentoringTrainerApi';
 import { HrAnalyticsTab } from '../components/HrAnalyticsTab';
+import { HrDirectMatchingTab } from '../components/HrDirectMatchingTab';
 import { HrMatchingTab } from '../components/HrMatchingTab';
 import { SkillSupplyDemandCard } from '../components/SkillSupplyDemandCard';
 import { TrainerApplicationsTab } from '../components/TrainerApplicationsTab';
 import { TrainerRosterTab } from '../components/TrainerRosterTab';
 
-type HrTabKey = 'overview' | 'applications' | 'trainers' | 'matching' | 'analytics';
+type HrTabKey = 'overview' | 'applications' | 'trainers' | 'direct-matching' | 'matching' | 'analytics';
 
 interface HrTabMeta {
   key: HrTabKey;
@@ -38,6 +39,7 @@ const HR_TABS: HrTabMeta[] = [
     label: 'Approved Trainers',
     anyPermissions: ['TRAINER_DIRECT_APPOINT', 'TRAINER_STATUS_MANAGE', 'MENTORING_REPORT_VIEW_ALL'],
   },
+  { key: 'direct-matching', label: 'Match Mentor & Trainee', anyPermissions: ['MENTORING_MATCH_MANAGE'] },
   { key: 'matching', label: 'Match Requests & Reassignments', anyPermissions: ['MENTORING_MATCH_MANAGE', 'TRAINER_STATUS_MANAGE'] },
   { key: 'analytics', label: 'Outcomes', anyPermissions: ['MENTORING_REPORT_VIEW_ALL'] },
 ];
@@ -78,6 +80,11 @@ export function HrMentoringDashboardPage() {
     queryFn: mentoringTrainerApi.listAppointmentCandidates,
     enabled: canAppointTrainers,
   });
+  const matchingEmployeesQuery = useQuery({
+    queryKey: ['mentoring', 'matching-employees'],
+    queryFn: mentoringTrainerApi.listMatchingEmployees,
+    enabled: canManageMatches,
+  });
   const skillsQuery = useQuery({
     queryKey: ['mentoring', 'active-skills'],
     queryFn: skillsApi.listActive,
@@ -106,6 +113,7 @@ export function HrMentoringDashboardPage() {
     canReviewApplications ? applicationsQuery : null,
     canManageTrainers ? trainersQuery : null,
     canAppointTrainers ? candidatesQuery : null,
+    canManageMatches ? matchingEmployeesQuery : null,
     canAppointTrainers ? skillsQuery : null,
     canManageMatches ? matchRequestsQuery : null,
     canViewReports ? overviewQuery : null,
@@ -118,11 +126,13 @@ export function HrMentoringDashboardPage() {
       ? 'Failed to load trainer authorizations.'
       : failedQuery === candidatesQuery
         ? 'Failed to load employee appointment candidates.'
-        : failedQuery === skillsQuery
-          ? 'Failed to load the active skills catalog.'
-          : failedQuery === matchRequestsQuery
-            ? 'Failed to load HR matching requests.'
-            : 'Failed to load mentoring analytics.';
+        : failedQuery === matchingEmployeesQuery
+          ? 'Failed to load active matching employees.'
+          : failedQuery === skillsQuery
+            ? 'Failed to load the active skills catalog.'
+            : failedQuery === matchRequestsQuery
+              ? 'Failed to load HR matching requests.'
+              : 'Failed to load mentoring analytics.';
 
   if (isLoading) return <LoadingSkeleton rows={6} height={28} />;
   if (failedQuery) {
@@ -213,6 +223,15 @@ export function HrMentoringDashboardPage() {
       {activeTab === 'matching' && (
         <PermissionGate anyPermissions={['MENTORING_MATCH_MANAGE', 'TRAINER_STATUS_MANAGE']}>
           <HrMatchingTab requests={matchRequests} trainers={trainers} />
+        </PermissionGate>
+      )}
+
+      {activeTab === 'direct-matching' && (
+        <PermissionGate permission="MENTORING_MATCH_MANAGE">
+          <HrDirectMatchingTab
+            employees={matchingEmployeesQuery.data ?? []}
+            trainers={trainers}
+          />
         </PermissionGate>
       )}
 

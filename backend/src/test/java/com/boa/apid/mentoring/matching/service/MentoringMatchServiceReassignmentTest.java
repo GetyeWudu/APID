@@ -5,16 +5,20 @@ import com.boa.apid.core.audit.service.AuditService;
 import com.boa.apid.core.auth.security.ApidUserPrincipal;
 import com.boa.apid.core.authorization.entity.User;
 import com.boa.apid.core.authorization.repository.UserRepository;
+import com.boa.apid.core.notifications.entity.NotificationModule;
 import com.boa.apid.core.notifications.service.NotificationService;
 import com.boa.apid.core.organization.entity.Employee;
 import com.boa.apid.core.organization.repository.EmployeeRepository;
 import com.boa.apid.core.skills.entity.Skill;
 import com.boa.apid.core.skills.repository.SkillRepository;
+import com.boa.apid.mentoring.matching.dto.MentoringDirectMatchInput;
 import com.boa.apid.mentoring.matching.dto.MentoringReassignmentInput;
 import com.boa.apid.mentoring.matching.repository.MentoringMatchRequestRepository;
 import com.boa.apid.mentoring.pairing.entity.MentoringRelationship;
 import com.boa.apid.mentoring.pairing.entity.MentoringRelationshipMember;
 import com.boa.apid.mentoring.pairing.entity.MentoringRelationshipMemberStatus;
+import com.boa.apid.mentoring.pairing.entity.MentoringRequestRecipient;
+import com.boa.apid.mentoring.pairing.entity.MentoringRequestRecipientStatus;
 import com.boa.apid.mentoring.pairing.entity.MentoringRequest;
 import com.boa.apid.mentoring.pairing.entity.MentoringRelationshipStatus;
 import com.boa.apid.mentoring.pairing.entity.MentoringRequestType;
@@ -40,6 +44,8 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.contains;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -61,6 +67,91 @@ class MentoringMatchServiceReassignmentTest {
 
     @InjectMocks
     private MentoringMatchService service;
+
+    @Test
+    void directlyMatchesActiveEmployeesWithoutParticipantApprovalAndNotifiesBoth() {
+        User mentor = activeUser(20L);
+        User trainee = activeUser(40L);
+        User hrUser = activeUser(5L);
+        Employee mentorEmployee = new Employee();
+        mentorEmployee.setFullName("Mentor Name");
+        Employee traineeEmployee = new Employee();
+        traineeEmployee.setFullName("Trainee Name");
+        TrainerAuthorization authorization = new TrainerAuthorization();
+        authorization.setEmployee(mentorEmployee);
+        authorization.setMaxConcurrentTrainees(2);
+        MentoringRelationship relationship = new MentoringRelationship();
+
+        when(userRepository.findByIdForUpdate(20L)).thenReturn(Optional.of(mentor));
+        when(userRepository.findByIdForUpdate(40L)).thenReturn(Optional.of(trainee));
+        when(userRepository.findById(5L)).thenReturn(Optional.of(hrUser));
+        when(trainerAuthorizationRepository.findActiveByUserId(20L)).thenReturn(List.of(authorization));
+        when(employeeRepository.findDetailedByUserId(40L)).thenReturn(Optional.of(traineeEmployee));
+        when(relationshipRepository.existsActivePair(
+                20L, 40L, MentoringRelationshipStatus.ACTIVE)).thenReturn(false);
+        when(recipientRepository.existsByMentorTraineeAndStatus(
+                20L, 40L, MentoringRequestRecipientStatus.PENDING)).thenReturn(false);
+        when(relationshipRepository.countActiveTraineesByMentorUserId(
+                20L, MentoringRelationshipStatus.ACTIVE)).thenReturn(0L);
+        when(recipientRepository.countByMentorAndStatus(
+                20L, MentoringRequestRecipientStatus.PENDING)).thenReturn(0L);
+        when(mentoringRequestRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+        when(recipientRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+        when(relationshipRepository.save(any())).thenReturn(relationship);
+
+        var result = service.directMatch(new MentoringDirectMatchInput(20L, 40L), hrPrincipal());
+
+        assertEquals(20L, result.mentorUserId());
+        assertEquals("Mentor Name", result.mentorName());
+        assertEquals(40L, result.traineeUserId());
+        assertEquals("Trainee Name", result.traineeName());
+        org.mockito.ArgumentCaptor<MentoringRequestRecipient> recipientCaptor =
+                org.mockito.ArgumentCaptor.forClass(MentoringRequestRecipient.class);
+        verify(recipientRepository).save(recipientCaptor.capture());
+        assertEquals(MentoringRequestRecipientStatus.ACCEPTED, recipientCaptor.getValue().getStatus());
+        org.junit.jupiter.api.Assertions.assertNotNull(recipientCaptor.getValue().getRespondedAt());
+        org.mockito.ArgumentCaptor<MentoringRelationshipMember> memberCaptor =
+                org.mockito.ArgumentCaptor.forClass(MentoringRelationshipMember.class);
+        verify(memberRepository).save(memberCaptor.capture());
+        assertEquals(MentoringRelationshipMemberStatus.ACTIVE, memberCaptor.getValue().getStatus());
+        verify(notificationService).notify(
+                eq(40L), eq(NotificationModule.MENTORING), eq("MENTORING_HR_MATCHED"),
+                eq("A mentor has been matched"), contains("Mentor Name"), any()
+        );
+        verify(notificationService).notify(
+                eq(20L), eq(NotificationModule.MENTORING), eq("MENTORING_HR_MATCHED"),
+                eq("A trainee has been matched"), contains("Trainee Name"), any()
+        );
+    }
+
+    @Test
+    void refusesToDirectlyMatchMentorAtCapacity() {
+        User mentor = activeUser(20L);
+        User trainee = activeUser(40L);
+        Employee mentorEmployee = new Employee();
+        TrainerAuthorization authorization = new TrainerAuthorization();
+        authorization.setEmployee(mentorEmployee);
+        authorization.setMaxConcurrentTrainees(1);
+        when(userRepository.findByIdForUpdate(20L)).thenReturn(Optional.of(mentor));
+        when(trainerAuthorizationRepository.findActiveByUserId(20L)).thenReturn(List.of(authorization));
+        when(userRepository.findByIdForUpdate(40L)).thenReturn(Optional.of(trainee));
+        when(employeeRepository.findDetailedByUserId(40L)).thenReturn(Optional.of(new Employee()));
+        when(relationshipRepository.existsActivePair(
+                20L, 40L, MentoringRelationshipStatus.ACTIVE)).thenReturn(false);
+        when(recipientRepository.existsByMentorTraineeAndStatus(
+                20L, 40L, MentoringRequestRecipientStatus.PENDING)).thenReturn(false);
+        when(relationshipRepository.countActiveTraineesByMentorUserId(
+                20L, MentoringRelationshipStatus.ACTIVE)).thenReturn(1L);
+        when(recipientRepository.countByMentorAndStatus(
+                20L, MentoringRequestRecipientStatus.PENDING)).thenReturn(0L);
+
+        BusinessException exception = assertThrows(BusinessException.class, () -> service.directMatch(
+                new MentoringDirectMatchInput(20L, 40L), hrPrincipal()
+        ));
+
+        assertEquals("MENTOR_CAPACITY_REACHED", exception.getErrorCode());
+        verify(mentoringRequestRepository, never()).save(any());
+    }
 
     @Test
     void refusesToReassignRelationshipThatIsNotPaused() {
@@ -198,5 +289,11 @@ class MentoringMatchServiceReassignmentTest {
     private ApidUserPrincipal hrPrincipal() {
         return new ApidUserPrincipal(5L, "hr.user", true, false, 1, Set.of(),
                 Set.of("MENTORING_MATCH_MANAGE"));
+    }
+
+    private User activeUser(Long id) {
+        User user = new User();
+        user.setId(id);
+        return user;
     }
 }

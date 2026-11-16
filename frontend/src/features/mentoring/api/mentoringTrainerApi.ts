@@ -91,6 +91,13 @@ export const mentoringTrainerApi = {
     return response.data.data;
   },
 
+  async listMatchingEmployees(): Promise<TrainerEmployeeCandidate[]> {
+    const response = await apiClient.get<ApiResponse<TrainerEmployeeCandidate[]>>(
+      '/mentoring/hr/matching-employees'
+    );
+    return response.data.data;
+  },
+
   async getOverview(): Promise<MentoringHrOverview> {
     const response = await apiClient.get<ApiResponse<MentoringHrOverview>>('/mentoring/hr/overview');
     return response.data.data;
