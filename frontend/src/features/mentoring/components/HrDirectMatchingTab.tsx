@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import axios from 'axios';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { Link2 } from 'lucide-react';
@@ -19,6 +19,7 @@ export function HrDirectMatchingTab({
   const [skillId, setSkillId] = useState('');
   const queryClient = useQueryClient();
   const { pushToast } = useToast();
+
   const matchMutation = useMutation({
     mutationFn: (input: { mentorUserId: number; traineeUserId: number; skillId: number }) =>
       mentoringMatchApi.directMatch(input),
@@ -46,21 +47,50 @@ export function HrDirectMatchingTab({
     },
   });
 
-  const eligibleMentors = trainers.filter((trainer) =>
+  // 1. All active authorized mentors with available capacity
+  const eligibleMentors = useMemo(() => trainers.filter((trainer) =>
     trainer.userId !== null &&
     trainer.status === 'ACTIVE' &&
     trainer.acceptingNewPairings !== false &&
     trainer.employmentStatus === 'ACTIVE' &&
-    trainer.skills.some((skill) => skill.status === 'ACTIVE') &&
+    trainer.skills.some((skill) => skill.status === 'ACTIVE' || skill.status === undefined) &&
     trainer.activeTrainees + trainer.pendingTrainees < trainer.maxConcurrentTrainees
-  );
-  const selectedMentor = eligibleMentors.find((mentor) => String(mentor.userId) === mentorUserId);
-  const availableSkills = selectedMentor?.skills.filter((skill) =>
-    skill.status === undefined ? selectedMentor.status === 'ACTIVE' : skill.status === 'ACTIVE'
-  ) ?? [];
-  const eligibleTrainees = employees.filter((employee) =>
+  ), [trainers]);
+
+  // 2. All active skills taught by any eligible mentor
+  const allMentorSkills = useMemo(() => {
+    const map = new Map<number, { id: number; name: string }>();
+    eligibleMentors.forEach((m) => {
+      m.skills.forEach((s) => {
+        if (s.status === 'ACTIVE' || s.status === undefined) {
+          map.set(s.id, { id: s.id, name: s.name });
+        }
+      });
+    });
+    return Array.from(map.values()).sort((a, b) => a.name.localeCompare(b.name));
+  }, [eligibleMentors]);
+
+  // 3. Mentors filtered by chosen skill (if a skill is selected first)
+  const availableMentors = useMemo(() => {
+    if (!skillId) return eligibleMentors;
+    return eligibleMentors.filter((m) =>
+      m.skills.some((s) => String(s.id) === skillId && (s.status === 'ACTIVE' || s.status === undefined))
+    );
+  }, [eligibleMentors, skillId]);
+
+  // 4. Skills filtered by chosen mentor (if a mentor is selected first)
+  const selectedMentor = eligibleMentors.find((m) => String(m.userId) === mentorUserId);
+  const availableSkills = useMemo(() => {
+    if (selectedMentor) {
+      return selectedMentor.skills.filter((s) => s.status === 'ACTIVE' || s.status === undefined);
+    }
+    return allMentorSkills;
+  }, [selectedMentor, allMentorSkills]);
+
+  // 5. Eligible trainees (excluding the mentor themselves)
+  const eligibleTrainees = useMemo(() => employees.filter((employee) =>
     String(employee.userId) !== mentorUserId
-  );
+  ), [employees, mentorUserId]);
 
   return (
     <section className="apid-card">
@@ -79,65 +109,104 @@ export function HrDirectMatchingTab({
           description="An active, authorized mentor and active employee account are required to create a match."
         />
       ) : (
-        <div className="boa-stack">
-          <label className="boa-stack" style={{ gap: '0.35rem' }}>
-            Mentor
-            <select
-              className="apid-input"
-              aria-label="Mentor"
-              value={mentorUserId}
-              onChange={(event) => {
-                setMentorUserId(event.target.value);
-                if (event.target.value === traineeUserId) setTraineeUserId('');
-                setSkillId('');
-              }}
-            >
-              <option value="">Select an active mentor</option>
-              {eligibleMentors.map((mentor) => (
-                <option key={mentor.userId} value={mentor.userId ?? ''}>
-                  {mentor.fullName} · {mentor.activeTrainees + mentor.pendingTrainees}/{mentor.maxConcurrentTrainees}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className="boa-stack" style={{ gap: '0.35rem' }}>
-            Skill
-            <select
-              className="apid-input"
-              aria-label="Skill"
-              value={skillId}
-              onChange={(event) => setSkillId(event.target.value)}
-              disabled={!selectedMentor}
-              required
-            >
-              <option value="">Select a skill for this pairing</option>
-              {availableSkills.map((skill) => (
-                <option key={skill.id} value={skill.id}>{skill.name}</option>
-              ))}
-            </select>
-          </label>
-          <label className="boa-stack" style={{ gap: '0.35rem' }}>
-            Trainee
-            <select
-              className="apid-input"
-              aria-label="Trainee"
-              value={traineeUserId}
-              onChange={(event) => setTraineeUserId(event.target.value)}
-            >
-              <option value="">Select an active employee</option>
-              {eligibleTrainees.map((employee) => (
-                <option key={employee.userId} value={employee.userId}>
-                  {employee.fullName} · {employee.employeeNumber}
-                  {employee.departmentName ? ` · ${employee.departmentName}` : ''}
-                </option>
-              ))}
-            </select>
-          </label>
-          <div>
+        <div className="boa-stack" style={{ gap: '1.25rem' }}>
+          <div style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))',
+            gap: '1rem',
+          }}>
+            {/* 1. Mentor Selection */}
+            <label style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem', fontWeight: 600 }}>
+              <span>Mentor</span>
+              <select
+                className="apid-input"
+                aria-label="Mentor"
+                value={mentorUserId}
+                onChange={(event) => {
+                  const nextMentorId = event.target.value;
+                  setMentorUserId(nextMentorId);
+                  if (nextMentorId === traineeUserId) setTraineeUserId('');
+                  if (nextMentorId && skillId) {
+                    const m = eligibleMentors.find((t) => String(t.userId) === nextMentorId);
+                    const teachesSkill = m?.skills.some((s) => String(s.id) === skillId);
+                    if (!teachesSkill) setSkillId('');
+                  }
+                }}
+              >
+                <option value="">Select an active mentor</option>
+                {availableMentors.map((mentor) => (
+                  <option key={mentor.userId} value={mentor.userId ?? ''}>
+                    {mentor.fullName} · {mentor.activeTrainees + mentor.pendingTrainees}/{mentor.maxConcurrentTrainees} capacity
+                  </option>
+                ))}
+              </select>
+              <span className="boa-muted" style={{ fontSize: '0.8rem', fontWeight: 400 }}>
+                {skillId
+                  ? 'Mentors certified in the selected skill.'
+                  : 'Select an authorized mentor with available capacity.'}
+              </span>
+            </label>
+
+            {/* 2. Skill Selection */}
+            <label style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem', fontWeight: 600 }}>
+              <span>Skill</span>
+              <select
+                className="apid-input"
+                aria-label="Skill"
+                value={skillId}
+                onChange={(event) => {
+                  const nextSkillId = event.target.value;
+                  setSkillId(nextSkillId);
+                  if (nextSkillId && mentorUserId) {
+                    const m = eligibleMentors.find((t) => String(t.userId) === mentorUserId);
+                    const teachesSkill = m?.skills.some((s) => String(s.id) === nextSkillId);
+                    if (!teachesSkill) setMentorUserId('');
+                  }
+                }}
+                required
+              >
+                <option value="">Select a skill for this pairing</option>
+                {availableSkills.map((skill) => (
+                  <option key={skill.id} value={skill.id}>
+                    {skill.name}
+                  </option>
+                ))}
+              </select>
+              <span className="boa-muted" style={{ fontSize: '0.8rem', fontWeight: 400 }}>
+                {selectedMentor
+                  ? `Authorized skills for ${selectedMentor.fullName}.`
+                  : 'Select a skill to filter available mentors.'}
+              </span>
+            </label>
+
+            {/* 3. Trainee Selection */}
+            <label style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem', fontWeight: 600 }}>
+              <span>Trainee</span>
+              <select
+                className="apid-input"
+                aria-label="Trainee"
+                value={traineeUserId}
+                onChange={(event) => setTraineeUserId(event.target.value)}
+              >
+                <option value="">Select an active employee</option>
+                {eligibleTrainees.map((employee) => (
+                  <option key={employee.userId} value={employee.userId}>
+                    {employee.fullName} ({employee.employeeNumber})
+                    {employee.departmentName ? ` · ${employee.departmentName}` : ''}
+                  </option>
+                ))}
+              </select>
+              <span className="boa-muted" style={{ fontSize: '0.8rem', fontWeight: 400 }}>
+                Employee to receive training in this skill.
+              </span>
+            </label>
+          </div>
+
+          <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', flexWrap: 'wrap' }}>
             <button
               type="button"
               className="apid-btn apid-btn-primary"
-              disabled={!selectedMentor || !skillId || !traineeUserId || matchMutation.isPending}
+              disabled={!mentorUserId || !skillId || !traineeUserId || matchMutation.isPending}
               onClick={() => matchMutation.mutate({
                 mentorUserId: Number(mentorUserId),
                 traineeUserId: Number(traineeUserId),
@@ -146,6 +215,15 @@ export function HrDirectMatchingTab({
             >
               <Link2 size={14} /> Match mentor and trainee
             </button>
+            {(!mentorUserId || !skillId || !traineeUserId) && (
+              <span className="boa-muted" style={{ fontSize: '0.82rem' }}>
+                {!mentorUserId
+                  ? 'Select an active mentor (or choose a skill to filter mentors).'
+                  : !skillId
+                  ? 'Select an authorized skill.'
+                  : 'Select a trainee to complete the match.'}
+              </span>
+            )}
           </div>
         </div>
       )}
