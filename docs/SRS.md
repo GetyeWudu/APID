@@ -195,8 +195,9 @@ The React frontend renders a **single adaptive application shell** whose navigat
    - **My Coaching (As Talent):** Assigned Coach, objectives, upcoming sessions, Daily.co join, reflection/additional report submission, chat, resources.
    - **My Mentoring (As Trainer):** Approved skills, capacity/availability settings, incoming Trainee requests, active Trainees, sessions, chat, resources.
    - **My Mentoring (As Trainee):** Apply to become a Trainer, browse/search Trainers, skill recommendations, submit learning requests, active mentoring sessions, feedback.
+   - **My Pairing:** An Employee navigation item lists every relationship membership for the logged-in employee as either Mentor or Trainee, including group/class memberships and relationship status.
 2. **PMS Admin Dashboard:** Report uploader + validation preview, import batch history, mandatory & skill-dev assignments table, missing-manager exception queue, Coach replacement modal, skill-dev approval queue, session report audit feed, missed-session/inactivity alerts, quarterly reports & exports.
-3. **HR Admin Dashboard:** Trainer applications queue + certificate viewer, direct Trainer appointment tool, active/suspended/revoked Trainer management, HR-assisted matching queue, mentoring analytics & exports.
+3. **HR Admin Dashboard:** Trainer applications queue + certificate viewer, direct Trainer appointment tool, active/suspended/revoked Trainer management, HR mentor self-service, HR-assisted matching queue, mentoring analytics & exports.
 4. **System Admin Dashboard:** User accounts, bulk employee/hierarchy import, org tree/manager editor, dynamic Role & Permission builder, Fiscal Quarter & Threshold settings, Audit Log viewer.
 
 ---
@@ -438,40 +439,50 @@ $$\text{Triggers Mandatory Performance Coaching} \iff \text{RoundedOverallFinalR
 *Module Owner: Developer 2 (Friend) · Controlling Authority: HR Department*
 
 ### 5.1 Trainer Application & Qualification Upload (`FR-MENTOR-01`)
-- Any active employee can apply via the Employee Portal to teach one or more skills from `core.skills`.
+- An active employee may submit one initial mentor application. The application can include multiple `core.skills` catalog skills and a custom skill.
+- Once approved, the employee cannot submit another initial application. To add skills, an approved mentor submits an additional-skill request from the mentor profile; HR review is required before the requested skill is authorized or offered for matching.
 - **Application Fields:**
   - Applicant employee identity (from logged-in user)
   - Target `skillId`(s)
-  - Years of experience / expertise summary / proposed mentoring syllabus
+  - Years of experience as a non-negative whole number
+  - Mentoring approach as separate free-text information
+  - Sessions available per week as a non-negative whole number
   - Max concurrent Trainees willing to mentor (optional default from system config)
-  - Weekly availability description
   - Supporting evidence files (certificates, degrees, portfolios, recommendations) stored via `FileStorageService`
-- **Statuses:** `DRAFT`, `SUBMITTED`, `UNDER_REVIEW`, `APPROVED`, `REJECTED`.
+- Initial applications and additional-skill requests use `PENDING`, `APPROVED`, and `DECLINED` review statuses. The applicant can review request history and pending decisions in the portal.
 
 ### 5.2 HR Review & Direct Trainer Appointment (`FR-MENTOR-02`)
 - **Application Review Queue:**
   - HR Admin inspects applicant profile, selected skills, and securely downloads/views uploaded certificates.
-  - HR Admin records `APPROVE` (creates active `TrainerAuthorization`) or `REJECT` (mandatory `rejectionReason` visible to applicant; applicant may revise and reapply later).
+  - HR Admin can approve or decline both initial applications and additional-skill requests. Approving an initial application creates the mentor authorization; approving an additional-skill request adds the approved skills to the existing authorization. A decline requires a reason and is visible to the applicant.
 - **Direct Trainer Appointment (No Application Required):**
   - HR Admin can directly appoint any employee identified as having unique talent/expertise as a Trainer for chosen `skillId`(s).
   - Records: `employeeId`, `skillIds`, `appointmentReason`, `appointedByAdminId`, `appointedAt`.
   - Notifies the employee so they can customize their mentoring bio, availability, and Trainee capacity cap.
 
 ### 5.3 Trainer Status Lifecycle: Suspend & Revoke (`FR-MENTOR-03`)
-HR Admin manages ongoing Trainer standing (`TrainerAuthorization`):
+HR Admin manages ongoing authorization separately for each skill on a `TrainerAuthorization`. A status change affects only that skill; other authorized skills and their active pairings remain unaffected.
 
 | Status | Meaning | Effect on Discovery & Requests | Effect on Existing Active Pairings | Reversible? |
 |---|---|---|---|---|
-| **`ACTIVE`** | Authorized to mentor | Visible in Browse & Recommendations; accepts new requests | Normal operation | — |
-| **`SUSPENDED`** | Temporarily paused by HR (reason & date recorded) | Hidden from Browse/Recommendations; new requests blocked; `PENDING` requests auto-cancelled with notice | Active pairings flagged on HR Dashboard for **Pause** or **HR Reassignment** | **Yes** (HR can restore to `ACTIVE`) |
-| **`REVOKED`** | Authorization permanently removed by HR | Hidden everywhere; new requests blocked; `PENDING` requests cancelled | Active pairings flagged on HR Dashboard for **Reassignment** or **Closure** | **No** (must re-apply or be re-appointed) |
+| **`ACTIVE`** | Authorized to mentor in this skill | Visible for this skill in Browse & Recommendations; accepts new requests for this skill | Normal operation for this skill | — |
+| **`SUSPENDED`** | Temporarily paused by HR for this skill (reason and date recorded) | Hidden for this skill; new requests blocked; pending requests for this skill are cancelled with notice | HR can leave relationships active while blocking new sessions, or pause only relationships for this skill for reassignment | **Yes** (HR can restore this skill to `ACTIVE`) |
+| **`REVOKED`** | Authorization removed by HR for this skill | Hidden for this skill; new requests blocked; pending requests for this skill are cancelled | HR can leave relationships active while blocking new sessions, or pause only relationships for this skill for reassignment | **Yes** (HR can explicitly reauthorize this skill) |
 
 - All historical applications, appointments, suspensions, revocations, and past mentoring sessions remain permanently preserved in audit logs and HR history.
+- A mentor may be authorized for multiple skills. Initial skills are submitted together in the one-time application; later skill additions require HR approval. Skill status is stored and audited per authorization/skill pair; the legacy authorization status is an aggregate of its skill statuses.
+
+### 5.3.1 HR Admin Mentor Availability
+- HR Admins have mentor availability enabled by default and can turn their own mentor badge on or off without HR review.
+- On first activation, the HR Admin selects one or two active skills; APID creates the mentor profile directly without an application or approval.
+- HR Admins can add active catalog skills to their own mentor profile immediately, without submitting an additional-skill request or waiting for approval.
+- Turning availability off removes the mentor from new direct requests, HR matches, and reassignment choices. Existing pairings and their collaboration features remain active.
+- Pending invitations cannot be accepted while the mentor is unavailable. Turning availability back on restores eligibility, subject to the mentor authorization and skill statuses.
 
 ### 5.4 Hybrid Trainer Discovery & Matching (`FR-MENTOR-04`)
 APID supports **all three** discovery and matching paths concurrently:
 1. **Method 1 — Direct Trainer Browsing:**
-   - Employees search/filter `ACTIVE` Trainers by `skillId`, `department`, availability, and remaining Trainee capacity, inspect Trainer profiles/expertise, and send a mentoring request directly.
+   - Employees search/filter `ACTIVE`, available Trainers by `skillId`, `department`, years of experience, mentoring approach, sessions per week, and remaining Trainee capacity, inspect Trainer profiles, and send a mentoring request directly.
 2. **Method 2 — Automated Skill Recommendations:**
    - Employee chooses a desired `skillId`; APID ranks matching `ACTIVE` Trainers by:
      1. Exact skill match
@@ -480,19 +491,25 @@ APID supports **all three** discovery and matching paths concurrently:
      4. Optional average Trainee feedback rating
 3. **Method 3 — HR-Assisted Manual Matching:**
    - Employee submits an open learning request (`"I want to learn X, please match me"`); HR Admin views matching Trainers and manually pairs the Trainee with a suitable Trainer.
+   - HR Admin can also select an active Mentor, an active employee, and one of the Mentor's active skills directly, without a prior learning request. This creates an active relationship immediately; neither participant approval is required, and both are notified.
 
 ### 5.5 Mentoring Requests & Capacity Rules (`FR-MENTOR-05`)
-- Supports **Individual** and **Group** learning requests.
-- **Request Fields:** `skillId`, `requestType` (`INDIVIDUAL` | `GROUP`), `traineeIds`, `learningObjectives`, `preferredTrainerId` (optional), `preferredScheduleNotes`, `justification`.
-- **Lifecycle Statuses:** `SUBMITTED`, `UNDER_REVIEW` (for HR matching), `AWAITING_TRAINER` (for direct browse), `MATCHED`, `ACCEPTED`, `REJECTED`, `CANCELLED`.
+- Supports **Individual** and **Group** mentoring relationships.
+- An employee can request **individual mentorship** from one active Mentor; that Mentor approves or declines the request.
+- A Mentor can invite one employee to an individual pairing or invite multiple employees to a **Group/class**. Each invited employee independently approves or declines; accepted employees join the same class relationship.
+- Group invitations are Mentor-initiated. Trainee-initiated requests are individual.
+- Requests include the Mentor, initiator, optional skill and message, relationship type, and one response record per recipient.
+- Each relationship is associated with at most one skill. The same Mentor–Trainee pair may have separate relationships for different skills, but only one active or pending relationship for the same skill.
+- Each recipient response is `PENDING`, `ACCEPTED`, or `DECLINED`. Approval creates an active Mentor–Trainee relationship; pending and declined responses do not.
 - **Capacity Guard:** System prevents assigning a new pairing if Trainer has reached `maxConcurrentTrainees` (unless HR Admin explicitly overrides).
 
 ### 5.6 Trainer–Trainee Relationships & Collaboration (`FR-MENTOR-06`)
 - Accepted/matched requests create a `MentoringRelationship` (`ACTIVE`, `PAUSED`, `COMPLETED`, `CANCELLED`, `REASSIGNED`).
 - **Shared Tools (Isolated from Coaching):**
-  - Appointment scheduling + `MentoringSession` (`SCHEDULED`, `COMPLETED`, `MISSED`, `CANCELLED`, `RESCHEDULED`).
+  - Mentor and accepted trainees can open a relationship detail page that shows its participants, completed or in-progress sessions, and recent conversation history.
+  - The detail page links mentors to Mentor Sessions to create sessions and trainees to My Sessions to review them. Sessions include a title, agenda, start/end time, delivery mode, and optional meeting link; a class relationship shares its schedule with all accepted trainees.
+  - The detail page's Message action opens employee Chat in the selected relationship context. Persistent, paginated relationship chat is shared by all members of a class. Active participants can send messages; closed relationships retain read-only history.
   - Daily.co live sessions + join-time capture + Trainer attendance confirmation.
-  - Scoped REST-polled chat (`MentoringConversation`).
   - Scoped resource sharing (`MentoringResource`).
   - Lightweight session notes / progress milestones.
 - **Closure & Feedback:**
@@ -522,8 +539,10 @@ All notifications write immediately to `core.notifications` (displayed in the to
 | Trainer application submitted | Mentoring | HR Admins | `/hr/applications/{id}` |
 | Trainer application approved / rejected | Mentoring | Applicant employee | `/mentoring/trainer-profile` |
 | Direct HR Trainer appointment | Mentoring | Appointed employee | `/mentoring/trainer-profile` |
+| HR directly matches a Mentor and Trainee | Mentoring | Mentor and Trainee | `/mentoring/pairing/{relationshipId}` |
 | Trainer suspended / revoked / restored | Mentoring | Trainer (+ active Trainees / HR if affected) | `/mentoring/relationships` |
-| New Mentoring request / HR match / Acceptance | Mentoring | Trainer + Trainee(s) | `/mentoring/requests/{id}` |
+| New Mentor invitation / trainee mentorship request | Mentoring | Invited Trainee or requested Mentor | `/mentoring?view=trainee` or `/mentoring?view=trainer` |
+| Mentoring request approved / declined | Mentoring | Request initiator | `/mentoring?view=trainer` or `/mentoring?view=trainee` |
 
 ---
 
@@ -593,19 +612,22 @@ APID uses **one PostgreSQL 16 database (`apid_db`)** divided into **3 isolated s
 - `coaching.coaching_resources` (`id`, `assignment_id`, `title`, `resource_type`, `file_id`, `external_url`, `uploaded_by`, `created_at`)
 
 ### 8.3 `mentoring` Schema (Developer 2 Ownership)
-- `mentoring.trainer_applications` (`id`, `applicant_employee_id` FK->`core.employees`, `expertise_summary`, `availability_notes`, `max_concurrent_trainees`, `status`, `reviewed_by`, `rejection_reason`, `submitted_at`, `reviewed_at`)
+- `mentoring.mentor_applications` (`id`, `applicant_user_id` FK->`core.users`, `application_type` (`INITIAL`|`SKILL_ADDITION`), `experience_years`, `mentoring_approach`, `sessions_per_week`, legacy `expertise_summary` and `availability_notes`, `max_concurrent_trainees`, `status`, `reviewed_by_user_id`, `review_reason`, `submitted_at`, `reviewed_at`)
 - `mentoring.trainer_application_skills` (`application_id`, `skill_id` FK->`core.skills`)
 - `mentoring.trainer_qualifications` (`id`, `application_id`, `file_id` FK->`core.stored_files`, `document_type`, `description`)
-- `mentoring.trainer_authorizations` (`id`, `employee_id` FK->`core.employees`, `source_type` (`APPLICATION`|`DIRECT_APPOINTMENT`), `source_application_id`, `status` (`ACTIVE`|`SUSPENDED`|`REVOKED`), `max_concurrent_trainees`, `bio`, `appointment_reason`, `authorized_by_user_id`, `status_reason`, `effective_from`, `updated_at`)
+- `mentoring.trainer_authorizations` (`id`, `employee_id` FK->`core.employees`, `source_type` (`APPLICATION`|`DIRECT_APPOINTMENT`), `source_application_id`, `status` (`ACTIVE`|`SUSPENDED`|`REVOKED`), `max_concurrent_trainees`, `experience_years`, `mentoring_approach`, `sessions_per_week`, legacy `bio` and `availability_notes`, `appointment_reason`, `authorized_by_user_id`, `status_reason`, `effective_from`, `updated_at`)
 - `mentoring.trainer_skills` (`trainer_auth_id`, `skill_id` FK->`core.skills`)
-- `mentoring.trainer_status_history` (`id`, `trainer_auth_id`, `previous_status`, `new_status`, `reason`, `changed_by_user_id`, `changed_at`)
-- `mentoring.mentoring_requests` (`id`, `requester_user_id`, `skill_id` FK->`core.skills`, `request_type` (`INDIVIDUAL`|`GROUP`), `discovery_mode` (`BROWSE`|`RECOMMENDED`|`HR_ASSISTED`), `preferred_trainer_employee_id`, `learning_objectives`, `preferred_schedule`, `status`, `handled_by_user_id`, `decision_notes`, `created_at`)
-- `mentoring.mentoring_request_trainees` (`request_id`, `employee_id`)
-- `mentoring.mentoring_relationships` (`id`, `request_id`, `trainer_employee_id`, `skill_id`, `learning_objectives`, `start_date`, `planned_end_date`, `status`, `completed_at`)
+- `mentoring.trainer_authorization_skill_status` (`trainer_auth_id`, `skill_id`, `status`, `status_reason`, `updated_at`); lifecycle status is independent for each authorized skill.
+- `mentoring.trainer_status_history` (`id`, `trainer_auth_id`, optional `skill_id`, `previous_status`, `new_status`, `reason`, `changed_by_user_id`, `changed_at`)
+- `mentoring.mentor_availability_preferences` (`user_id` FK->`core.users`, `accepting_new_pairings`, `updated_at`); missing rows default to accepting new pairings.
+- `mentoring.mentoring_requests` (`id`, `mentor_user_id`, `initiated_by_user_id`, `request_type` (`INDIVIDUAL`|`GROUP`), optional `skill_id` and `message`, `created_at`)
+- `mentoring.mentoring_request_recipients` (`id`, `request_id`, `recipient_user_id`, `trainee_user_id`, `status` (`PENDING`|`ACCEPTED`|`DECLINED`), `responded_at`); group invitations have one recipient row per invited employee.
+- `mentoring.mentoring_relationships` (`id`, `request_id`, `mentor_user_id`, `status` (`ACTIVE`|`PAUSED`|`COMPLETED`|`CANCELLED`|`REASSIGNED`), `started_at`, `ended_at`); one group request creates one shared class relationship.
+- `mentoring.mentoring_relationship_members` (`id`, `relationship_id`, `request_recipient_id`, `mentor_user_id`, `trainee_user_id`, optional `skill_id`, `status`, `joined_at`, `ended_at`); each approved trainee has a separate membership, while an individual relationship has one member. Active uniqueness is enforced per Mentor–Trainee–Skill.
 - `mentoring.mentoring_relationship_trainees` (`relationship_id`, `trainee_employee_id`, `rating`, `feedback`, `rated_at`)
-- `mentoring.mentoring_sessions` (`id`, `relationship_id`, `title`, `agenda`, `scheduled_start`, `scheduled_end`, `delivery_mode`, `video_room_id`, `status`, `reminded_24h`, `reminded_15m`, `notes`)
+- `mentoring.mentoring_sessions` (`id`, `relationship_id`, `title`, `agenda`, `scheduled_start`, `scheduled_end`, `delivery_mode`, `meeting_url`, `status`, `notes`, `created_by_user_id`, `created_at`, `updated_at`); the relationship mentor creates sessions, and a class relationship shares them with its trainees.
 - `mentoring.mentoring_session_attendance` (`id`, `session_id`, `trainee_employee_id`, `attendance_status`, `joined_at`, `confirmed_by_trainer_at`)
-- `mentoring.mentoring_messages` (`id`, `relationship_id`, `sender_user_id`, `body`, `attachment_file_id`, `created_at`)
+- `mentoring.mentoring_messages` (`id`, `relationship_id`, `sender_user_id`, `body`, `created_at`); text messages are paginated by relationship.
 - `mentoring.mentoring_resources` (`id`, `relationship_id`, `title`, `resource_type`, `file_id`, `external_url`, `uploaded_by`, `created_at`)
 
 **Database Integrity Rules:**

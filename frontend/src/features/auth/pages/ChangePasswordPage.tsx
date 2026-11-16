@@ -6,7 +6,7 @@ import { useAuth } from '../../../app/AuthContext';
 import type { ApiErrorPayload } from '../../../shared/api/apiClient';
 
 export function ChangePasswordPage() {
-  const { user, changePassword } = useAuth();
+  const { user, changePassword, logout } = useAuth();
   const navigate = useNavigate();
 
   const [currentPassword, setCurrentPassword] = useState('');
@@ -14,6 +14,19 @@ export function ChangePasswordPage() {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [signingOut, setSigningOut] = useState(false);
+
+  const handleUseNewTemporaryPassword = async () => {
+    setSigningOut(true);
+    let notice = 'Signed out. Sign in with the new temporary password provided by your administrator.';
+    try {
+      await logout();
+    } catch {
+      notice =
+        'This browser session was cleared, but server sign-out could not be confirmed. If your password was reset, try the new temporary password.';
+    }
+    navigate('/login', { replace: true, state: { notice } });
+  };
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
@@ -118,9 +131,29 @@ export function ChangePasswordPage() {
               />
             </div>
 
-            <button type="submit" className="apid-btn apid-btn-primary" disabled={submitting}>
+            <button
+              type="submit"
+              className="apid-btn apid-btn-primary"
+              disabled={submitting || signingOut}
+            >
               {submitting ? 'Updating Password...' : 'Update Password'}
             </button>
+            {user?.mustChangePassword && (
+              <>
+                <p className="apid-subtitle" style={{ margin: 0 }}>
+                  Forgot your current temporary password? Ask an administrator to reset it, then sign
+                  in with the new temporary password.
+                </p>
+                <button
+                  type="button"
+                  className="apid-btn apid-btn-outline"
+                  disabled={submitting || signingOut}
+                  onClick={() => void handleUseNewTemporaryPassword()}
+                >
+                  {signingOut ? 'Signing out...' : 'Back to Sign In'}
+                </button>
+              </>
+            )}
           </form>
         </div>
       </section>

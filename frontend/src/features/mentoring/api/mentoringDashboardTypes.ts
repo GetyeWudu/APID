@@ -1,17 +1,14 @@
 import type {
   PreviewCertifiedTrainer,
   PreviewMentoringRequest,
-  PreviewTrainerApplication,
 } from '../../../shared/mocks/boaPreviewFixtures';
 
 export type TrainerSuspensionPolicy =
-  | 'PAUSE_EXISTING_RELATIONSHIPS'
   | 'BLOCK_NEW_SESSIONS_ONLY'
   | 'REQUIRE_HR_REASSIGNMENT';
 
 export interface HrMentoringOverview {
   liveSkillNames: string[];
-  applications: PreviewTrainerApplication[];
   trainers: PreviewCertifiedTrainer[];
   requests: PreviewMentoringRequest[];
   skillSupplyDemand: Array<{
@@ -26,11 +23,6 @@ export interface HrMentoringOverview {
 export interface MentoringDashboardApi {
   readonly mode: 'preview';
   getOverview(): Promise<HrMentoringOverview>;
-  simulateApplicationDecision(
-    applicationId: string,
-    decision: 'APPROVED' | 'REJECTED',
-    reason: string
-  ): Promise<{ simulated: true; message: string }>;
   simulateDirectAppoint(
     employeeName: string,
     skills: string[],

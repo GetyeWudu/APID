@@ -1,8 +1,11 @@
 package com.boa.apid.core.skills.entity;
 
+import com.boa.apid.core.authorization.entity.User;
 import jakarta.persistence.*;
 
 import java.time.Instant;
+import java.util.HashSet;
+import java.util.Set;
 
 @Entity
 @Table(name = "skills", schema = "core")
@@ -23,6 +26,9 @@ public class Skill {
 
     @Column(nullable = false)
     private boolean active = true;
+
+    @ManyToMany(mappedBy = "skills", fetch = FetchType.LAZY)
+    private Set<User> users = new HashSet<>();
 
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
@@ -80,6 +86,22 @@ public class Skill {
 
     public void setActive(boolean active) {
         this.active = active;
+    }
+
+    public Set<User> getUsers() {
+        return users;
+    }
+
+    public void addUser(User user) {
+        if (users.add(user)) {
+            user.getSkills().add(this);
+        }
+    }
+
+    public void removeUser(User user) {
+        if (users.remove(user)) {
+            user.getSkills().remove(this);
+        }
     }
 
     public Instant getCreatedAt() {

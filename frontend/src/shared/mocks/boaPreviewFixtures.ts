@@ -16,15 +16,6 @@ export const PREVIEW_NOTIFICATIONS: PreviewNotificationItem[] = [
     read: false,
   },
   {
-    id: 'notif-hr-1',
-    title: 'Trainer Certificate Pending HR Review',
-    body: 'Sample applicant BOA-9031 uploaded Financial Modeling credentials.',
-    timeAgo: '1h ago',
-    module: 'MENTORING',
-    targetRoute: '/mentoring/hr',
-    read: false,
-  },
-  {
     id: 'notif-ws-1',
     title: 'Upcoming Coaching Session Reminder',
     body: 'Coaching session "Branch SLA & Deposit Growth" starts tomorrow at 09:30 EAT.',
@@ -233,20 +224,6 @@ export const PREVIEW_SKILL_DEV_REQUESTS: PreviewSkillDevRequest[] = [
   },
 ];
 
-export interface PreviewTrainerApplication {
-  id: string;
-  applicantCode: string;
-  applicantName: string;
-  department: string;
-  employmentStatus: 'ACTIVE' | 'ON_LEAVE' | 'TERMINATED';
-  claimedSkills: string[];
-  certificateFileName: string;
-  yearsExperience: number;
-  submittedAt: string;
-  status: 'PENDING_REVIEW' | 'APPROVED' | 'REJECTED';
-  reviewReason?: string;
-}
-
 export interface PreviewCertifiedTrainer {
   id: string;
   employeeCode: string;
@@ -270,33 +247,6 @@ export interface PreviewMentoringRequest {
   status: 'AWAITING_HR_MATCH' | 'MATCHED' | 'PENDING_TRAINER';
   preferredSchedule: string;
 }
-
-export const PREVIEW_TRAINER_APPLICATIONS: PreviewTrainerApplication[] = [
-  {
-    id: 'APP-301',
-    applicantCode: 'BOA-9031',
-    applicantName: 'Dawit Mekonnen',
-    department: 'Application Development & API',
-    employmentStatus: 'ACTIVE',
-    claimedSkills: ['Java & Spring Boot Development', 'Data Analytics & Power BI'],
-    certificateFileName: 'spring-security-architecture-cert.pdf',
-    yearsExperience: 9,
-    submittedAt: '2026-11-08',
-    status: 'PENDING_REVIEW',
-  },
-  {
-    id: 'APP-302',
-    applicantCode: 'BOA-9054',
-    applicantName: 'Rahel Tsegaye',
-    department: 'Corporate Credit Appraisal',
-    employmentStatus: 'ACTIVE',
-    claimedSkills: ['Credit Risk & Loan Assessment', 'Advanced Excel & Financial Modeling'],
-    certificateFileName: 'credit-risk-charter-2025.pdf',
-    yearsExperience: 7,
-    submittedAt: '2026-11-10',
-    status: 'PENDING_REVIEW',
-  },
-];
 
 export const PREVIEW_CERTIFIED_TRAINERS: PreviewCertifiedTrainer[] = [
   {

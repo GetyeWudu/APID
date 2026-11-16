@@ -13,12 +13,15 @@ import { organizationApi } from '../features/admin/organization/api/organization
 import { LinkUserModal } from '../features/admin/organization/components/LinkUserModal';
 import type { UserProfile } from '../features/auth/types/auth.types';
 import { coachingPreviewAdapter } from '../features/coaching/api/coachingDashboardApi';
+import { mentoringPairingApi } from '../features/mentoring/api/mentoringPairingApi';
 import {
   classifyRating,
   isMandatoryCoachingRounded,
   RATING_BAND_METADATA,
 } from '../features/coaching/utils/ratingClassification';
-import { mentoringPreviewAdapter } from '../features/mentoring/api/mentoringDashboardApi';
+import { mentoringTrainerApi } from '../features/mentoring/api/mentoringTrainerApi';
+import { MentorDirectory } from '../features/mentoring/components/MentorDirectory';
+import { MentoringRequestsPanel } from '../features/mentoring/components/MentoringRequestsPanel';
 import { TrainerRosterTab } from '../features/mentoring/components/TrainerRosterTab';
 import { workspaceLiveApi } from '../features/workspace/api/workspaceDashboardApi';
 import { WorkspaceDashboardPage } from '../features/workspace/pages/WorkspaceDashboardPage';
@@ -36,7 +39,6 @@ import { ToastProvider, NotificationBellPopover } from '../shared/components/ui'
 import { coreConfigApi } from '../features/admin/config/api/coreConfigApi';
 import { SystemConfigPanel } from '../features/admin/config/SystemConfigPanel';
 import { notificationsApi } from '../shared/api/notificationsApi';
-import { PREVIEW_CERTIFIED_TRAINERS } from '../shared/mocks/boaPreviewFixtures';
 
 function buildAuthMock(user: UserProfile | null) {
   const perms = user?.permissions ?? [];
@@ -227,10 +229,85 @@ describe('Portal Home module cards & scoped sidebar isolation', () => {
     expect(screen.getByText('All Modules')).toBeInTheDocument();
 
     // Scoped away on Coaching page
+    expect(screen.queryByText('Employee')).not.toBeInTheDocument();
+    expect(screen.queryByText('Dashboard')).not.toBeInTheDocument();
+    expect(screen.queryByText('Chat')).not.toBeInTheDocument();
     expect(screen.queryByText('My Mentoring')).not.toBeInTheDocument();
     expect(screen.queryByText('PMS Administration')).not.toBeInTheDocument();
     expect(screen.queryByText('HR Administration')).not.toBeInTheDocument();
     expect(screen.queryByText('System Administration')).not.toBeInTheDocument();
+  });
+
+  it('shows mentoring Chat and Resources alongside pairings without a My Mentor entry', () => {
+    vi.spyOn(AuthContextModule, 'useAuth').mockReturnValue(
+      buildAuthMock({
+        id: 12,
+        username: 'mentor.trainee',
+        mustChangePassword: false,
+        roles: ['Employee', 'Mentor'],
+        permissions: ['EMPLOYEE_PORTAL_ACCESS'],
+      })
+    );
+    vi.spyOn(workspaceLiveApi, 'loadMyIdentity').mockResolvedValue({
+      linkedEmployee: null,
+      directReports: [],
+      activeSkills: [],
+    });
+
+    renderWithProviders(
+      <AppLayout>
+        <div>Mentoring Content</div>
+      </AppLayout>,
+      '/mentoring?view=trainer'
+    );
+
+    expect(screen.getByText('Employee')).toBeInTheDocument();
+    expect(screen.getByText('Dashboard')).toBeInTheDocument();
+    expect(screen.queryByText('My Coaching')).not.toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Chat' })).toHaveAttribute('href', '/mentoring/chat');
+    expect(screen.getByRole('link', { name: 'Resources' })).toHaveAttribute(
+      'href',
+      '/mentoring/resources'
+    );
+    expect(screen.getByText('As a Trainee')).toBeInTheDocument();
+    expect(screen.queryByText('My Mentor')).not.toBeInTheDocument();
+    expect(screen.getByText('My Sessions')).toBeInTheDocument();
+    expect(screen.getByText('Find a Mentor')).toBeInTheDocument();
+    expect(screen.getByText('As a Mentor')).toBeInTheDocument();
+    expect(screen.getByText('My Trainees')).toBeInTheDocument();
+    expect(screen.getByText('Mentor Profile')).toBeInTheDocument();
+    expect(screen.getByText('Mentor Sessions')).toBeInTheDocument();
+  });
+
+  it('shows the employee Dashboard, Chat, and Resources in the workspace sidebar', () => {
+    vi.spyOn(AuthContextModule, 'useAuth').mockReturnValue(
+      buildAuthMock({
+        id: 21,
+        username: 'employee.user',
+        mustChangePassword: false,
+        roles: ['Employee'],
+        permissions: ['EMPLOYEE_PORTAL_ACCESS'],
+      })
+    );
+
+    renderWithProviders(
+      <AppLayout>
+        <div>Workspace Content</div>
+      </AppLayout>,
+      '/workspace?tab=chat'
+    );
+
+    expect(screen.getByRole('navigation', { name: 'Module navigation' })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Dashboard' })).toHaveAttribute('href', '/workspace');
+    expect(screen.queryByRole('link', { name: 'My Coaching' })).not.toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Chat' })).toHaveAttribute('href', '/mentoring/chat');
+    expect(screen.getByRole('link', { name: 'Resources' })).toHaveAttribute(
+      'href',
+      '/mentoring/resources'
+    );
+    expect(screen.getByText('As a Trainee')).toBeInTheDocument();
+    expect(screen.queryByText('My Mentor')).not.toBeInTheDocument();
+    expect(screen.getByText('Find a Mentor')).toBeInTheDocument();
   });
 
   it('shows personal + HR Admin features inside Mentoring sidebar for HR Admin and excludes duplicate tabs in Admin', () => {
@@ -256,8 +333,12 @@ describe('Portal Home module cards & scoped sidebar isolation', () => {
       '/mentoring'
     );
 
-    expect(screen.getByText('My Mentoring')).toBeInTheDocument();
+    expect(screen.getByText('As a Trainee')).toBeInTheDocument();
+    expect(screen.queryByText('My Mentor')).not.toBeInTheDocument();
+    expect(screen.getByText('Find a Mentor')).toBeInTheDocument();
     expect(screen.getByText('HR Administration')).toBeInTheDocument();
+    expect(screen.queryByText('As a Mentor')).not.toBeInTheDocument();
+    expect(screen.queryByText('Mentor Profile')).not.toBeInTheDocument();
     expect(screen.getByText('Trainer Applications')).toBeInTheDocument();
     expect(screen.getByText('Match Requests')).toBeInTheDocument();
     expect(screen.queryByText('System Administration')).not.toBeInTheDocument();
@@ -286,6 +367,156 @@ describe('Portal Home module cards & scoped sidebar isolation', () => {
   });
 });
 
+describe('Mentor directory self-exclusion', () => {
+  it('hides the current employee and excludes their skills from the directory filters', () => {
+    renderWithProviders(
+      <MentorDirectory
+        currentUserId={12}
+        mentors={[
+          {
+            userId: 12,
+            username: 'current.employee',
+            employeeNumber: 'E-12',
+            fullName: 'Current Employee',
+            departmentName: 'Operations',
+            bio: null,
+            availabilityNotes: null,
+            activeTrainees: 0,
+            remainingCapacity: 0,
+            averageRating: 0,
+            skills: [{ id: 1, name: 'Self Only Skill', category: 'Business' }],
+          },
+          {
+            userId: 13,
+            username: 'other.mentor',
+            employeeNumber: 'E-13',
+            fullName: 'Other Mentor',
+            departmentName: 'Technology',
+            bio: null,
+            availabilityNotes: null,
+            activeTrainees: 0,
+            remainingCapacity: 3,
+            averageRating: 0,
+            skills: [{ id: 2, name: 'Available Skill', category: 'Technical' }],
+          },
+        ]}
+      />
+    );
+
+    expect(screen.queryByText('Current Employee')).not.toBeInTheDocument();
+    expect(screen.queryByRole('option', { name: 'Self Only Skill' })).not.toBeInTheDocument();
+    expect(screen.getByText('Other Mentor')).toBeInTheDocument();
+  });
+
+  it('shows a clear empty state if the only matching profile is the employee', () => {
+    renderWithProviders(
+      <MentorDirectory
+        currentUserId={12}
+        mentors={[
+          {
+            userId: 12,
+            username: 'current.employee',
+            employeeNumber: 'E-12',
+            fullName: 'Current Employee',
+            departmentName: 'Operations',
+            bio: null,
+            availabilityNotes: null,
+            activeTrainees: 0,
+            remainingCapacity: 0,
+            averageRating: 0,
+            skills: [],
+          },
+        ]}
+      />
+    );
+
+    expect(screen.getByText('No Other Mentors Found')).toBeInTheDocument();
+    expect(screen.getByText('Your own profile is hidden from the mentor directory.')).toBeInTheDocument();
+  });
+
+  it('sends an individual mentorship request to the selected mentor', async () => {
+    const request = vi.spyOn(apiClient, 'post').mockResolvedValue({
+      data: { data: { id: 20, status: 'PENDING' } },
+    } as never);
+    renderWithProviders(
+      <MentorDirectory
+        currentUserId={12}
+        mentors={[
+          {
+            userId: 13,
+            username: 'other.mentor',
+            employeeNumber: 'E-13',
+            fullName: 'Other Mentor',
+            departmentName: 'Technology',
+            bio: null,
+            availabilityNotes: null,
+            activeTrainees: 0,
+            remainingCapacity: 3,
+            averageRating: 0,
+            skills: [{ id: 2, name: 'Available Skill', category: 'Technical' }],
+          },
+        ]}
+      />
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Request mentorship' }));
+    fireEvent.change(screen.getByLabelText('Message (optional)'), {
+      target: { value: 'I want to learn this skill.' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Send request' }));
+
+    await waitFor(() =>
+      expect(request).toHaveBeenCalledWith('/mentoring/pairing/requests/mentors', {
+        mentorUserId: 13,
+        skillId: 2,
+        message: 'I want to learn this skill.',
+      })
+    );
+    expect(await screen.findByText('Mentorship request sent')).toBeInTheDocument();
+  });
+
+  it('approves an incoming mentor invitation through the pairing API', async () => {
+    const request = vi.spyOn(apiClient, 'post').mockResolvedValue({
+      data: { data: { status: 'ACCEPTED' } },
+    } as never);
+    renderWithProviders(
+      <MentoringRequestsPanel
+        currentUserId={2}
+        view="trainee"
+        requests={[
+          {
+            id: 20,
+            requestId: 10,
+            requestType: 'INDIVIDUAL',
+            status: 'PENDING',
+            incoming: true,
+            initiatedByMentor: true,
+            mentorUserId: 1,
+            mentorName: 'Mentor One',
+            traineeUserId: 2,
+            traineeName: 'Trainee One',
+            recipientUserId: 2,
+            skillId: null,
+            skillName: null,
+            message: null,
+            createdAt: new Date().toISOString(),
+            respondedAt: null,
+          },
+        ]}
+      />
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Approve' }));
+
+    await waitFor(() =>
+      expect(request).toHaveBeenCalledWith('/mentoring/pairing/requests/20/decision', {
+        decision: 'ACCEPTED',
+      })
+    );
+    expect(await screen.findByText('Mentoring request approved')).toBeInTheDocument();
+  });
+});
+
 describe('Preview adapters network isolation', () => {
   it('performs zero HTTP requests for coaching preview mutations & snapshot', async () => {
     const getSpy = vi.spyOn(apiClient, 'get');
@@ -308,21 +539,22 @@ describe('Preview adapters network isolation', () => {
     expect(postSpy).not.toHaveBeenCalled();
   });
 
-  it('performs zero mutating HTTP calls in HR mentoring preview adapter', async () => {
+  it('sends direct trainer appointments to the live mentoring API', async () => {
     const postSpy = vi.spyOn(apiClient, 'post');
-    const patchSpy = vi.spyOn(apiClient, 'patch');
-    await mentoringPreviewAdapter.simulateApplicationDecision('APP-301', 'APPROVED', 'Valid cert');
-    await mentoringPreviewAdapter.simulateDirectAppoint('Trainer Demo', ['Java & Spring Boot Development'], 3);
-    await mentoringPreviewAdapter.simulateTrainerStatusChange(
-      'TRN-401',
-      'SUSPENDED',
-      'BLOCK_NEW_SESSIONS_ONLY',
-      'Rotation'
-    );
-    await mentoringPreviewAdapter.simulateMatch('MR-501', 'TRN-401');
+    postSpy.mockResolvedValue({ data: { data: { id: 401 } } } as never);
+    await mentoringTrainerApi.appoint({
+      employeeId: 31,
+      skillIds: [9],
+      maxConcurrentTrainees: 3,
+      appointmentReason: 'Recognized subject expertise',
+    });
 
-    expect(postSpy).not.toHaveBeenCalled();
-    expect(patchSpy).not.toHaveBeenCalled();
+    expect(postSpy).toHaveBeenCalledWith('/mentoring/hr/trainers', {
+      employeeId: 31,
+      skillIds: [9],
+      maxConcurrentTrainees: 3,
+      appointmentReason: 'Recognized subject expertise',
+    });
   });
 });
 
@@ -340,17 +572,74 @@ describe('Orthogonal HR Trainer lifecycle status rendering', () => {
 
     renderWithProviders(
       <TrainerRosterTab
-        trainers={PREVIEW_CERTIFIED_TRAINERS}
-        liveSkillNames={['Credit Risk & Loan Assessment']}
-        onTrainerAppointed={vi.fn()}
-        onTrainerStatusChanged={vi.fn()}
+        trainers={[
+          {
+            id: 401,
+            employeeId: 101,
+            userId: 21,
+            employeeNumber: 'E-101',
+            fullName: 'Mentor One',
+            departmentName: 'Operations',
+            employmentStatus: 'ON_LEAVE',
+            sourceType: 'APPLICATION',
+            status: 'SUSPENDED',
+            activeTrainees: 0,
+            pendingTrainees: 0,
+            maxConcurrentTrainees: 3,
+            bio: null,
+            availabilityNotes: null,
+            skills: [],
+            effectiveFrom: '2026-01-01T00:00:00Z',
+            updatedAt: '2026-01-01T00:00:00Z',
+          },
+          {
+            id: 402,
+            employeeId: 102,
+            userId: 22,
+            employeeNumber: 'E-102',
+            fullName: 'Mentor Two',
+            departmentName: 'Finance',
+            employmentStatus: 'TERMINATED',
+            sourceType: 'DIRECT_APPOINTMENT',
+            status: 'REVOKED',
+            activeTrainees: 0,
+            pendingTrainees: 0,
+            maxConcurrentTrainees: 3,
+            bio: null,
+            availabilityNotes: null,
+            skills: [],
+            effectiveFrom: '2026-01-01T00:00:00Z',
+            updatedAt: '2026-01-01T00:00:00Z',
+          },
+          {
+            id: 403,
+            employeeId: 103,
+            userId: 23,
+            employeeNumber: 'E-103',
+            fullName: 'Mentor Three',
+            departmentName: 'Technology',
+            employmentStatus: 'ACTIVE',
+            sourceType: 'APPLICATION',
+            status: 'ACTIVE',
+            activeTrainees: 3,
+            pendingTrainees: 0,
+            maxConcurrentTrainees: 3,
+            bio: null,
+            availabilityNotes: null,
+            skills: [],
+            effectiveFrom: '2026-01-01T00:00:00Z',
+            updatedAt: '2026-01-01T00:00:00Z',
+          },
+        ]}
+        candidates={[]}
+        skills={[]}
       />
     );
 
     expect(screen.getByText('Emp: ON_LEAVE')).toBeInTheDocument();
     expect(screen.getByText('Auth: SUSPENDED')).toBeInTheDocument();
     expect(screen.getByText('Emp: TERMINATED')).toBeInTheDocument();
-    expect(screen.getByText('3/3 AT CAPACITY')).toBeInTheDocument();
+    expect(screen.getByText('3 active + 0 pending / 3')).toBeInTheDocument();
   });
 });
 
@@ -439,8 +728,10 @@ describe('WorkspaceDashboardPage identity-driven empty state', () => {
       directReports: [],
       activeSkills: [],
     });
+    vi.spyOn(mentoringPairingApi, 'listMyRequests').mockResolvedValue([]);
+    vi.spyOn(mentoringPairingApi, 'listMyRelationships').mockResolvedValue([]);
 
-    renderWithProviders(<WorkspaceDashboardPage />, '/workspace');
+    renderWithProviders(<WorkspaceDashboardPage />, '/workspace?tab=chat');
 
     await waitFor(() => expect(screen.getByTestId('unlinked-profile-state')).toBeInTheDocument());
     expect(screen.getByText('Profile Not Linked Yet')).toBeInTheDocument();
@@ -453,7 +744,7 @@ describe('WorkspaceDashboardPage identity-driven empty state', () => {
         id: 34,
         username: 'linked.staff',
         mustChangePassword: false,
-        roles: ['Employee'],
+        roles: ['Employee', 'Mentor'],
         permissions: ['EMPLOYEE_PORTAL_ACCESS', 'COACHING_REQUEST_SUBMIT'],
       })
     );
@@ -479,19 +770,112 @@ describe('WorkspaceDashboardPage identity-driven empty state', () => {
         updatedAt: '2026-11-12T08:00:00Z',
       },
       directReports: [],
-      activeSkills: [],
+      activeSkills: [{
+        id: 5,
+        name: 'Custom Coaching',
+        category: 'Mentoring',
+        description: null,
+        active: true,
+        createdAt: '2026-11-12T08:00:00Z',
+        updatedAt: '2026-11-12T08:00:00Z',
+      }],
     });
+    vi.spyOn(mentoringPairingApi, 'listMyRequests').mockResolvedValue([
+      {
+        id: 111,
+        requestId: 121,
+        requestType: 'INDIVIDUAL',
+        status: 'PENDING',
+        incoming: false,
+        initiatedByMentor: true,
+        mentorUserId: 34,
+        mentorName: 'Abebe Bekele',
+        traineeUserId: 37,
+        traineeName: 'Trainee Three',
+        recipientUserId: 37,
+        skillId: 6,
+        skillName: 'Java',
+        message: 'I can mentor you in Java.',
+        createdAt: '2026-11-12T08:00:00Z',
+        respondedAt: null,
+      },
+    ]);
+    vi.spyOn(mentoringPairingApi, 'listMyRelationships').mockResolvedValue([
+      {
+        memberId: 81,
+        relationshipId: 92,
+        requestId: 101,
+        requestType: 'INDIVIDUAL',
+        relationshipStatus: 'ACTIVE',
+        memberStatus: 'ACTIVE',
+        currentUserRole: 'MENTOR',
+        mentorUserId: 34,
+        mentorName: 'Abebe Bekele',
+        traineeUserId: 35,
+        traineeName: 'Trainee One',
+        skillId: 6,
+        skillName: 'Java',
+        message: null,
+        startedAt: '2026-11-12T08:00:00Z',
+        joinedAt: '2026-11-12T08:00:00Z',
+        endedAt: null,
+        memberEndedAt: null,
+      },
+      {
+        memberId: 82,
+        relationshipId: 93,
+        requestId: 102,
+        requestType: 'INDIVIDUAL',
+        relationshipStatus: 'ACTIVE',
+        memberStatus: 'ACTIVE',
+        currentUserRole: 'MENTOR',
+        mentorUserId: 34,
+        mentorName: 'Abebe Bekele',
+        traineeUserId: 36,
+        traineeName: 'Trainee Two',
+        skillId: 6,
+        skillName: 'Java',
+        message: null,
+        startedAt: '2026-11-12T08:00:00Z',
+        joinedAt: '2026-11-12T08:00:00Z',
+        endedAt: null,
+        memberEndedAt: null,
+      },
+    ]);
 
-    renderWithProviders(<WorkspaceDashboardPage />, '/workspace');
+    renderWithProviders(<WorkspaceDashboardPage />, '/workspace?tab=chat');
 
     await waitFor(() => expect(screen.getByText('Abebe Bekele')).toBeInTheDocument());
     expect(screen.getByText(/BOA-4091/)).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Overview' })).toBeInTheDocument();
+    expect(screen.getByText('Abebe Bekele → Trainee One')).toBeInTheDocument();
+    expect(screen.getAllByText(/One-to-one mentoring · You are the mentor · Java/)).toHaveLength(2);
+    expect(screen.getAllByRole('link', { name: 'View relationship' })).toHaveLength(2);
+    expect(screen.getByText('Total pairings').closest('.boa-stat-card')).toHaveTextContent('2');
+    expect(screen.getByText('As mentor').closest('.boa-stat-card')).toHaveTextContent('2');
+    expect(screen.getByText('As trainee').closest('.boa-stat-card')).toHaveTextContent('0');
+    expect(screen.getByText('Active', { selector: '.boa-stat-label' }).closest('.boa-stat-card'))
+      .toHaveTextContent('2');
+    expect(screen.getByText('Active Mentors').closest('.boa-stat-card')).toHaveTextContent('0');
+    expect(screen.getByText('Active Trainees').closest('.boa-stat-card')).toHaveTextContent('2');
+    expect(screen.getByText('Outgoing Requests').closest('.boa-stat-card')).toHaveTextContent('1');
+    expect(screen.getByText('Available Skills').closest('.boa-stat-card')).toHaveTextContent('1');
+    const pairingSummary = screen.getByRole('region', { name: 'Pairing' });
+    expect(pairingSummary).toContainElement(screen.getByText('Total pairings'));
+    expect(pairingSummary).toContainElement(screen.getByText('As mentor'));
+    expect(pairingSummary).toContainElement(screen.getByText('As trainee'));
+    expect(pairingSummary).toContainElement(screen.getByText('Active', { selector: '.boa-stat-label' }));
+    expect(screen.getByRole('region', { name: 'My mentoring pairings' })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Open mentor workspace' })).toBeInTheDocument();
+    expect(screen.queryByRole('tab', { name: 'My Mentoring' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('tab', { name: 'Chat' })).not.toBeInTheDocument();
+    expect(mentoringPairingApi.listMyRelationships).toHaveBeenCalledOnce();
     expect(screen.queryByTestId('unlinked-profile-state')).not.toBeInTheDocument();
   });
 });
 
-describe('LinkUserModal Create New User & Link', () => {
-  it('creates a new user account, links it to the employee, and masks the one-time password', async () => {
+describe('LinkUserModal employee login provisioning', () => {
+  it('creates and links a new account, then masks the one-time password', async () => {
     vi.spyOn(AuthContextModule, 'useAuth').mockReturnValue(
       buildAuthMock({
         id: 1,
@@ -501,26 +885,29 @@ describe('LinkUserModal Create New User & Link', () => {
         permissions: ['USER_MANAGE', 'HIERARCHY_MANAGE'],
       })
     );
-    vi.spyOn(organizationApi, 'listAvailableUsers').mockResolvedValue([]);
-    vi.spyOn(organizationApi, 'linkEmployeeUser').mockResolvedValue({
-      id: 4,
-      userId: 88,
+    vi.spyOn(organizationApi, 'createAndLinkEmployeeUser').mockResolvedValue({
+      employee: {
+        id: 4,
+        userId: 88,
+        username: 'mekdes.alemu.004',
+        employeeNumber: '00010004',
+        fullName: 'Mekdes Alemu',
+        email: 'mekdes.alemu.004@bankofabyssinia.com',
+        gender: 'Female',
+        departmentId: 3,
+        departmentName: 'Bole Branch Operations',
+        parentDepartmentName: 'Retail & Branch Banking',
+        job: 'Branch Management',
+        position: 'Branch Manager',
+        managerId: 2,
+        managerEmployeeNumber: '00010003',
+        managerFullName: 'Bekele Tesfaye',
+        employmentStatus: 'ACTIVE',
+        createdAt: '2026-11-12T08:00:00Z',
+        updatedAt: '2026-11-12T08:00:00Z',
+      },
       username: 'mekdes.alemu.004',
-      employeeNumber: '00010004',
-      fullName: 'Mekdes Alemu',
-      email: 'mekdes.alemu.004@bankofabyssinia.com',
-      gender: 'Female',
-      departmentId: 3,
-      departmentName: 'Bole Branch Operations',
-      parentDepartmentName: 'Retail & Branch Banking',
-      job: 'Branch Management',
-      position: 'Branch Manager',
-      managerId: 2,
-      managerEmployeeNumber: '00010003',
-      managerFullName: 'Bekele Tesfaye',
-      employmentStatus: 'ACTIVE',
-      createdAt: '2026-11-12T08:00:00Z',
-      updatedAt: '2026-11-12T08:00:00Z',
+      temporaryPassword: 'Temp#Mekdes004!',
     });
     vi.spyOn(rolesApi, 'listRoles').mockResolvedValue([
       {
@@ -532,24 +919,16 @@ describe('LinkUserModal Create New User & Link', () => {
         permissions: [],
         activeUserCount: 0,
       },
-    ]);
-    vi.spyOn(usersApi, 'create').mockResolvedValue({
-      user: {
-        id: 88,
-        username: 'mekdes.alemu.004',
-        authProvider: 'LOCAL',
-        status: 'ACTIVE',
-        mustChangePassword: true,
-        temporarilyLocked: false,
-        lockedUntil: null,
-        failedLoginAttempts: 0,
-        roles: [],
-        lastLoginAt: null,
-        createdAt: '2026-11-12T08:00:00Z',
+      {
+        id: 5,
+        name: 'Coach',
+        description: 'Coach role',
+        active: true,
+        systemProtected: false,
+        permissions: [],
+        activeUserCount: 0,
       },
-      temporaryPassword: 'Temp#Mekdes004!',
-    });
-
+    ]);
     const onUpdated = vi.fn().mockResolvedValue(undefined);
     const onClose = vi.fn();
 
@@ -580,11 +959,15 @@ describe('LinkUserModal Create New User & Link', () => {
       />
     );
 
-    fireEvent.click(screen.getByRole('button', { name: 'Create New User & Link' }));
     await waitFor(() => expect(screen.getByLabelText('Employee')).toBeChecked());
+    fireEvent.click(screen.getByLabelText('Coach'));
     fireEvent.click(screen.getByRole('button', { name: 'Create Account & Link' }));
 
     await waitFor(() => expect(screen.getByTestId('link-modal-masked-credential')).toBeInTheDocument());
+    expect(organizationApi.createAndLinkEmployeeUser).toHaveBeenCalledWith(4, {
+      username: 'mekdes.alemu.004',
+      roleIds: [4, 5],
+    });
     expect(screen.getByTestId('link-modal-masked-credential')).toHaveTextContent('••••••••••••••••');
     expect(screen.queryByText('Temp#Mekdes004!')).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /copy/i })).not.toBeInTheDocument();
@@ -719,7 +1102,7 @@ describe('Phase 4 live SystemConfigPanel, NotificationBellPopover & AppLayout qu
           eventType: 'PMS_COACHING_ASSIGNED',
           title: 'Mandatory Coaching Plan Ready',
           message: 'Please review Q2 action goals.',
-          deepLink: '/workspace?tab=coaching',
+          deepLink: '/coaching',
           read: false,
           readAt: null,
           createdAt: new Date().toISOString(),

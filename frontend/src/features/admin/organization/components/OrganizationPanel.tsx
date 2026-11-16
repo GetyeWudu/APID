@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState, type FormEvent } from 'react';
 import type { AxiosError } from 'axios';
+import { useAuth } from '../../../../app/AuthContext';
 import type { ApiErrorPayload } from '../../../../shared/api/apiClient';
 import { organizationApi } from '../api/organizationApi';
 import type {
@@ -8,7 +9,6 @@ import type {
   EmployeePage,
   EmploymentStatus,
   OrgImportCommitResult,
-  UserAccountSummary,
 } from '../types/organization.types';
 import { EmployeeSearchSelect } from './EmployeeSearchSelect';
 import { EmployeeTeamModal } from './EmployeeTeamModal';
@@ -35,6 +35,9 @@ function triggerCsvDownload(filename: string, content: string) {
 }
 
 export function OrganizationPanel() {
+  const { hasPermission } = useAuth();
+  const canManageEmployeeAccounts =
+    hasPermission('HIERARCHY_MANAGE') && hasPermission('USER_MANAGE');
   const [subView, setSubView] = useState<SubView>('employees');
   const [departments, setDepartments] = useState<DepartmentItem[]>([]);
   const [employeePage, setEmployeePage] = useState<EmployeePage | null>(null);
@@ -49,8 +52,6 @@ export function OrganizationPanel() {
   // Employee modal state
   const [showEmpModal, setShowEmpModal] = useState(false);
   const [editingEmployee, setEditingEmployee] = useState<EmployeeItem | null>(null);
-  const [availableUsers, setAvailableUsers] = useState<UserAccountSummary[]>([]);
-  const [empUserId, setEmpUserId] = useState<number | null>(null);
   const [empNumber, setEmpNumber] = useState('');
   const [empFullName, setEmpFullName] = useState('');
   const [empEmail, setEmpEmail] = useState('');
@@ -120,9 +121,8 @@ export function OrganizationPanel() {
     await Promise.all([loadEmployees(), loadDepartments()]);
   };
 
-  const openCreateEmployee = async () => {
+  const openCreateEmployee = () => {
     setEditingEmployee(null);
-    setEmpUserId(null);
     setEmpNumber('');
     setEmpFullName('');
     setEmpEmail('');
@@ -134,17 +134,11 @@ export function OrganizationPanel() {
     setEmpManagerLabel(null);
     setEmpStatus('ACTIVE');
     setBanner(null);
-    try {
-      setAvailableUsers(await organizationApi.listAvailableUsers(null));
-    } catch {
-      setAvailableUsers([]);
-    }
     setShowEmpModal(true);
   };
 
-  const openEditEmployee = async (emp: EmployeeItem) => {
+  const openEditEmployee = (emp: EmployeeItem) => {
     setEditingEmployee(emp);
-    setEmpUserId(emp.userId);
     setEmpNumber(emp.employeeNumber);
     setEmpFullName(emp.fullName);
     setEmpEmail(emp.email ?? '');
@@ -158,11 +152,6 @@ export function OrganizationPanel() {
     );
     setEmpStatus(emp.employmentStatus);
     setBanner(null);
-    try {
-      setAvailableUsers(await organizationApi.listAvailableUsers(emp.userId));
-    } catch {
-      setAvailableUsers([]);
-    }
     setShowEmpModal(true);
   };
 
@@ -172,7 +161,6 @@ export function OrganizationPanel() {
     setBanner(null);
     try {
       const payload = {
-        userId: empUserId,
         employeeNumber: empNumber.trim(),
         fullName: empFullName.trim(),
         email: empEmail.trim() || undefined,
@@ -422,13 +410,15 @@ export function OrganizationPanel() {
                         <button type="button" className="apid-btn apid-btn-sm" onClick={() => setTeamEmployee(emp)}>
                           Team
                         </button>
-                        <button
-                          type="button"
-                          className="apid-btn apid-btn-sm"
-                          onClick={() => setLinkUserEmployee(emp)}
-                        >
-                          {emp.userId ? 'User Link' : 'Link User'}
-                        </button>
+                        {canManageEmployeeAccounts && (
+                          <button
+                            type="button"
+                            className={`apid-btn apid-btn-sm${emp.userId ? ' apid-btn-danger' : ''}`}
+                            onClick={() => setLinkUserEmployee(emp)}
+                          >
+                            {emp.userId ? 'Revoke Link' : 'Link User'}
+                          </button>
+                        )}
                       </td>
                     </tr>
                   ))
@@ -606,22 +596,6 @@ export function OrganizationPanel() {
                     setEmpManagerLabel(item ? `${item.fullName} (${item.employeeNumber})` : null);
                   }}
                 />
-              </div>
-              <div className="apid-field">
-                <label htmlFor="emp-user">Linked Login Account</label>
-                <select
-                  id="emp-user"
-                  className="apid-input"
-                  value={empUserId ?? ''}
-                  onChange={(e) => setEmpUserId(e.target.value ? Number(e.target.value) : null)}
-                >
-                  <option value="">Unlinked</option>
-                  {availableUsers.map((u) => (
-                    <option key={u.id} value={u.id}>
-                      @{u.username} ({u.status})
-                    </option>
-                  ))}
-                </select>
               </div>
               <div className="apid-field">
                 <label htmlFor="emp-status">Employment Status</label>

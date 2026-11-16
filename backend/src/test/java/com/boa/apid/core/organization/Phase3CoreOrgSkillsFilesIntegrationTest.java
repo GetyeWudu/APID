@@ -13,8 +13,11 @@ import com.boa.apid.core.organization.service.EmployeeQueryService;
 import com.boa.apid.core.skills.dto.CreateSkillRequest;
 import com.boa.apid.core.skills.dto.UpdateSkillRequest;
 import com.boa.apid.core.skills.dto.UpdateSkillStatusRequest;
+import com.boa.apid.core.skills.entity.Skill;
+import com.boa.apid.core.skills.repository.SkillRepository;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import jakarta.persistence.EntityManager;
 import jakarta.servlet.http.Cookie;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -27,6 +30,7 @@ import org.springframework.cache.CacheManager;
 import org.springframework.http.MediaType;
 import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
@@ -67,9 +71,11 @@ class Phase3CoreOrgSkillsFilesIntegrationTest {
     @Autowired private RoleRepository roleRepository;
     @Autowired private PermissionRepository permissionRepository;
     @Autowired private UserRoleRepository userRoleRepository;
+    @Autowired private SkillRepository skillRepository;
     @Autowired private PasswordEncoder passwordEncoder;
     @Autowired private CacheManager cacheManager;
     @Autowired private EmployeeQueryService employeeQueryService;
+    @Autowired private EntityManager entityManager;
 
     private Role superAdminRole;
     private Role employeeRole;
@@ -78,6 +84,79 @@ class Phase3CoreOrgSkillsFilesIntegrationTest {
     void loadRoles() {
         superAdminRole = roleRepository.findByNameIgnoreCase("Super Admin").orElseThrow();
         employeeRole = roleRepository.findByNameIgnoreCase("Employee").orElseThrow();
+    }
+
+    @Test
+    @Transactional
+    void usersAndSkillsPersistManyToManyAssociations() {
+        String s = suffix();
+        User firstUser = createDirectUser("p3_skill_user_a_" + s, TEST_PASS, employeeRole);
+        User secondUser = createDirectUser("p3_skill_user_b_" + s, TEST_PASS, employeeRole);
+        User userWithoutSkills = createDirectUser("p3_skill_user_empty_" + s, TEST_PASS, employeeRole);
+
+        Skill sharedSkill = createSkill("P3 Shared Skill " + s);
+        Skill anotherSkill = createSkill("P3 Another Skill " + s);
+        firstUser.addSkill(sharedSkill);
+        firstUser.addSkill(anotherSkill);
+        secondUser.addSkill(sharedSkill);
+
+        userRepository.save(firstUser);
+        userRepository.save(secondUser);
+        entityManager.flush();
+        entityManager.clear();
+
+        User loadedFirstUser = userRepository.findById(firstUser.getId()).orElseThrow();
+        User loadedSecondUser = userRepository.findById(secondUser.getId()).orElseThrow();
+        User loadedUserWithoutSkills = userRepository.findById(userWithoutSkills.getId()).orElseThrow();
+        Skill loadedSharedSkill = skillRepository.findById(sharedSkill.getId()).orElseThrow();
+
+        assertThat(loadedFirstUser.getSkills()).extracting(Skill::getName)
+                .containsExactlyInAnyOrder(sharedSkill.getName(), anotherSkill.getName());
+        assertThat(loadedSecondUser.getSkills()).extracting(Skill::getName)
+                .containsExactly(sharedSkill.getName());
+        assertThat(loadedUserWithoutSkills.getSkills()).isEmpty();
+        assertThat(loadedSharedSkill.getUsers()).extracting(User::getUsername)
+                .containsExactlyInAnyOrder(firstUser.getUsername(), secondUser.getUsername());
+    }
+
+    @Test
+    @Transactional
+    void mentorDirectoryReturnsOnlyUsersWithMentorRoleAndTheirSkills() throws Exception {
+        String s = suffix();
+        Role mentorRole = roleRepository.findByNameIgnoreCase("Mentor").orElseThrow();
+        User mentor = createDirectUser("p3_directory_mentor_" + s, TEST_PASS, employeeRole, mentorRole);
+        User employee = createDirectUser("p3_directory_employee_" + s, TEST_PASS, employeeRole);
+
+        Skill skill = createSkill("P3 Directory Skill " + s);
+        mentor.addSkill(skill);
+        userRepository.save(mentor);
+        entityManager.flush();
+
+        String token = login(mentor.getUsername(), TEST_PASS);
+        MvcResult result = mockMvc.perform(get("/api/v1/core/mentors")
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk())
+                .andReturn();
+
+        JsonNode directory = objectMapper.readTree(result.getResponse().getContentAsString()).path("data");
+        JsonNode mentorRecord = null;
+        for (JsonNode row : directory) {
+            if (mentor.getUsername().equals(row.path("username").asText())) {
+                mentorRecord = row;
+                break;
+            }
+        }
+
+        assertThat(mentorRecord).isNotNull();
+        assertThat(mentorRecord.path("skills").findValuesAsText("name")).contains(skill.getName());
+        assertThat(directory.findValuesAsText("username")).doesNotContain(employee.getUsername());
+    }
+
+    private Skill createSkill(String name) {
+        Skill skill = new Skill();
+        skill.setName(name);
+        skill.setCategory("Integration Test");
+        return skillRepository.save(skill);
     }
 
     @Test

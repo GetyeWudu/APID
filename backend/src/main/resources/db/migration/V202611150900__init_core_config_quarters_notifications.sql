@@ -56,7 +56,7 @@ INSERT INTO core.system_configs (config_key, config_value, value_type, descripti
      'Maximum allowed uploaded file size in megabytes', TRUE)
 ON CONFLICT (config_key) DO NOTHING;
 
-CREATE TABLE core.notifications (
+CREATE TABLE IF NOT EXISTS core.notifications (
     id                BIGSERIAL PRIMARY KEY,
     recipient_user_id BIGINT        NOT NULL REFERENCES core.users(id) ON DELETE CASCADE,
     module            VARCHAR(30)   NOT NULL CHECK (module IN ('SYSTEM', 'COACHING', 'MENTORING')),
@@ -70,6 +70,24 @@ CREATE TABLE core.notifications (
     CONSTRAINT chk_notifications_read_consistency CHECK (read_at IS NULL OR is_read = TRUE)
 );
 
+ALTER TABLE core.notifications
+    ALTER COLUMN module TYPE VARCHAR(30),
+    ALTER COLUMN event_type TYPE VARCHAR(60),
+    ALTER COLUMN title TYPE VARCHAR(200),
+    ALTER COLUMN deep_link TYPE VARCHAR(300);
+
+ALTER TABLE core.notifications
+    DROP CONSTRAINT IF EXISTS chk_notifications_read_at,
+    DROP CONSTRAINT IF EXISTS chk_notifications_read_consistency,
+    DROP CONSTRAINT IF EXISTS notifications_recipient_user_id_fkey;
+
+ALTER TABLE core.notifications
+    ADD CONSTRAINT chk_notifications_read_consistency
+        CHECK (read_at IS NULL OR is_read = TRUE),
+    ADD CONSTRAINT notifications_recipient_user_id_fkey
+        FOREIGN KEY (recipient_user_id) REFERENCES core.users(id) ON DELETE CASCADE;
+
+DROP INDEX IF EXISTS core.idx_notifications_recipient_unread;
 CREATE INDEX idx_notifications_recipient_unread
     ON core.notifications (recipient_user_id, is_read, created_at DESC);
 

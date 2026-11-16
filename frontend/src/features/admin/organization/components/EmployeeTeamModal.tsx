@@ -48,7 +48,6 @@ export function EmployeeTeamModal({ employee, onClose, onUpdated }: EmployeeTeam
     setErrorMsg(null);
     try {
       await organizationApi.updateEmployee(employee.id, {
-        userId: employee.userId,
         employeeNumber: employee.employeeNumber,
         fullName: employee.fullName,
         email: employee.email ?? undefined,

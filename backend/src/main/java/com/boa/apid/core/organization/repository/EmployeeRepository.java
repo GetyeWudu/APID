@@ -11,6 +11,7 @@ import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 
@@ -39,6 +40,24 @@ public interface EmployeeRepository extends JpaRepository<Employee, Long>, JpaSp
     Optional<Employee> findDetailedByUserId(@Param("userId") Long userId);
 
     Optional<Employee> findByUserId(Long userId);
+
+    @Query("""
+            SELECT e FROM Employee e
+            LEFT JOIN FETCH e.department d
+            LEFT JOIN FETCH d.parentDepartment
+            LEFT JOIN FETCH e.manager
+            WHERE e.userId IN :userIds
+            """)
+    List<Employee> findDetailedByUserIdIn(@Param("userIds") Collection<Long> userIds);
+
+    @Query("""
+            SELECT e FROM Employee e
+            LEFT JOIN FETCH e.department d
+            LEFT JOIN FETCH d.parentDepartment
+            WHERE e.userId IN :userIds
+              AND e.employmentStatus = com.boa.apid.core.organization.entity.EmploymentStatus.ACTIVE
+            """)
+    List<Employee> findActiveDetailedByUserIdIn(@Param("userIds") Collection<Long> userIds);
 
     @Query("""
             SELECT e FROM Employee e
@@ -87,6 +106,19 @@ public interface EmployeeRepository extends JpaRepository<Employee, Long>, JpaSp
             LEFT JOIN FETCH e.manager
             """)
     List<Employee> findAllWithDetails();
+
+    @Query("""
+            SELECT e FROM Employee e
+            LEFT JOIN FETCH e.department d
+            LEFT JOIN FETCH d.parentDepartment
+            WHERE e.userId IS NOT NULL
+              AND e.userId <> :excludedUserId
+              AND e.employmentStatus = com.boa.apid.core.organization.entity.EmploymentStatus.ACTIVE
+            ORDER BY e.fullName
+            """)
+    List<Employee> findActiveLinkedEmployeesExceptUserId(@Param("excludedUserId") Long excludedUserId);
+
+    boolean existsByUserIdAndEmploymentStatus(Long userId, EmploymentStatus employmentStatus);
 
     @Query("SELECT e.userId FROM Employee e WHERE e.userId IS NOT NULL")
     List<Long> findAllLinkedUserIds();

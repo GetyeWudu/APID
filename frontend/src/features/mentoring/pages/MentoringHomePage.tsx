@@ -1,4 +1,3 @@
-import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { ShieldAlert } from 'lucide-react';
 import { Link, useSearchParams } from 'react-router-dom';
@@ -10,29 +9,65 @@ import {
   LoadingSkeleton,
   PageHeader,
 } from '../../../shared/components/ui';
-import { workspaceLiveApi, workspacePreviewAdapter } from '../../workspace/api/workspaceDashboardApi';
-import type { ChatMessageItem } from '../../workspace/components/IsolatedChatPanel';
-import { MentoringTab } from '../../workspace/components/MentoringTab';
+import { workspaceLiveApi } from '../../workspace/api/workspaceDashboardApi';
+import { mentoringPairingApi } from '../api/mentoringPairingApi';
+import { mentorDirectoryApi } from '../api/mentorDirectoryApi';
+import { ApplyForMentorForm } from '../components/ApplyForMentorForm';
+import { MentorDirectory } from '../components/MentorDirectory';
+import { MentorInvitationForm } from '../components/MentorInvitationForm';
+import { MentoringRequestsPanel } from '../components/MentoringRequestsPanel';
+import { MentoringMatchRequestForm } from '../components/MentoringMatchRequestForm';
+import { MentoringRecommendations } from '../components/MentoringRecommendations';
+import { MentorProfileForm } from '../components/MentorProfileForm';
+import { MentoringSessionsPage } from './MentoringSessionsPage';
 
-type MentoringViewKey = 'overview' | 'directory' | 'trainer';
+type MentoringViewKey =
+  | 'overview'
+  | 'directory'
+  | 'trainee'
+  | 'trainee-sessions'
+  | 'trainer'
+  | 'trainer-profile'
+  | 'trainer-sessions'
+  | 'apply';
 
 export function MentoringHomePage() {
   const { user, hasPermission, hasAnyPermission } = useAuth();
   const [searchParams] = useSearchParams();
-  const [mentoringChatExtra, setMentoringChatExtra] = useState<ChatMessageItem[]>([]);
+  const isMentor = user?.roles.some((role) => role.trim().toLowerCase() === 'mentor') ?? false;
 
   const requestedView = searchParams.get('view') as MentoringViewKey | null;
   const activeView: MentoringViewKey =
-    requestedView === 'directory' || requestedView === 'trainer' ? requestedView : 'overview';
+    requestedView === 'directory' ||
+    requestedView === 'trainee' ||
+    requestedView === 'trainee-sessions' ||
+    requestedView === 'trainer' ||
+    requestedView === 'trainer-profile' ||
+    requestedView === 'trainer-sessions' ||
+    requestedView === 'apply'
+      ? requestedView
+      : 'overview';
 
   const identityQuery = useQuery({
     queryKey: ['workspace', 'identity', user?.id],
     queryFn: workspaceLiveApi.loadMyIdentity,
+    enabled: hasAnyPermission(EMPLOYEE_WORKSPACE_PERMISSIONS),
   });
 
-  const previewQuery = useQuery({
-    queryKey: ['workspace', 'preview-participation'],
-    queryFn: workspacePreviewAdapter.getParticipationPreview,
+  const mentorsQuery = useQuery({
+    queryKey: ['mentoring', 'directory'],
+    queryFn: () => mentorDirectoryApi.listMentors(),
+    enabled: activeView === 'directory' && hasAnyPermission(EMPLOYEE_WORKSPACE_PERMISSIONS),
+  });
+
+  const pairingRequestsQuery = useQuery({
+    queryKey: ['mentoring', 'pairing', 'requests', user?.id],
+    queryFn: mentoringPairingApi.listMyRequests,
+    enabled:
+      hasAnyPermission(EMPLOYEE_WORKSPACE_PERMISSIONS) &&
+      activeView !== 'trainer-profile' &&
+      activeView !== 'trainer-sessions' &&
+      activeView !== 'trainee-sessions',
   });
 
   if (!hasAnyPermission(EMPLOYEE_WORKSPACE_PERMISSIONS)) {
@@ -46,10 +81,9 @@ export function MentoringHomePage() {
     );
   }
 
-  if (identityQuery.isLoading || previewQuery.isLoading) {
+  if (identityQuery.isLoading) {
     return <LoadingSkeleton rows={6} height={28} />;
   }
-
   if (identityQuery.isError || !identityQuery.data) {
     return (
       <ErrorState
@@ -64,8 +98,8 @@ export function MentoringHomePage() {
     return (
       <div className="boa-stack">
         <PageHeader
-          title="Mentoring & Trainers"
-          subtitle="Track your mentoring match, browse certified trainers, or apply as a trainer."
+          title="Mentoring"
+          subtitle="Learn with a mentor, find mentors by skill, or apply to become a mentor."
           source="live"
         />
         <div className="apid-card" data-testid="unlinked-profile-state">
@@ -86,49 +120,191 @@ export function MentoringHomePage() {
     );
   }
 
-  const workspaceData = previewQuery.data!.workspace;
-  const availableTrainers = previewQuery.data?.availableTrainers ?? [];
-  const allMentoringMsgs = [...workspaceData.chatMentoringMessages, ...mentoringChatExtra];
+  if (activeView === 'directory') {
+    if (mentorsQuery.isLoading || pairingRequestsQuery.isLoading) {
+      return <LoadingSkeleton rows={6} height={28} />;
+    }
 
-  const appendMessage = (body: string) => {
-    setMentoringChatExtra((prev) => [
-      ...prev,
-      { id: `msg-${Date.now()}`, sender: 'You', body, time: 'Just now' },
-    ]);
-  };
+    if (mentorsQuery.isError || pairingRequestsQuery.isError) {
+      return (
+        <ErrorState
+          message="Unable to load mentors or your mentoring requests."
+          onRetry={() => {
+            void mentorsQuery.refetch();
+            void pairingRequestsQuery.refetch();
+          }}
+        />
+      );
+    }
 
-  const viewMeta =
-    activeView === 'directory'
-      ? {
-          title: 'Certified Trainer Directory',
-          subtitle: 'Browse active Bank of Abyssinia internal trainers by skill and submit a request.',
-        }
-      : activeView === 'trainer'
-        ? {
-            title: 'Trainer Workspace & Certification',
-            subtitle: 'Manage incoming trainee requests or apply to become a certified internal trainer.',
-          }
-        : {
-            title: 'My Mentor & Progress',
-            subtitle: 'Track your active mentoring match, completed sessions, and trainee ↔ trainer channel.',
-          };
+    return (
+      <div className="boa-stack">
+        <PageHeader
+          title="Find a Mentor"
+          subtitle="Find active mentors with available capacity for a skill, or ask HR to match you."
+          source="live"
+        />
+        {user?.id && (
+          <MentoringRecommendations
+            skills={activeSkills.map((skill) => ({ id: skill.id, name: skill.name }))}
+            currentUserId={user.id}
+            requests={pairingRequestsQuery.data ?? []}
+          />
+        )}
+        <MentoringMatchRequestForm skills={activeSkills} />
+        <MentorDirectory
+          mentors={mentorsQuery.data ?? []}
+          currentUserId={user?.id}
+          requests={pairingRequestsQuery.data ?? []}
+        />
+      </div>
+    );
+  }
 
-  const section =
-    activeView === 'directory' ? 'directory' : activeView === 'trainer' ? 'trainer' : 'trainee';
+  if (activeView === 'trainer-profile') {
+    if (!isMentor) {
+      return (
+        <div className="boa-stack">
+          <PageHeader title="Mentor Profile" subtitle="Manage your public mentor profile." source="live" />
+          <div className="apid-card">
+            <EmptyState
+              title="Mentor Access Required"
+              description="Only approved mentors can manage a public mentor profile."
+            />
+          </div>
+        </div>
+      );
+    }
 
-  return (
-    <div className="boa-stack">
-      <PageHeader title={viewMeta.title} subtitle={viewMeta.subtitle} source="preview" />
+    return (
+      <div className="boa-stack">
+        <PageHeader
+          title="Mentor Profile"
+          subtitle="Keep your expertise, availability, and trainee capacity up to date for employees seeking a mentor."
+          source="live"
+        />
+        <MentorProfileForm activeSkills={activeSkills} currentUserId={user?.id ?? 0} />
+      </div>
+    );
+  }
 
-      <MentoringTab
-        workspace={workspaceData}
-        availableTrainers={availableTrainers}
-        activeSkills={activeSkills}
-        chatMessages={allMentoringMsgs}
-        onAppendChat={appendMessage}
-        section={section}
-      />
-    </div>
-  );
+  if (activeView === 'overview' || activeView === 'trainee' || activeView === 'trainer') {
+    if (pairingRequestsQuery.isLoading) {
+      return <LoadingSkeleton rows={6} height={28} />;
+    }
+    if (pairingRequestsQuery.isError) {
+      return (
+        <ErrorState
+          message="Unable to load your mentoring requests."
+          onRetry={() => void pairingRequestsQuery.refetch()}
+        />
+      );
+    }
+    if (activeView === 'trainer' && !isMentor) {
+      return (
+        <div className="boa-stack">
+          <PageHeader title="My Trainees" subtitle="Mentor invitations and requests." source="live" />
+          <div className="apid-card">
+            <EmptyState
+              title="Mentor Access Required"
+              description="Only approved mentors can invite employees or respond to trainee requests."
+            />
+          </div>
+        </div>
+      );
+    }
+
+    const view = activeView === 'trainer' ? 'mentor' : activeView === 'trainee' ? 'trainee' : 'all';
+    const title =
+      activeView === 'trainer'
+        ? 'My Trainees'
+        : activeView === 'trainee'
+          ? 'My Mentor'
+          : 'Mentoring';
+    const subtitle =
+      activeView === 'trainer'
+        ? 'Invite employees to a one-to-one pairing or class, and respond to mentorship requests.'
+        : activeView === 'trainee'
+          ? 'Request a mentor, respond to invitations, and track your active relationships.'
+          : 'Manage mentoring invitations, requests, and active pairings.';
+
+    return (
+      <div className="boa-stack">
+        <PageHeader title={title} subtitle={subtitle} source="live" />
+        {activeView === 'trainer' && user?.id && (
+          <MentorInvitationForm currentUserId={user.id} />
+        )}
+        {activeView === 'trainee' && (
+          <div className="boa-stack">
+            <div>
+              <Link to="/mentoring?view=directory" className="apid-btn apid-btn-primary apid-btn-sm">
+                Find a Mentor
+              </Link>
+            </div>
+            {user?.id && (
+              <MentoringRecommendations
+                skills={activeSkills.map((skill) => ({ id: skill.id, name: skill.name }))}
+                currentUserId={user.id}
+                requests={pairingRequestsQuery.data ?? []}
+              />
+            )}
+            <MentoringMatchRequestForm skills={activeSkills} />
+          </div>
+        )}
+        {activeView === 'overview' && (
+          <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+            <Link to="/mentoring?view=directory" className="apid-btn apid-btn-outline apid-btn-sm">
+              Find a Mentor
+            </Link>
+            {isMentor && (
+              <Link to="/mentoring?view=trainer" className="apid-btn apid-btn-outline apid-btn-sm">
+                Invite Employees
+              </Link>
+            )}
+          </div>
+        )}
+        <MentoringRequestsPanel
+          requests={pairingRequestsQuery.data ?? []}
+          currentUserId={user?.id ?? 0}
+          view={view}
+        />
+      </div>
+    );
+  }
+
+  if (activeView === 'apply') {
+    if (isMentor) {
+      return (
+        <div className="boa-stack">
+          <PageHeader
+            title="Apply to Become a Mentor"
+            subtitle="Approved mentors can request additional skills from their profile."
+          />
+          <div className="apid-card">
+            <EmptyState
+              title="You Are Already a Mentor"
+              description="Use your mentor profile to request HR approval for additional skills."
+              action={
+                <Link to="/mentoring?view=trainer-profile" className="apid-btn apid-btn-primary apid-btn-sm">
+                  Open mentor profile
+                </Link>
+              }
+            />
+          </div>
+        </div>
+      );
+    }
+    return (
+      <div className="boa-stack">
+        <PageHeader
+          title="Apply to Become a Mentor"
+          subtitle="Submit one application with all requested skills and supporting evidence."
+        />
+        <ApplyForMentorForm activeSkills={activeSkills} currentUserId={user?.id ?? 0} />
+      </div>
+    );
+  }
+
+  return <MentoringSessionsPage view={activeView === 'trainer-sessions' ? 'mentor' : 'trainee'} />;
 }
 

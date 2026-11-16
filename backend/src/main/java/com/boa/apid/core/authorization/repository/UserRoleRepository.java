@@ -2,6 +2,7 @@ package com.boa.apid.core.authorization.repository;
 
 import com.boa.apid.core.authorization.entity.UserRole;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
@@ -48,4 +49,19 @@ public interface UserRoleRepository extends JpaRepository<UserRole, Long> {
               AND ur.active = true
             """)
     List<UserRole> findActiveByUserIdsWithRole(@Param("userIds") List<Long> userIds);
+
+    @Query("""
+            SELECT CASE WHEN COUNT(ur) > 0 THEN true ELSE false END
+            FROM UserRole ur
+            JOIN ur.role r
+            WHERE ur.user.id = :userId
+              AND ur.active = true
+              AND r.active = true
+              AND LOWER(r.name) = 'mentor'
+            """)
+    boolean existsActiveMentorRoleByUserId(@Param("userId") Long userId);
+
+    @Modifying
+    @Query("DELETE FROM UserRole ur WHERE ur.user.id = :userId")
+    int deleteAllForUser(@Param("userId") Long userId);
 }

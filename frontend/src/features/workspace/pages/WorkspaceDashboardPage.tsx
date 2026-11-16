@@ -1,8 +1,21 @@
-import { useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { Award, Building2, ClipboardCheck, ShieldAlert, Users } from 'lucide-react';
-import { Link, useSearchParams } from 'react-router-dom';
+import {
+  ArrowDownRight,
+  ArrowUpRight,
+  Building2,
+  ClipboardCheck,
+  GitPullRequest,
+  HeartHandshake,
+  UserRound,
+  Users,
+  UsersRound,
+} from 'lucide-react';
+import { Link } from 'react-router-dom';
 import { useAuth } from '../../../app/AuthContext';
+import {
+  EMPLOYEE_WORKSPACE_PERMISSIONS,
+  HR_MODULE_PERMISSIONS,
+} from '../../../shared/auth/workspaceResolver';
 import {
   AvatarBadge,
   DataSourceBadge,
@@ -13,64 +26,78 @@ import {
   StatCard,
   StatusPill,
 } from '../../../shared/components/ui';
-import { EMPLOYEE_WORKSPACE_PERMISSIONS } from '../../../shared/auth/workspaceResolver';
-import { workspaceLiveApi, workspacePreviewAdapter } from '../api/workspaceDashboardApi';
-import { CoachingTab } from '../components/CoachingTab';
-import type { ChatMessageItem } from '../components/IsolatedChatPanel';
-import { MentoringTab } from '../components/MentoringTab';
+import { mentoringPairingApi } from '../../mentoring/api/mentoringPairingApi';
+import { mentorApplicationApi } from '../../mentoring/api/mentorApplicationApi';
+import { mentoringMatchApi } from '../../mentoring/api/mentoringMatchApi';
+import { mentoringTrainerApi } from '../../mentoring/api/mentoringTrainerApi';
+import { HrMentorSelfService } from '../../mentoring/components/HrMentorSelfService';
+import { MentoringRequestsPanel } from '../../mentoring/components/MentoringRequestsPanel';
+import { SkillSupplyDemandCard } from '../../mentoring/components/SkillSupplyDemandCard';
+import { workspaceLiveApi } from '../api/workspaceDashboardApi';
 
-type WorkspaceTabKey = 'overview' | 'coaching' | 'mentoring';
+function formatDate(value: string) {
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? 'Date unavailable' : date.toLocaleDateString();
+}
 
 export function WorkspaceDashboardPage() {
   const { user, hasPermission, hasAnyPermission } = useAuth();
-  const [searchParams, setSearchParams] = useSearchParams();
-
-  // Strictly dev-only participation flag toggles (never visible in production builds)
-  const [devCoachOverride, setDevCoachOverride] = useState<boolean | null>(null);
-  const [devTrainerOverride, setDevTrainerOverride] = useState<boolean | null>(null);
-
-  const [coachingChatExtra, setCoachingChatExtra] = useState<ChatMessageItem[]>([]);
-  const [mentoringChatExtra, setMentoringChatExtra] = useState<ChatMessageItem[]>([]);
+  const canAccessWorkspace = hasAnyPermission(EMPLOYEE_WORKSPACE_PERMISSIONS);
+  const canManageHrMentor = hasAnyPermission(HR_MODULE_PERMISSIONS);
+  const canReviewMentorApplications = canAccessWorkspace && hasPermission('TRAINER_APPLICATION_REVIEW');
+  const canManageMentoringMatches = canAccessWorkspace && hasPermission('MENTORING_MATCH_MANAGE');
+  const canViewMentorRoster = canAccessWorkspace && hasAnyPermission([
+    'TRAINER_DIRECT_APPOINT',
+    'TRAINER_STATUS_MANAGE',
+    'MENTORING_MATCH_MANAGE',
+    'MENTORING_REPORT_VIEW_ALL',
+  ]);
+  const canViewMentoringReports = canAccessWorkspace && hasPermission('MENTORING_REPORT_VIEW_ALL');
 
   const identityQuery = useQuery({
     queryKey: ['workspace', 'identity', user?.id],
     queryFn: workspaceLiveApi.loadMyIdentity,
+    enabled: canAccessWorkspace,
+  });
+  const hrMentorProfileQuery = useQuery({
+    queryKey: ['mentoring', 'hr', 'my-mentor-profile'],
+    queryFn: mentoringTrainerApi.getHrMentorProfile,
+    enabled: canManageHrMentor,
+    refetchInterval: canManageHrMentor ? 3_000 : false,
+    refetchOnWindowFocus: true,
+  });
+  const hrApplicationsQuery = useQuery({
+    queryKey: ['mentoring', 'applications'],
+    queryFn: mentorApplicationApi.list,
+    enabled: canReviewMentorApplications,
+  });
+  const hrMatchRequestsQuery = useQuery({
+    queryKey: ['mentoring', 'hr-match-requests'],
+    queryFn: mentoringMatchApi.listForHr,
+    enabled: canManageMentoringMatches,
+  });
+  const hrTrainersQuery = useQuery({
+    queryKey: ['mentoring', 'trainers'],
+    queryFn: mentoringTrainerApi.listRoster,
+    enabled: canViewMentorRoster,
+  });
+  const hrOverviewQuery = useQuery({
+    queryKey: ['mentoring', 'hr-overview'],
+    queryFn: mentoringTrainerApi.getOverview,
+    enabled: canViewMentoringReports,
+  });
+  const pairingRequestsQuery = useQuery({
+    queryKey: ['mentoring', 'pairing', 'requests', user?.id],
+    queryFn: mentoringPairingApi.listMyRequests,
+    enabled: canAccessWorkspace,
+  });
+  const relationshipsQuery = useQuery({
+    queryKey: ['mentoring', 'pairing', 'relationships', user?.id],
+    queryFn: mentoringPairingApi.listMyRelationships,
+    enabled: canAccessWorkspace,
   });
 
-  const previewQuery = useQuery({
-    queryKey: ['workspace', 'preview-participation'],
-    queryFn: workspacePreviewAdapter.getParticipationPreview,
-  });
-
-  const requestedTab = (searchParams.get('tab') as WorkspaceTabKey | null) ?? 'overview';
-  const activeTab: WorkspaceTabKey =
-    requestedTab === 'coaching' || requestedTab === 'mentoring' ? requestedTab : 'overview';
-
-  const selectTab = (key: WorkspaceTabKey) => {
-    if (key === 'overview') {
-      setSearchParams({});
-    } else {
-      setSearchParams({ tab: key });
-    }
-  };
-
-  const effectiveWorkspace = useMemo(() => {
-    const base = previewQuery.data?.workspace;
-    if (!base) return null;
-    const isCoachDefault =
-      (identityQuery.data?.directReports.length ?? 0) > 0 || base.isAssignedCoach;
-    return {
-      ...base,
-      isAssignedCoach:
-        import.meta.env.DEV && devCoachOverride !== null ? devCoachOverride : isCoachDefault,
-      isApprovedTrainer:
-        import.meta.env.DEV && devTrainerOverride !== null
-          ? devTrainerOverride
-          : base.isApprovedTrainer,
-    };
-  }, [previewQuery.data, identityQuery.data, devCoachOverride, devTrainerOverride]);
-
-  if (!hasAnyPermission(EMPLOYEE_WORKSPACE_PERMISSIONS)) {
+  if (!canAccessWorkspace) {
     return (
       <div className="apid-card">
         <EmptyState
@@ -81,11 +108,34 @@ export function WorkspaceDashboardPage() {
     );
   }
 
-  if (identityQuery.isLoading || previewQuery.isLoading) {
+  if (identityQuery.isLoading || pairingRequestsQuery.isLoading || relationshipsQuery.isLoading) {
     return <LoadingSkeleton rows={6} height={28} />;
   }
 
-  if (identityQuery.isError || !identityQuery.data) {
+  const failedQuery = identityQuery.isError
+    ? identityQuery
+    : pairingRequestsQuery.isError
+      ? pairingRequestsQuery
+      : relationshipsQuery.isError
+        ? relationshipsQuery
+        : null;
+  if (failedQuery) {
+    const message = failedQuery === identityQuery
+      ? 'Unable to load your live employee profile.'
+      : failedQuery === pairingRequestsQuery
+        ? 'Unable to load your mentoring requests.'
+        : 'Unable to load your mentoring relationships.';
+    return (
+      <ErrorState
+        message={message}
+        onRetry={() => {
+          void failedQuery.refetch();
+        }}
+      />
+    );
+  }
+
+  if (!identityQuery.data) {
     return (
       <ErrorState
         message="Unable to load your live employee profile."
@@ -94,23 +144,16 @@ export function WorkspaceDashboardPage() {
     );
   }
 
-  const { linkedEmployee, directReports, activeSkills } = identityQuery.data;
-
-  // Identity-driven honest empty state when login user has no linked employee profile yet
+  const { linkedEmployee, activeSkills } = identityQuery.data;
   if (!linkedEmployee) {
     return (
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-        <PageHeader
-          title="Employee Profile"
-          subtitle="Your employee profile and reporting information from Bank of Abyssinia."
-          source="live"
-        />
-
+      <div className="boa-stack">
+        <PageHeader title="Overview" subtitle="Your role-based employee and mentoring activity." source="live" />
         <div className="apid-card" data-testid="unlinked-profile-state">
           <EmptyState
             title="Profile Not Linked Yet"
             description={`Your account "${user?.username ?? ''}" is signed in, but it is not linked to an employee profile yet. Ask your Administrator to link your account under Employees & Org.`}
-            icon={<ShieldAlert size={34} />}
+            icon={<Building2 size={34} />}
             action={
               hasPermission('HIERARCHY_MANAGE') ? (
                 <Link to="/admin?tab=organization" className="apid-btn apid-btn-primary apid-btn-sm">
@@ -124,42 +167,84 @@ export function WorkspaceDashboardPage() {
     );
   }
 
-  const workspaceData = effectiveWorkspace!;
-  const availableTrainers = previewQuery.data?.availableTrainers ?? [];
-  const allCoachingMsgs = [...workspaceData.chatCoachingMessages, ...coachingChatExtra];
-  const allMentoringMsgs = [...workspaceData.chatMentoringMessages, ...mentoringChatExtra];
-
-  const appendMessage = (channel: 'coaching' | 'mentoring', body: string) => {
-    const item: ChatMessageItem = {
-      id: `msg-${Date.now()}`,
-      sender: 'You',
-      body,
-      time: 'Just now',
-    };
-    if (channel === 'coaching') {
-      setCoachingChatExtra((prev) => [...prev, item]);
-    } else {
-      setMentoringChatExtra((prev) => [...prev, item]);
-    }
-  };
-
-  const workspaceHeading =
-    activeTab === 'coaching'
-      ? 'My Coaching'
-      : activeTab === 'mentoring'
-        ? 'My Mentoring'
-        : 'Overview';
+  const requests = pairingRequestsQuery.data ?? [];
+  const relationships = relationshipsQuery.data ?? [];
+  const currentRelationships = relationships.filter(
+    (relationship) =>
+      relationship.memberStatus === 'ACTIVE' &&
+      (relationship.relationshipStatus === 'ACTIVE' || relationship.relationshipStatus === 'PAUSED')
+  );
+  const totalPairCount = new Set(relationships.map((relationship) => relationship.relationshipId)).size;
+  const mentorPairCount = new Set(
+    relationships
+      .filter((relationship) => relationship.currentUserRole === 'MENTOR')
+      .map((relationship) => relationship.relationshipId)
+  ).size;
+  const traineePairCount = new Set(
+    relationships
+      .filter((relationship) => relationship.currentUserRole === 'TRAINEE')
+      .map((relationship) => relationship.relationshipId)
+  ).size;
+  const incomingRequests = requests.filter((request) => request.status === 'PENDING' && request.incoming);
+  const outgoingRequests = requests.filter(
+    (request) =>
+      request.status === 'PENDING' &&
+      !request.incoming &&
+      request.initiatedByMentor &&
+      request.mentorUserId === user?.id
+  );
+  const isMentor = user?.roles.some((role) => role.trim().toLowerCase() === 'mentor') ?? false;
+  const activeRelationships = currentRelationships.filter(
+    (relationship) => relationship.relationshipStatus === 'ACTIVE'
+  );
+  const activePairCount = new Set(activeRelationships.map((relationship) => relationship.relationshipId)).size;
+  const activeMentorCount = new Set(
+    activeRelationships
+      .filter((relationship) => relationship.currentUserRole === 'TRAINEE')
+      .map((relationship) => relationship.mentorUserId)
+  ).size;
+  const activeTraineeCount = new Set(
+    activeRelationships
+      .filter((relationship) => relationship.currentUserRole === 'MENTOR')
+      .map((relationship) => relationship.traineeUserId)
+  ).size;
+  const hrActivityQueries = [
+    canReviewMentorApplications ? hrApplicationsQuery : null,
+    canManageMentoringMatches ? hrMatchRequestsQuery : null,
+    canViewMentorRoster ? hrTrainersQuery : null,
+    canViewMentoringReports ? hrOverviewQuery : null,
+  ].filter((query): query is NonNullable<typeof query> => query !== null);
+  const hasHrActivityAccess = hrActivityQueries.length > 0;
+  const hrActivityLoading = hrActivityQueries.some((query) => query.isLoading);
+  const hrActivityError = hrActivityQueries.some((query) => query.isError);
+  const activeHrMentorUserIds = new Set(
+    (hrTrainersQuery.data ?? [])
+      .filter((trainer) => trainer.status === 'ACTIVE' && trainer.acceptingNewPairings !== false)
+      .map((trainer) => trainer.userId)
+      .filter((userId): userId is number => userId !== null)
+  );
+  if (
+    canManageHrMentor &&
+    user?.id !== undefined &&
+    hrMentorProfileQuery.data?.acceptingNewPairings
+  ) {
+    activeHrMentorUserIds.add(user.id);
+  }
+  const activeHrMentorCount = activeHrMentorUserIds.size;
+  const pendingHrApplications = (hrApplicationsQuery.data ?? [])
+    .filter((application) => application.status === 'PENDING').length;
+  const openHrMatchRequests = (hrMatchRequestsQuery.data ?? [])
+    .filter((request) => request.status === 'OPEN').length;
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+    <div className="boa-stack">
       <PageHeader
-        title={workspaceHeading}
-        subtitle="Your personal coaching, mentoring, and team reporting view."
+        title="Overview"
+        subtitle="Your live employee profile, team responsibilities, and mentoring activity."
         source="live"
       />
 
-      {/* Live Bank of Abyssinia Identity Card */}
-      <div className="apid-card">
+      <section className="apid-card">
         <div className="boa-card-header">
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.85rem', flexWrap: 'wrap' }}>
             <AvatarBadge name={linkedEmployee.fullName} size={46} />
@@ -183,214 +268,240 @@ export function WorkspaceDashboardPage() {
               label={linkedEmployee.employmentStatus}
               tone={linkedEmployee.employmentStatus === 'ACTIVE' ? 'ok' : 'warn'}
             />
+            {(user?.roles ?? [])
+              .filter(
+                (role) =>
+                  !(
+                    canManageHrMentor &&
+                    role.trim().toLowerCase() === 'mentor' &&
+                    hrMentorProfileQuery.data?.acceptingNewPairings === false
+                  )
+              )
+              .map((role) => (
+                <StatusPill key={role} label={role} tone="neutral" />
+              ))}
             <DataSourceBadge source="live" />
           </div>
         </div>
+      </section>
 
-        {/* Navigation tabs */}
-        <div className="apid-tabs" role="tablist" aria-label="Workspace sections">
-          <button
-            type="button"
-            role="tab"
-            aria-selected={activeTab === 'overview'}
-            className={`apid-tab ${activeTab === 'overview' ? 'active' : ''}`}
-            onClick={() => selectTab('overview')}
-          >
-            Overview
-          </button>
-          <button
-            type="button"
-            role="tab"
-            aria-selected={activeTab === 'coaching'}
-            className={`apid-tab ${activeTab === 'coaching' ? 'active' : ''}`}
-            onClick={() => selectTab('coaching')}
-          >
-            My Coaching
-          </button>
-          <button
-            type="button"
-            role="tab"
-            aria-selected={activeTab === 'mentoring'}
-            className={`apid-tab ${activeTab === 'mentoring' ? 'active' : ''}`}
-            onClick={() => selectTab('mentoring')}
-          >
-            My Mentoring
-          </button>
-        </div>
-      </div>
+      {hasAnyPermission(HR_MODULE_PERMISSIONS) && <HrMentorSelfService />}
 
-      {/* Strictly development-only flag inspector */}
-      {import.meta.env.DEV && (
-        <div
-          className="apid-card"
-          data-testid="dev-participation-sandbox"
-          style={{ padding: '0.75rem 1rem', background: '#fffbeb', borderColor: '#fde68a' }}
-        >
-          <div
-            style={{
-              display: 'flex',
-              justifyContent: 'space-between',
-              alignItems: 'center',
-              gap: '0.75rem',
-              flexWrap: 'wrap',
-              fontSize: '0.8rem',
-            }}
-          >
+      {hasHrActivityAccess && (
+        <section className="boa-stack" aria-label="HR mentoring activity">
+          <div className="boa-card-header">
             <div>
-              <strong>Sample Role View:</strong> Toggle Coach or Trainer view to preview role cards.
+              <h2 className="boa-card-title">HR Mentoring Activity</h2>
+              <p className="boa-card-subtitle">
+                Review workload, matching requests, and current mentoring assignments.
+              </p>
             </div>
-            <div style={{ display: 'flex', gap: '0.5rem' }}>
-              <button
-                type="button"
-                className="apid-btn apid-btn-outline apid-btn-sm"
-                onClick={() =>
-                  setDevCoachOverride((prev) => !(prev ?? workspaceData.isAssignedCoach))
-                }
-              >
-                Coach Flag: {workspaceData.isAssignedCoach ? 'ON' : 'OFF'}
-              </button>
-              <button
-                type="button"
-                className="apid-btn apid-btn-outline apid-btn-sm"
-                onClick={() =>
-                  setDevTrainerOverride((prev) => !(prev ?? workspaceData.isApprovedTrainer))
-                }
-              >
-                Trainer Flag: {workspaceData.isApprovedTrainer ? 'ON' : 'OFF'}
-              </button>
-            </div>
+            <Link to="/mentoring/hr" className="apid-btn apid-btn-outline apid-btn-sm">
+              Open HR mentoring
+            </Link>
           </div>
-        </div>
-      )}
-
-      {activeTab === 'overview' && (
-        <div className="boa-stack">
-          <div className="boa-kpi-grid" style={{ marginBottom: 0 }}>
-            <StatCard
-              label="Direct Reports"
-              value={directReports.length}
-              subtext={
-                directReports.length > 0
-                  ? 'Employees reporting to you'
-                  : 'Individual contributor'
-              }
-              icon={<Users size={16} />}
+          {hrActivityLoading ? (
+            <LoadingSkeleton rows={2} height={72} />
+          ) : hrActivityError ? (
+            <ErrorState
+              message="Unable to load HR mentoring activity."
+              onRetry={() => {
+                hrActivityQueries.forEach((query) => {
+                  if (query.isError) void query.refetch();
+                });
+              }}
             />
-            <StatCard
-              label="Coaching Progress"
-              value={`${workspaceData.talentPlan.progressPct}%`}
-              subtext={workspaceData.talentPlan.quarter}
-              badge={workspaceData.hasTalentAssignment ? 'ACTIVE PLAN' : 'NONE'}
-              badgeTone="info"
-              icon={<ClipboardCheck size={16} />}
-            />
-            <StatCard
-              label="Mentoring Sessions"
-              value={`${workspaceData.mentoringAsTrainee.sessionsCompleted}/${workspaceData.mentoringAsTrainee.sessionsPlanned}`}
-              subtext={workspaceData.mentoringAsTrainee.skillName}
-              badge="SAMPLE"
-              badgeTone="neutral"
-              icon={<Award size={16} />}
-            />
-            <StatCard
-              label="Available Skills"
-              value={activeSkills.length}
-              subtext="Bank of Abyssinia skills catalog"
-              icon={<Building2 size={16} />}
-            />
-          </div>
-
-          {directReports.length > 0 && (
-            <div className="apid-card">
-              <div className="boa-card-header">
-                <div>
-                  <h3 className="boa-card-title">My Direct Reports</h3>
-                  <p className="boa-card-subtitle">
-                    Employees reporting directly to {linkedEmployee.fullName}.
-                  </p>
-                </div>
-                <DataSourceBadge source="live" />
+          ) : (
+            <div className="boa-stack">
+              <div className="boa-kpi-grid" style={{ marginBottom: 0 }}>
+                {canReviewMentorApplications && (
+                  <StatCard
+                    label="Pending Applications"
+                    value={pendingHrApplications}
+                    subtext="Awaiting HR review"
+                    icon={<ClipboardCheck size={16} />}
+                  />
+                )}
+                {canManageMentoringMatches && (
+                  <StatCard
+                    label="Awaiting Matching"
+                    value={openHrMatchRequests}
+                    subtext="Trainees waiting for a mentor"
+                    icon={<GitPullRequest size={16} />}
+                  />
+                )}
+                {canViewMentorRoster && (
+                  <StatCard
+                    label="Approved Mentors"
+                    value={activeHrMentorCount}
+                    subtext="Active mentors; includes HR admin when badge is on"
+                    icon={<UserRound size={16} />}
+                  />
+                )}
+                {canViewMentoringReports && (
+                  <StatCard
+                    label="Active Assignments"
+                    value={hrOverviewQuery.data?.activeRelationships ?? 0}
+                    subtext="Current mentoring relationships"
+                    icon={<HeartHandshake size={16} />}
+                  />
+                )}
+                {canViewMentoringReports && hrOverviewQuery.data && (
+                  <StatCard
+                    label="Relationship Completion"
+                    value={`${hrOverviewQuery.data.completionRatePct}%`}
+                    subtext={`${hrOverviewQuery.data.completedRelationships} completed relationships`}
+                    icon={<HeartHandshake size={16} />}
+                  />
+                )}
               </div>
-              <div className="apid-table-wrap">
-                <table className="apid-table">
-                  <thead>
-                    <tr>
-                      <th>Emp #</th>
-                      <th>Name</th>
-                      <th>Department</th>
-                      <th>Position</th>
-                      <th>Status</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {directReports.map((dr) => (
-                      <tr key={dr.id}>
-                        <td className="tabular-nums"><strong>{dr.employeeNumber}</strong></td>
-                        <td>{dr.fullName}</td>
-                        <td>{dr.departmentName ?? '—'}</td>
-                        <td>{dr.position || dr.job || '—'}</td>
-                        <td>
-                          <StatusPill
-                            label={dr.employmentStatus}
-                            tone={dr.employmentStatus === 'ACTIVE' ? 'ok' : 'warn'}
-                          />
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+              {canViewMentoringReports && hrOverviewQuery.data && (
+                <SkillSupplyDemandCard
+                  liveSkillNames={hrOverviewQuery.data.skillSupplyDemand.map((row) => row.skillName)}
+                  skillSupplyDemand={hrOverviewQuery.data.skillSupplyDemand}
+                />
+              )}
             </div>
           )}
+        </section>
+      )}
 
-          <div className="apid-card">
-            <div className="boa-card-header">
-              <div>
-                <h3 className="boa-card-title">Quick Navigation</h3>
-                <p className="boa-card-subtitle">
-                  Open your Coaching plans or browse available Trainers under Mentoring.
-                </p>
-              </div>
-              <DataSourceBadge source="preview" />
-            </div>
-            <div style={{ display: 'flex', gap: '0.65rem', flexWrap: 'wrap' }}>
-              <button
-                type="button"
-                className="apid-btn apid-btn-primary apid-btn-sm"
-                onClick={() => selectTab('coaching')}
-              >
-                Open My Coaching
-              </button>
-              <button
-                type="button"
-                className="apid-btn apid-btn-outline apid-btn-sm"
-                onClick={() => selectTab('mentoring')}
-              >
-                Open My Mentoring &amp; Trainer Directory
-              </button>
-            </div>
+      <section className="boa-kpi-grid" aria-label="Role overview metrics" style={{ marginBottom: 0 }}>
+        <StatCard
+          label="Active Mentors"
+          value={activeMentorCount}
+          subtext="Mentors currently mentoring you"
+          icon={<UserRound size={16} />}
+        />
+        <StatCard
+          label="Active Trainees"
+          value={activeTraineeCount}
+          subtext="Trainees you currently mentor"
+          icon={<UsersRound size={16} />}
+        />
+        <StatCard
+          label="Incoming Requests"
+          value={incomingRequests.length}
+          subtext="Awaiting your response"
+          icon={<Users size={16} />}
+        />
+        <StatCard
+          label="Outgoing Requests"
+          value={outgoingRequests.length}
+          subtext="Mentoring requests you sent awaiting a response"
+          icon={<ArrowUpRight size={16} />}
+        />
+        <StatCard
+          label="Available Skills"
+          value={activeSkills.length}
+          subtext="Active catalog skills, including approved custom skills"
+          icon={<Building2 size={16} />}
+        />
+      </section>
+
+      <section className="boa-stack" aria-label="Pairing">
+        <div className="boa-card-header">
+          <div>
+            <h2 className="boa-card-title">Pairing</h2>
+            <p className="boa-card-subtitle">A summary of your mentoring relationships.</p>
           </div>
         </div>
-      )}
+        <div className="boa-kpi-grid" aria-label="Pairing metrics" style={{ marginBottom: 0 }}>
+          <StatCard
+            label="Total pairings"
+            value={totalPairCount}
+            subtext="All mentoring relationships"
+            icon={<HeartHandshake size={16} />}
+          />
+          <StatCard
+            label="As mentor"
+            value={mentorPairCount}
+            subtext="Relationships where you mentor"
+            icon={<ArrowUpRight size={16} />}
+          />
+          <StatCard
+            label="As trainee"
+            value={traineePairCount}
+            subtext="Relationships where you are mentored"
+            icon={<ArrowDownRight size={16} />}
+          />
+          <StatCard
+            label="Active"
+            value={activePairCount}
+            subtext="Current active relationships"
+            icon={<UsersRound size={16} />}
+          />
+        </div>
+      </section>
 
-      {activeTab === 'coaching' && (
-        <CoachingTab
-          workspace={workspaceData}
-          directReports={directReports}
-          activeSkills={activeSkills}
-          chatMessages={allCoachingMsgs}
-          onAppendChat={(body) => appendMessage('coaching', body)}
-        />
-      )}
+      <section className="apid-card" aria-label="My mentoring pairings">
+        <div className="boa-card-header">
+          <div>
+            <h3 className="boa-card-title">My Mentoring Pairings</h3>
+            <p className="boa-card-subtitle">Your active and paused pairs, with participants, skill, status, and start date.</p>
+          </div>
+          <Link to="/mentoring?view=directory" className="apid-btn apid-btn-outline apid-btn-sm">
+            Find a Mentor
+          </Link>
+        </div>
+        {currentRelationships.length === 0 ? (
+          <EmptyState
+            title="No Current Mentoring Relationships"
+            description="When you join or mentor a pairing, its status and participants will appear here."
+          />
+        ) : (
+          <div className="boa-grid-2" style={{ marginBottom: 0 }}>
+            {currentRelationships.map((relationship) => {
+              return (
+                <article key={relationship.memberId} className="apid-card" style={{ border: '1px solid var(--border)' }}>
+                  <div className="boa-card-header">
+                    <div>
+                      <strong>{relationship.mentorName} → {relationship.traineeName}</strong>
+                      <p className="boa-card-subtitle">
+                        {relationship.requestType === 'GROUP' ? 'Mentoring group' : 'One-to-one mentoring'}
+                        {' · '}
+                        {relationship.currentUserRole === 'MENTOR' ? 'You are the mentor' : 'You are the trainee'}
+                        {relationship.skillName ? ` · ${relationship.skillName}` : ''}
+                      </p>
+                    </div>
+                    <StatusPill
+                      label={relationship.relationshipStatus}
+                      tone={relationship.relationshipStatus === 'ACTIVE' ? 'ok' : 'warn'}
+                    />
+                  </div>
+                  <div className="boa-muted" style={{ fontSize: '0.8rem', marginBottom: '0.75rem' }}>
+                    Started {formatDate(relationship.startedAt)}
+                  </div>
+                  <Link
+                    to={`/mentoring/pairing/${relationship.relationshipId}`}
+                    className="apid-btn apid-btn-outline apid-btn-sm"
+                  >
+                    View relationship
+                  </Link>
+                </article>
+              );
+            })}
+          </div>
+        )}
+      </section>
 
-      {activeTab === 'mentoring' && (
-        <MentoringTab
-          workspace={workspaceData}
-          availableTrainers={availableTrainers}
-          activeSkills={activeSkills}
-          chatMessages={allMentoringMsgs}
-          onAppendChat={(body) => appendMessage('mentoring', body)}
-        />
+      <MentoringRequestsPanel
+        requests={requests}
+        currentUserId={user?.id ?? 0}
+        view="all"
+        showActive={false}
+      />
+
+      {isMentor && (
+        <div className="apid-card" style={{ display: 'flex', justifyContent: 'space-between', gap: '1rem', flexWrap: 'wrap' }}>
+          <div>
+            <h3 className="boa-card-title">Mentor Workspace</h3>
+            <p className="boa-card-subtitle">Manage invitations, trainee requests, and your mentor profile.</p>
+          </div>
+          <Link to="/mentoring?view=trainer" className="apid-btn apid-btn-primary apid-btn-sm">
+            Open mentor workspace
+          </Link>
+        </div>
       )}
     </div>
   );

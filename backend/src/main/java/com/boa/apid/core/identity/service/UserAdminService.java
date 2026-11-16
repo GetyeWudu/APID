@@ -18,6 +18,7 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -204,6 +205,57 @@ public class UserAdminService {
         ));
 
         return loadSingleDto(saved);
+    }
+
+    @Transactional
+    public String deleteUserAccountForEmployeeRevocation(
+            Long targetUserId,
+            ApidUserPrincipal actor,
+            String reason
+    ) {
+        if (targetUserId.equals(actor.getUserId())) {
+            throw new BusinessException(
+                    "SELF_MODIFICATION_BLOCKED",
+                    "You cannot revoke and delete your own account",
+                    HttpStatus.BAD_REQUEST
+            );
+        }
+
+        User user = userRepository.findById(targetUserId)
+                .orElseThrow(() -> new ResourceNotFoundException("User not found"));
+        protectionService.assertSuperAdminRemainsAfterUserStatusChange(targetUserId, UserStatus.DISABLED);
+
+        String username = user.getUsername();
+        auditService.record(new AuditService.AuditCommand(
+                null,
+                actor.getUserId(),
+                actor.getUsername(),
+                null,
+                "IAM",
+                "USER_ACCOUNT_DELETED",
+                "SUCCESS",
+                null,
+                "USER",
+                String.valueOf(targetUserId),
+                Map.of("userId", targetUserId, "username", username, "reason", reason),
+                null,
+                null
+        ));
+        eventPublisher.publishEvent(PermissionCacheInvalidationEvent.forUser(targetUserId));
+        userRoleRepository.deleteAllForUser(targetUserId);
+
+        try {
+            userRepository.delete(user);
+            userRepository.flush();
+        } catch (DataIntegrityViolationException ex) {
+            throw new BusinessException(
+                    "USER_ACCOUNT_HAS_HISTORY",
+                    "This account cannot be deleted because retained records still refer to it. The employee link was not revoked.",
+                    HttpStatus.CONFLICT
+            );
+        }
+
+        return username;
     }
 
     @Transactional
