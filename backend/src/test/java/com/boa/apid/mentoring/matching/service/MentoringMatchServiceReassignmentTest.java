@@ -28,6 +28,10 @@ import com.boa.apid.mentoring.pairing.repository.MentoringRequestRecipientReposi
 import com.boa.apid.mentoring.pairing.repository.MentoringRequestRepository;
 import com.boa.apid.mentoring.trainer.entity.TrainerAuthorization;
 import com.boa.apid.mentoring.trainer.repository.TrainerAuthorizationRepository;
+import com.boa.apid.mentoring.trainer.repository.TrainerAuthorizationSkillStatusRepository;
+import com.boa.apid.mentoring.trainer.service.MentorAvailabilityService;
+import org.junit.jupiter.api.BeforeEach;
+import com.boa.apid.mentoring.trainer.entity.TrainerAuthorizationStatus;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
@@ -58,6 +62,8 @@ class MentoringMatchServiceReassignmentTest {
     @Mock private UserRepository userRepository;
     @Mock private SkillRepository skillRepository;
     @Mock private TrainerAuthorizationRepository trainerAuthorizationRepository;
+    @Mock private TrainerAuthorizationSkillStatusRepository skillStatusRepository;
+    @Mock private MentorAvailabilityService availabilityService;
     @Mock private MentoringRequestRepository mentoringRequestRepository;
     @Mock private MentoringRequestRecipientRepository recipientRepository;
     @Mock private MentoringRelationshipRepository relationshipRepository;
@@ -68,6 +74,13 @@ class MentoringMatchServiceReassignmentTest {
     @InjectMocks
     private MentoringMatchService service;
 
+    @BeforeEach
+    void mentorsAcceptNewPairingsByDefault() {
+        org.mockito.Mockito.lenient()
+                .when(availabilityService.isAcceptingNewPairings(anyLong()))
+                .thenReturn(true);
+    }
+
     @Test
     void directlyMatchesActiveEmployeesWithoutParticipantApprovalAndNotifiesBoth() {
         User mentor = activeUser(20L);
@@ -75,22 +88,32 @@ class MentoringMatchServiceReassignmentTest {
         User hrUser = activeUser(5L);
         Employee mentorEmployee = new Employee();
         mentorEmployee.setFullName("Mentor Name");
+        mentorEmployee.setEmploymentStatus(com.boa.apid.core.organization.entity.EmploymentStatus.ACTIVE);
         Employee traineeEmployee = new Employee();
         traineeEmployee.setFullName("Trainee Name");
+        traineeEmployee.setEmploymentStatus(com.boa.apid.core.organization.entity.EmploymentStatus.ACTIVE);
+        Skill skill = new Skill();
+        skill.setId(11L);
+        skill.setName("Java");
         TrainerAuthorization authorization = new TrainerAuthorization();
         authorization.setEmployee(mentorEmployee);
         authorization.setMaxConcurrentTrainees(2);
+        authorization.setSkills(Set.of(skill));
+        org.springframework.test.util.ReflectionTestUtils.setField(authorization, "id", 100L);
         MentoringRelationship relationship = new MentoringRelationship();
 
         when(userRepository.findByIdForUpdate(20L)).thenReturn(Optional.of(mentor));
         when(userRepository.findByIdForUpdate(40L)).thenReturn(Optional.of(trainee));
         when(userRepository.findById(5L)).thenReturn(Optional.of(hrUser));
         when(trainerAuthorizationRepository.findActiveByUserId(20L)).thenReturn(List.of(authorization));
+        when(skillRepository.findByIdAndActiveTrue(11L)).thenReturn(Optional.of(skill));
+        when(skillStatusRepository.existsByAuthorization_IdAndSkill_IdAndStatus(
+                100L, 11L, TrainerAuthorizationStatus.ACTIVE)).thenReturn(true);
         when(employeeRepository.findDetailedByUserId(40L)).thenReturn(Optional.of(traineeEmployee));
         when(relationshipRepository.existsActivePair(
-                20L, 40L, MentoringRelationshipStatus.ACTIVE)).thenReturn(false);
+                20L, 40L, 11L, MentoringRelationshipStatus.ACTIVE)).thenReturn(false);
         when(recipientRepository.existsByMentorTraineeAndStatus(
-                20L, 40L, MentoringRequestRecipientStatus.PENDING)).thenReturn(false);
+                20L, 40L, 11L, MentoringRequestRecipientStatus.PENDING)).thenReturn(false);
         when(relationshipRepository.countActiveTraineesByMentorUserId(
                 20L, MentoringRelationshipStatus.ACTIVE)).thenReturn(0L);
         when(recipientRepository.countByMentorAndStatus(
@@ -99,7 +122,7 @@ class MentoringMatchServiceReassignmentTest {
         when(recipientRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
         when(relationshipRepository.save(any())).thenReturn(relationship);
 
-        var result = service.directMatch(new MentoringDirectMatchInput(20L, 40L), hrPrincipal());
+        var result = service.directMatch(new MentoringDirectMatchInput(20L, 40L, 11L), hrPrincipal());
 
         assertEquals(20L, result.mentorUserId());
         assertEquals("Mentor Name", result.mentorName());
@@ -132,25 +155,92 @@ class MentoringMatchServiceReassignmentTest {
         TrainerAuthorization authorization = new TrainerAuthorization();
         authorization.setEmployee(mentorEmployee);
         authorization.setMaxConcurrentTrainees(1);
+        Employee traineeEmployee = new Employee();
+        traineeEmployee.setEmploymentStatus(com.boa.apid.core.organization.entity.EmploymentStatus.ACTIVE);
+        Skill skill = new Skill();
+        skill.setId(11L);
+        authorization.setSkills(Set.of(skill));
+        org.springframework.test.util.ReflectionTestUtils.setField(authorization, "id", 100L);
         when(userRepository.findByIdForUpdate(20L)).thenReturn(Optional.of(mentor));
         when(trainerAuthorizationRepository.findActiveByUserId(20L)).thenReturn(List.of(authorization));
+        when(skillRepository.findByIdAndActiveTrue(11L)).thenReturn(Optional.of(skill));
+        when(skillStatusRepository.existsByAuthorization_IdAndSkill_IdAndStatus(
+                100L, 11L, TrainerAuthorizationStatus.ACTIVE)).thenReturn(true);
         when(userRepository.findByIdForUpdate(40L)).thenReturn(Optional.of(trainee));
-        when(employeeRepository.findDetailedByUserId(40L)).thenReturn(Optional.of(new Employee()));
+        when(employeeRepository.findDetailedByUserId(40L)).thenReturn(Optional.of(traineeEmployee));
         when(relationshipRepository.existsActivePair(
-                20L, 40L, MentoringRelationshipStatus.ACTIVE)).thenReturn(false);
+                20L, 40L, 11L, MentoringRelationshipStatus.ACTIVE)).thenReturn(false);
         when(recipientRepository.existsByMentorTraineeAndStatus(
-                20L, 40L, MentoringRequestRecipientStatus.PENDING)).thenReturn(false);
+                20L, 40L, 11L, MentoringRequestRecipientStatus.PENDING)).thenReturn(false);
         when(relationshipRepository.countActiveTraineesByMentorUserId(
                 20L, MentoringRelationshipStatus.ACTIVE)).thenReturn(1L);
         when(recipientRepository.countByMentorAndStatus(
                 20L, MentoringRequestRecipientStatus.PENDING)).thenReturn(0L);
 
         BusinessException exception = assertThrows(BusinessException.class, () -> service.directMatch(
-                new MentoringDirectMatchInput(20L, 40L), hrPrincipal()
+                new MentoringDirectMatchInput(20L, 40L, 11L), hrPrincipal()
         ));
 
         assertEquals("MENTOR_CAPACITY_REACHED", exception.getErrorCode());
         verify(mentoringRequestRepository, never()).save(any());
+    }
+
+    @Test
+    void allowsTheSameMentorAndTraineeToBeMatchedForDifferentSkills() {
+        User mentor = activeUser(20L);
+        User trainee = activeUser(40L);
+        User hrUser = activeUser(5L);
+        Employee mentorEmployee = new Employee();
+        mentorEmployee.setFullName("Mentor Name");
+        mentorEmployee.setEmploymentStatus(com.boa.apid.core.organization.entity.EmploymentStatus.ACTIVE);
+        Employee traineeEmployee = new Employee();
+        traineeEmployee.setFullName("Trainee Name");
+        traineeEmployee.setEmploymentStatus(com.boa.apid.core.organization.entity.EmploymentStatus.ACTIVE);
+        Skill java = new Skill();
+        java.setId(11L);
+        java.setName("Java");
+        Skill leadership = new Skill();
+        leadership.setId(12L);
+        leadership.setName("Leadership");
+        TrainerAuthorization authorization = new TrainerAuthorization();
+        authorization.setEmployee(mentorEmployee);
+        authorization.setMaxConcurrentTrainees(3);
+        authorization.setSkills(Set.of(java, leadership));
+        org.springframework.test.util.ReflectionTestUtils.setField(authorization, "id", 100L);
+        when(userRepository.findByIdForUpdate(20L)).thenReturn(Optional.of(mentor));
+        when(userRepository.findByIdForUpdate(40L)).thenReturn(Optional.of(trainee));
+        when(userRepository.findById(5L)).thenReturn(Optional.of(hrUser));
+        when(trainerAuthorizationRepository.findActiveByUserId(20L)).thenReturn(List.of(authorization));
+        when(employeeRepository.findDetailedByUserId(40L)).thenReturn(Optional.of(traineeEmployee));
+        when(skillRepository.findByIdAndActiveTrue(11L)).thenReturn(Optional.of(java));
+        when(skillRepository.findByIdAndActiveTrue(12L)).thenReturn(Optional.of(leadership));
+        when(skillStatusRepository.existsByAuthorization_IdAndSkill_IdAndStatus(
+                100L, 11L, TrainerAuthorizationStatus.ACTIVE)).thenReturn(true);
+        when(skillStatusRepository.existsByAuthorization_IdAndSkill_IdAndStatus(
+                100L, 12L, TrainerAuthorizationStatus.ACTIVE)).thenReturn(true);
+        when(relationshipRepository.existsActivePair(
+                20L, 40L, 11L, MentoringRelationshipStatus.ACTIVE)).thenReturn(false);
+        when(relationshipRepository.existsActivePair(
+                20L, 40L, 12L, MentoringRelationshipStatus.ACTIVE)).thenReturn(false);
+        when(recipientRepository.existsByMentorTraineeAndStatus(
+                20L, 40L, 11L, MentoringRequestRecipientStatus.PENDING)).thenReturn(false);
+        when(recipientRepository.existsByMentorTraineeAndStatus(
+                20L, 40L, 12L, MentoringRequestRecipientStatus.PENDING)).thenReturn(false);
+        when(relationshipRepository.countActiveTraineesByMentorUserId(
+                20L, MentoringRelationshipStatus.ACTIVE)).thenReturn(0L);
+        when(recipientRepository.countByMentorAndStatus(
+                20L, MentoringRequestRecipientStatus.PENDING)).thenReturn(0L);
+        when(mentoringRequestRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+        when(recipientRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+        when(relationshipRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+
+        service.directMatch(new MentoringDirectMatchInput(20L, 40L, 11L), hrPrincipal());
+        service.directMatch(new MentoringDirectMatchInput(20L, 40L, 12L), hrPrincipal());
+
+        verify(relationshipRepository).existsActivePair(
+                20L, 40L, 11L, MentoringRelationshipStatus.ACTIVE);
+        verify(relationshipRepository).existsActivePair(
+                20L, 40L, 12L, MentoringRelationshipStatus.ACTIVE);
     }
 
     @Test

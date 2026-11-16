@@ -27,6 +27,8 @@ import com.boa.apid.mentoring.pairing.repository.MentoringRelationshipMemberRepo
 import com.boa.apid.mentoring.pairing.repository.MentoringRelationshipRepository;
 import com.boa.apid.mentoring.pairing.repository.MentoringSessionRepository;
 import com.boa.apid.mentoring.trainer.repository.TrainerAuthorizationRepository;
+import com.boa.apid.mentoring.trainer.entity.TrainerAuthorizationStatus;
+import com.boa.apid.mentoring.trainer.repository.TrainerAuthorizationSkillStatusRepository;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.access.AccessDeniedException;
@@ -58,6 +60,7 @@ public class MentoringCollaborationService {
     private final UserRepository userRepository;
     private final UserRoleRepository userRoleRepository;
     private final TrainerAuthorizationRepository trainerAuthorizationRepository;
+    private final TrainerAuthorizationSkillStatusRepository skillStatusRepository;
 
     public MentoringCollaborationService(
             MentoringRelationshipRepository relationshipRepository,
@@ -67,7 +70,8 @@ public class MentoringCollaborationService {
             EmployeeRepository employeeRepository,
             UserRepository userRepository,
             UserRoleRepository userRoleRepository,
-            TrainerAuthorizationRepository trainerAuthorizationRepository
+            TrainerAuthorizationRepository trainerAuthorizationRepository,
+            TrainerAuthorizationSkillStatusRepository skillStatusRepository
     ) {
         this.relationshipRepository = relationshipRepository;
         this.memberRepository = memberRepository;
@@ -77,6 +81,7 @@ public class MentoringCollaborationService {
         this.userRepository = userRepository;
         this.userRoleRepository = userRoleRepository;
         this.trainerAuthorizationRepository = trainerAuthorizationRepository;
+        this.skillStatusRepository = skillStatusRepository;
     }
 
     @Transactional(readOnly = true)
@@ -165,10 +170,24 @@ public class MentoringCollaborationService {
         if (!relationship.getMentorUser().getId().equals(actor.getUserId())) {
             throw new AccessDeniedException("Only the mentor can schedule a session.");
         }
+        var activeAuthorizations = trainerAuthorizationRepository.findActiveByUserId(actor.getUserId());
         if (!userRoleRepository.existsActiveMentorRoleByUserId(actor.getUserId())
-                || trainerAuthorizationRepository.findActiveByUserId(actor.getUserId()).isEmpty()
+                || activeAuthorizations.isEmpty()
                 || !employeeRepository.existsByUserIdAndEmploymentStatus(actor.getUserId(), EmploymentStatus.ACTIVE)) {
             throw new AccessDeniedException("Only an active mentor can schedule a session.");
+        }
+        Long skillId = relationship.getRequest().getSkill() == null
+                ? null : relationship.getRequest().getSkill().getId();
+        boolean skillAuthorizationInactive = skillId != null && skillStatusRepository
+                .findByAuthorization_IdAndSkill_Id(activeAuthorizations.get(0).getId(), skillId)
+                .map(skillStatus -> skillStatus.getStatus() != TrainerAuthorizationStatus.ACTIVE)
+                .orElse(false);
+        if (skillId != null && (!relationship.getRequest().getSkill().isActive() || skillAuthorizationInactive)) {
+            throw new BusinessException(
+                    "MENTOR_SKILL_NOT_ACTIVE",
+                    "Sessions cannot be scheduled because the mentor's authorization for this skill is suspended or revoked.",
+                    HttpStatus.CONFLICT
+            );
         }
         if (relationship.getStatus() != MentoringRelationshipStatus.ACTIVE) {
             throw new BusinessException(

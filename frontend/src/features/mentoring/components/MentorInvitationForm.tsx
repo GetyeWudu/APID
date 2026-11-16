@@ -7,17 +7,30 @@ import {
   mentoringPairingApi,
   type MentoringRequestType,
 } from '../api/mentoringPairingApi';
+import { mentoringTrainerApi } from '../api/mentoringTrainerApi';
 
 export function MentorInvitationForm({ currentUserId }: { currentUserId: number }) {
   const queryClient = useQueryClient();
   const { pushToast } = useToast();
   const [requestType, setRequestType] = useState<MentoringRequestType>('INDIVIDUAL');
   const [selectedIds, setSelectedIds] = useState<number[]>([]);
+  const [skillId, setSkillId] = useState('');
   const [message, setMessage] = useState('');
+  const profileQuery = useQuery({
+    queryKey: ['mentoring', 'trainer', 'profile', currentUserId],
+    queryFn: mentoringTrainerApi.getProfile,
+    refetchInterval: 3_000,
+    refetchOnWindowFocus: true,
+  });
+  const acceptingNewPairings = profileQuery.data?.acceptingNewPairings !== false;
   const candidatesQuery = useQuery({
     queryKey: ['mentoring', 'pairing', 'employees', currentUserId],
     queryFn: mentoringPairingApi.listEmployeeCandidates,
+    enabled: profileQuery.isSuccess && acceptingNewPairings,
   });
+  const activeSkills = (profileQuery.data?.skills ?? []).filter(
+    (skill) => skill.status === undefined || skill.status === 'ACTIVE'
+  );
   const invitationMutation = useMutation({
     mutationFn: mentoringPairingApi.inviteTrainees,
     onSuccess: async (created) => {
@@ -26,6 +39,7 @@ export function MentorInvitationForm({ currentUserId }: { currentUserId: number 
         queryClient.invalidateQueries({ queryKey: ['core', 'notifications'] }),
       ]);
       setSelectedIds([]);
+      setSkillId('');
       setMessage('');
       pushToast({
         title: requestType === 'GROUP' ? 'Class invitations sent' : 'Mentoring invitation sent',
@@ -59,15 +73,42 @@ export function MentorInvitationForm({ currentUserId }: { currentUserId: number 
       });
       return;
     }
+    if (activeSkills.length > 1 && !skillId) {
+      pushToast({
+        title: 'Select a mentoring skill',
+        message: 'Choose which of your skills this mentoring invitation is for.',
+        tone: 'info',
+      });
+      return;
+    }
     invitationMutation.mutate({
       requestType,
       traineeUserIds: selectedIds,
+      skillId: skillId ? Number(skillId) : activeSkills[0]?.id,
       message: message.trim() || undefined,
     });
   };
 
-  if (candidatesQuery.isLoading) {
+  if (profileQuery.isLoading || (acceptingNewPairings && candidatesQuery.isLoading)) {
     return <LoadingSkeleton rows={4} height={28} />;
+  }
+  if (profileQuery.isError || !profileQuery.data) {
+    return (
+      <ErrorState
+        message="Unable to load your authorized mentoring skills."
+        onRetry={() => void profileQuery.refetch()}
+      />
+    );
+  }
+  if (!acceptingNewPairings) {
+    return (
+      <div className="apid-card">
+        <EmptyState
+          title="Not accepting new matches"
+          description="Your existing mentoring pairings are unchanged. Turn your mentor badge on to send or receive new requests."
+        />
+      </div>
+    );
   }
   if (candidatesQuery.isError) {
     return (
@@ -112,6 +153,31 @@ export function MentorInvitationForm({ currentUserId }: { currentUserId: number 
               <option value="GROUP">One mentor and a class</option>
             </select>
           </div>
+          {activeSkills.length > 1 && (
+            <div className="apid-field">
+              <label htmlFor="mentor-invitation-skill">Mentoring skill</label>
+              <select
+                id="mentor-invitation-skill"
+                className="apid-input"
+                value={skillId}
+                disabled={invitationMutation.isPending}
+                onChange={(event) => setSkillId(event.target.value)}
+                required
+              >
+                <option value="">Select a skill</option>
+                {activeSkills.map((skill) => (
+                  <option key={skill.id} value={skill.id}>
+                    {skill.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+          {activeSkills.length === 1 && (
+            <p className="boa-muted" style={{ margin: 0, fontSize: '0.84rem' }}>
+              Mentoring skill: {activeSkills[0].name}
+            </p>
+          )}
           <div className="apid-field">
             <label htmlFor="mentor-invitation-employees">
               Employees {requestType === 'GROUP' ? '(select at least two)' : '(select one)'}
@@ -163,6 +229,7 @@ export function MentorInvitationForm({ currentUserId }: { currentUserId: number 
             className="apid-btn apid-btn-primary"
             disabled={
               invitationMutation.isPending ||
+              (activeSkills.length > 1 && !skillId) ||
               (requestType === 'INDIVIDUAL' && selectedIds.length !== 1) ||
               (requestType === 'GROUP' && selectedIds.length < 2)
             }

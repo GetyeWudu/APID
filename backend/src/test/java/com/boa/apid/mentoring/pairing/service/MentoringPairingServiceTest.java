@@ -28,6 +28,8 @@ import com.boa.apid.mentoring.pairing.repository.MentoringRequestRecipientReposi
 import com.boa.apid.mentoring.pairing.repository.MentoringRequestRepository;
 import com.boa.apid.mentoring.trainer.entity.TrainerAuthorization;
 import com.boa.apid.mentoring.trainer.repository.TrainerAuthorizationRepository;
+import com.boa.apid.mentoring.trainer.repository.TrainerAuthorizationSkillStatusRepository;
+import com.boa.apid.mentoring.trainer.service.MentorAvailabilityService;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -60,6 +62,8 @@ class MentoringPairingServiceTest {
     @Mock private EmployeeRepository employeeRepository;
     @Mock private NotificationService notificationService;
     @Mock private TrainerAuthorizationRepository trainerAuthorizationRepository;
+    @Mock private TrainerAuthorizationSkillStatusRepository skillStatusRepository;
+    @Mock private MentorAvailabilityService availabilityService;
 
     @InjectMocks
     private MentoringPairingService service;
@@ -71,6 +75,9 @@ class MentoringPairingServiceTest {
         org.mockito.Mockito.lenient()
                 .when(trainerAuthorizationRepository.findActiveByUserId(any()))
                 .thenReturn(List.of(authorization));
+        org.mockito.Mockito.lenient()
+                .when(availabilityService.isAcceptingNewPairings(any()))
+                .thenReturn(true);
     }
 
     @Test
@@ -183,7 +190,7 @@ class MentoringPairingServiceTest {
         when(userRepository.findById(2L)).thenReturn(Optional.of(trainee));
         when(employeeRepository.existsByUserIdAndEmploymentStatus(2L, EmploymentStatus.ACTIVE)).thenReturn(true);
         when(relationshipRepository.existsActivePair(
-                1L, 2L, MentoringRelationshipStatus.ACTIVE
+                1L, 2L, null, MentoringRelationshipStatus.ACTIVE
         )).thenReturn(false);
         when(relationshipRepository.countActiveTraineesByMentorUserId(1L, MentoringRelationshipStatus.ACTIVE))
                 .thenReturn(0L);
@@ -242,8 +249,8 @@ class MentoringPairingServiceTest {
         when(userRepository.findById(3L)).thenReturn(Optional.of(traineeTwo));
         when(employeeRepository.existsByUserIdAndEmploymentStatus(2L, EmploymentStatus.ACTIVE)).thenReturn(true);
         when(employeeRepository.existsByUserIdAndEmploymentStatus(3L, EmploymentStatus.ACTIVE)).thenReturn(true);
-        when(relationshipRepository.existsActivePair(1L, 2L, MentoringRelationshipStatus.ACTIVE)).thenReturn(false);
-        when(relationshipRepository.existsActivePair(1L, 3L, MentoringRelationshipStatus.ACTIVE)).thenReturn(false);
+        when(relationshipRepository.existsActivePair(1L, 2L, null, MentoringRelationshipStatus.ACTIVE)).thenReturn(false);
+        when(relationshipRepository.existsActivePair(1L, 3L, null, MentoringRelationshipStatus.ACTIVE)).thenReturn(false);
         when(relationshipRepository.countActiveTraineesByMentorUserId(1L, MentoringRelationshipStatus.ACTIVE))
                 .thenReturn(0L, 1L);
         when(relationshipRepository.findByRequest_Id(50L))
@@ -288,7 +295,7 @@ class MentoringPairingServiceTest {
         when(userRepository.findById(2L)).thenReturn(Optional.of(trainee));
         when(employeeRepository.existsByUserIdAndEmploymentStatus(2L, EmploymentStatus.ACTIVE)).thenReturn(true);
         when(relationshipRepository.existsActivePair(
-                1L, 2L, MentoringRelationshipStatus.ACTIVE
+                1L, 2L, null, MentoringRelationshipStatus.ACTIVE
         )).thenReturn(false);
         when(relationshipRepository.countActiveTraineesByMentorUserId(1L, MentoringRelationshipStatus.ACTIVE))
                 .thenReturn(3L);

@@ -16,6 +16,7 @@ public record TrainerRosterDto(
         String employmentStatus,
         TrainerAuthorizationSource sourceType,
         TrainerAuthorizationStatus status,
+        boolean acceptingNewPairings,
         int activeTrainees,
         int pendingTrainees,
         int maxConcurrentTrainees,

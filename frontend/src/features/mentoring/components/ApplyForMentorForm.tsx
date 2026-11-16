@@ -1,12 +1,24 @@
 import { useState, type FormEvent } from 'react';
 import axios from 'axios';
-import { useToast } from '../../../shared/components/ui';
+import { useQuery } from '@tanstack/react-query';
+import { Link } from 'react-router-dom';
+import { ErrorState, LoadingSkeleton, StatusPill, useToast } from '../../../shared/components/ui';
 import type { ApiErrorPayload } from '../../../shared/api/apiClient';
 import type { SkillItem } from '../../admin/skills/types/skills.types';
 import { mentorApplicationApi } from '../api/mentorApplicationApi';
 
-export function ApplyForMentorForm({ activeSkills }: { activeSkills: SkillItem[] }) {
+export function ApplyForMentorForm({
+  activeSkills,
+  currentUserId,
+}: {
+  activeSkills: SkillItem[];
+  currentUserId: number;
+}) {
   const { pushToast } = useToast();
+  const applicationsQuery = useQuery({
+    queryKey: ['mentoring', 'applications', 'mine', currentUserId],
+    queryFn: mentorApplicationApi.listMine,
+  });
   const [skillIds, setSkillIds] = useState<string[]>([]);
   const [customSkill, setCustomSkill] = useState('');
   const [note, setNote] = useState('');
@@ -48,6 +60,7 @@ export function ApplyForMentorForm({ activeSkills }: { activeSkills: SkillItem[]
         availabilityNotes: availabilityNotes.trim() || undefined,
         maxConcurrentTrainees: maxConcurrentTrainees ? Number(maxConcurrentTrainees) : undefined,
       });
+      await applicationsQuery.refetch();
       pushToast({
         title: 'Application sent',
         message: 'Your mentor application is pending review.',
@@ -77,13 +90,62 @@ export function ApplyForMentorForm({ activeSkills }: { activeSkills: SkillItem[]
     }
   };
 
+  if (applicationsQuery.isLoading) {
+    return <LoadingSkeleton rows={4} height={28} />;
+  }
+  if (applicationsQuery.isError) {
+    return (
+      <ErrorState
+        message="Unable to check your mentor application status."
+        onRetry={() => void applicationsQuery.refetch()}
+      />
+    );
+  }
+
+  const existingApplication = applicationsQuery.data?.find(
+    (application) => application.applicationType === 'INITIAL'
+  );
+  if (existingApplication) {
+    const statusTone = existingApplication.status === 'APPROVED'
+      ? 'ok'
+      : existingApplication.status === 'DECLINED' ? 'err' : 'warn';
+    return (
+      <div className="apid-card">
+        <div className="boa-card-header">
+          <div>
+            <h3 className="boa-card-title">Mentor Application Submitted</h3>
+            <p className="boa-card-subtitle">
+              You can submit one initial mentor application. Additional skills can be requested from your mentor profile after approval.
+            </p>
+          </div>
+          <StatusPill label={existingApplication.status} tone={statusTone} />
+        </div>
+        <p>Skills: {existingApplication.skillName || '—'}</p>
+        {existingApplication.reviewReason && (
+          <p className="boa-muted">HR review: {existingApplication.reviewReason}</p>
+        )}
+        {existingApplication.status === 'APPROVED' && (
+          <Link to="/mentoring?view=trainer-profile" className="apid-btn apid-btn-primary apid-btn-sm">
+            Manage mentor profile
+          </Link>
+        )}
+        {existingApplication.status === 'PENDING' && (
+          <p className="boa-muted">Your application is awaiting HR review.</p>
+        )}
+        {existingApplication.status === 'DECLINED' && (
+          <p className="boa-muted">This one-time application has been reviewed and cannot be resubmitted.</p>
+        )}
+      </div>
+    );
+  }
+
   return (
     <div className="apid-card">
       <div className="boa-card-header">
         <div>
           <h3 className="boa-card-title">Apply for Mentor</h3>
           <p className="boa-card-subtitle">
-            Select one or more skills to mentor and attach supporting evidence.
+            Submit one application with all the skills you want to mentor and attach supporting evidence.
           </p>
         </div>
       </div>

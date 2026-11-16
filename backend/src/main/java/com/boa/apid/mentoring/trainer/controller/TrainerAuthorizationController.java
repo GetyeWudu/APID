@@ -2,6 +2,8 @@ package com.boa.apid.mentoring.trainer.controller;
 
 import com.boa.apid.common.response.ApiResponse;
 import com.boa.apid.core.auth.security.ApidUserPrincipal;
+import com.boa.apid.mentoring.trainer.dto.HrMentorProfileDto;
+import com.boa.apid.mentoring.trainer.dto.HrMentorProfileRequest;
 import com.boa.apid.mentoring.trainer.dto.MentoringHrOverviewDto;
 import com.boa.apid.mentoring.trainer.dto.TrainerAppointmentRequest;
 import com.boa.apid.mentoring.trainer.dto.TrainerDirectoryDto;
@@ -114,6 +116,26 @@ public class TrainerAuthorizationController {
             @AuthenticationPrincipal ApidUserPrincipal actor
     ) {
         return ApiResponse.ok(authorizationService.getOwnProfile(actor));
+    }
+
+    @GetMapping("/hr/my-mentor-profile")
+    @PreAuthorize("isAuthenticated() and !principal.mustChangePassword and hasAnyAuthority('TRAINER_APPLICATION_REVIEW', 'TRAINER_DIRECT_APPOINT', 'TRAINER_STATUS_MANAGE', 'MENTORING_MATCH_MANAGE', 'MENTORING_REPORT_VIEW_ALL')")
+    public ApiResponse<HrMentorProfileDto> getHrMentorProfile(
+            @AuthenticationPrincipal ApidUserPrincipal actor
+    ) {
+        return ApiResponse.ok(authorizationService.getHrMentorProfile(actor));
+    }
+
+    @PatchMapping("/hr/my-mentor-profile")
+    @PreAuthorize("isAuthenticated() and !principal.mustChangePassword and hasAnyAuthority('TRAINER_APPLICATION_REVIEW', 'TRAINER_DIRECT_APPOINT', 'TRAINER_STATUS_MANAGE', 'MENTORING_MATCH_MANAGE', 'MENTORING_REPORT_VIEW_ALL')")
+    public ApiResponse<HrMentorProfileDto> updateHrMentorProfile(
+            @Valid @RequestBody HrMentorProfileRequest request,
+            @AuthenticationPrincipal ApidUserPrincipal actor
+    ) {
+        return ApiResponse.ok(
+                "Mentor availability updated",
+                authorizationService.updateHrMentorProfile(request, actor)
+        );
     }
 
     @GetMapping("/hr/overview")

@@ -25,6 +25,10 @@ public class MentorApplication {
     @Column(name = "status", nullable = false, length = 20)
     private MentorApplicationStatus status = MentorApplicationStatus.PENDING;
 
+    @Enumerated(EnumType.STRING)
+    @Column(name = "application_type", nullable = false, length = 30)
+    private MentorApplicationType applicationType = MentorApplicationType.INITIAL;
+
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "proof_file_id", nullable = false)
     private StoredFile proofDocument;
@@ -93,6 +97,11 @@ public class MentorApplication {
 
     public MentorApplicationStatus getStatus() { return status; }
     public void setStatus(MentorApplicationStatus status) { this.status = status; }
+
+    public MentorApplicationType getApplicationType() { return applicationType; }
+    public void setApplicationType(MentorApplicationType applicationType) {
+        this.applicationType = applicationType == null ? MentorApplicationType.INITIAL : applicationType;
+    }
 
     public StoredFile getProofDocument() { return proofDocument; }
     public void setProofDocument(StoredFile proofDocument) { this.proofDocument = proofDocument; }

@@ -1,8 +1,11 @@
 import { useQuery } from '@tanstack/react-query';
 import {
+  Award,
   ArrowDownRight,
   ArrowUpRight,
   Building2,
+  ClipboardCheck,
+  GitPullRequest,
   HeartHandshake,
   UserRound,
   Users,
@@ -10,7 +13,10 @@ import {
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../../../app/AuthContext';
-import { EMPLOYEE_WORKSPACE_PERMISSIONS } from '../../../shared/auth/workspaceResolver';
+import {
+  EMPLOYEE_WORKSPACE_PERMISSIONS,
+  HR_MODULE_PERMISSIONS,
+} from '../../../shared/auth/workspaceResolver';
 import {
   AvatarBadge,
   DataSourceBadge,
@@ -22,7 +28,13 @@ import {
   StatusPill,
 } from '../../../shared/components/ui';
 import { mentoringPairingApi } from '../../mentoring/api/mentoringPairingApi';
+import { mentorApplicationApi } from '../../mentoring/api/mentorApplicationApi';
+import { mentoringMatchApi } from '../../mentoring/api/mentoringMatchApi';
+import { mentoringTrainerApi } from '../../mentoring/api/mentoringTrainerApi';
+import { HrMentorSelfService } from '../../mentoring/components/HrMentorSelfService';
 import { MentoringRequestsPanel } from '../../mentoring/components/MentoringRequestsPanel';
+import { SkillSupplyDemandCard } from '../../mentoring/components/SkillSupplyDemandCard';
+import { TrainerApplicationsTab } from '../../mentoring/components/TrainerApplicationsTab';
 import { workspaceLiveApi } from '../api/workspaceDashboardApi';
 
 function formatDate(value: string) {
@@ -33,11 +45,48 @@ function formatDate(value: string) {
 export function WorkspaceDashboardPage() {
   const { user, hasPermission, hasAnyPermission } = useAuth();
   const canAccessWorkspace = hasAnyPermission(EMPLOYEE_WORKSPACE_PERMISSIONS);
+  const canManageHrMentor = hasAnyPermission(HR_MODULE_PERMISSIONS);
+  const canReviewMentorApplications = canAccessWorkspace && hasPermission('TRAINER_APPLICATION_REVIEW');
+  const canManageMentoringMatches = canAccessWorkspace && hasPermission('MENTORING_MATCH_MANAGE');
+  const canViewMentorRoster = canAccessWorkspace && hasAnyPermission([
+    'TRAINER_DIRECT_APPOINT',
+    'TRAINER_STATUS_MANAGE',
+    'MENTORING_MATCH_MANAGE',
+    'MENTORING_REPORT_VIEW_ALL',
+  ]);
+  const canViewMentoringReports = canAccessWorkspace && hasPermission('MENTORING_REPORT_VIEW_ALL');
 
   const identityQuery = useQuery({
     queryKey: ['workspace', 'identity', user?.id],
     queryFn: workspaceLiveApi.loadMyIdentity,
     enabled: canAccessWorkspace,
+  });
+  const hrMentorProfileQuery = useQuery({
+    queryKey: ['mentoring', 'hr', 'my-mentor-profile'],
+    queryFn: mentoringTrainerApi.getHrMentorProfile,
+    enabled: canManageHrMentor,
+    refetchInterval: canManageHrMentor ? 3_000 : false,
+    refetchOnWindowFocus: true,
+  });
+  const hrApplicationsQuery = useQuery({
+    queryKey: ['mentoring', 'applications'],
+    queryFn: mentorApplicationApi.list,
+    enabled: canReviewMentorApplications,
+  });
+  const hrMatchRequestsQuery = useQuery({
+    queryKey: ['mentoring', 'hr-match-requests'],
+    queryFn: mentoringMatchApi.listForHr,
+    enabled: canManageMentoringMatches,
+  });
+  const hrTrainersQuery = useQuery({
+    queryKey: ['mentoring', 'trainers'],
+    queryFn: mentoringTrainerApi.listRoster,
+    enabled: canViewMentorRoster,
+  });
+  const hrOverviewQuery = useQuery({
+    queryKey: ['mentoring', 'hr-overview'],
+    queryFn: mentoringTrainerApi.getOverview,
+    enabled: canViewMentoringReports,
   });
   const pairingRequestsQuery = useQuery({
     queryKey: ['mentoring', 'pairing', 'requests', user?.id],
@@ -161,6 +210,24 @@ export function WorkspaceDashboardPage() {
       .filter((relationship) => relationship.currentUserRole === 'MENTOR')
       .map((relationship) => relationship.traineeUserId)
   ).size;
+  const hrActivityQueries = [
+    canReviewMentorApplications ? hrApplicationsQuery : null,
+    canManageMentoringMatches ? hrMatchRequestsQuery : null,
+    canViewMentorRoster ? hrTrainersQuery : null,
+    canViewMentoringReports ? hrOverviewQuery : null,
+  ].filter((query): query is NonNullable<typeof query> => query !== null);
+  const hasHrActivityAccess = hrActivityQueries.length > 0;
+  const hrActivityLoading = hrActivityQueries.some((query) => query.isLoading);
+  const hrActivityError = hrActivityQueries.some((query) => query.isError);
+  const activeHrMentorCount = canViewMentoringReports
+    ? hrOverviewQuery.data?.activeTrainers ?? 0
+    : (hrTrainersQuery.data ?? []).filter((trainer) => trainer.status === 'ACTIVE').length;
+  const pendingHrApplications = (hrApplicationsQuery.data ?? [])
+    .filter((application) => application.status === 'PENDING').length;
+  const approvedHrApplications = (hrApplicationsQuery.data ?? [])
+    .filter((application) => application.status === 'APPROVED').length;
+  const openHrMatchRequests = (hrMatchRequestsQuery.data ?? [])
+    .filter((request) => request.status === 'OPEN').length;
 
   return (
     <div className="boa-stack">
@@ -194,13 +261,114 @@ export function WorkspaceDashboardPage() {
               label={linkedEmployee.employmentStatus}
               tone={linkedEmployee.employmentStatus === 'ACTIVE' ? 'ok' : 'warn'}
             />
-            {(user?.roles ?? []).map((role) => (
-              <StatusPill key={role} label={role} tone="neutral" />
-            ))}
+            {(user?.roles ?? [])
+              .filter(
+                (role) =>
+                  !(
+                    canManageHrMentor &&
+                    role.trim().toLowerCase() === 'mentor' &&
+                    hrMentorProfileQuery.data?.acceptingNewPairings === false
+                  )
+              )
+              .map((role) => (
+                <StatusPill key={role} label={role} tone="neutral" />
+              ))}
             <DataSourceBadge source="live" />
           </div>
         </div>
       </section>
+
+      {hasAnyPermission(HR_MODULE_PERMISSIONS) && <HrMentorSelfService />}
+
+      {hasHrActivityAccess && (
+        <section className="boa-stack" aria-label="HR mentoring activity">
+          <div className="boa-card-header">
+            <div>
+              <h2 className="boa-card-title">HR Mentoring Activity</h2>
+              <p className="boa-card-subtitle">
+                Review workload, matching requests, and current mentoring assignments.
+              </p>
+            </div>
+            <Link to="/mentoring/hr" className="apid-btn apid-btn-outline apid-btn-sm">
+              Open HR mentoring
+            </Link>
+          </div>
+          {hrActivityLoading ? (
+            <LoadingSkeleton rows={2} height={72} />
+          ) : hrActivityError ? (
+            <ErrorState
+              message="Unable to load HR mentoring activity."
+              onRetry={() => {
+                hrActivityQueries.forEach((query) => {
+                  if (query.isError) void query.refetch();
+                });
+              }}
+            />
+          ) : (
+            <div className="boa-stack">
+              <div className="boa-kpi-grid" style={{ marginBottom: 0 }}>
+                {canReviewMentorApplications && (
+                  <>
+                    <StatCard
+                      label="Pending Applications"
+                      value={pendingHrApplications}
+                      subtext="Awaiting HR review"
+                      icon={<ClipboardCheck size={16} />}
+                    />
+                    <StatCard
+                      label="Approved Applications"
+                      value={approvedHrApplications}
+                      subtext="Approved mentor applications"
+                      icon={<Award size={16} />}
+                    />
+                  </>
+                )}
+                {canManageMentoringMatches && (
+                  <StatCard
+                    label="Awaiting Matching"
+                    value={openHrMatchRequests}
+                    subtext="Trainees waiting for a mentor"
+                    icon={<GitPullRequest size={16} />}
+                  />
+                )}
+                {canViewMentorRoster && (
+                  <StatCard
+                    label="Authorized Mentors"
+                    value={activeHrMentorCount}
+                    subtext="Currently authorized mentors"
+                    icon={<UserRound size={16} />}
+                  />
+                )}
+                {canViewMentoringReports && (
+                  <StatCard
+                    label="Active Assignments"
+                    value={hrOverviewQuery.data?.activeRelationships ?? 0}
+                    subtext="Current mentoring relationships"
+                    icon={<HeartHandshake size={16} />}
+                  />
+                )}
+                {canViewMentoringReports && hrOverviewQuery.data && (
+                  <StatCard
+                    label="Relationship Completion"
+                    value={`${hrOverviewQuery.data.completionRatePct}%`}
+                    subtext={`${hrOverviewQuery.data.completedRelationships} completed relationships`}
+                    icon={<HeartHandshake size={16} />}
+                  />
+                )}
+              </div>
+              {canViewMentoringReports && hrOverviewQuery.data && (
+                <SkillSupplyDemandCard
+                  liveSkillNames={hrOverviewQuery.data.skillSupplyDemand.map((row) => row.skillName)}
+                  skillSupplyDemand={hrOverviewQuery.data.skillSupplyDemand}
+                />
+              )}
+              {canReviewMentorApplications && (
+                <TrainerApplicationsTab applications={hrApplicationsQuery.data ?? []} />
+              )}
+            </div>
+          )}
+        </section>
+      )}
 
       <section className="boa-kpi-grid" aria-label="Role overview metrics" style={{ marginBottom: 0 }}>
         <StatCard

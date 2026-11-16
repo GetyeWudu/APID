@@ -7,6 +7,7 @@ import { EmptyState, StatusPill, useToast } from '../../../shared/components/ui'
 import type { MentoringMatchRequest } from '../api/mentoringMatchApi';
 import { mentoringMatchApi } from '../api/mentoringMatchApi';
 import type { TrainerRosterItem } from '../api/mentoringTrainerApi';
+import './HrMatchingTab.css';
 
 export function HrMatchingTab({
   requests,
@@ -120,8 +121,12 @@ export function HrMatchingTab({
                 const eligible = trainers.filter((trainer) =>
                   trainer.userId !== null &&
                   trainer.status === 'ACTIVE' &&
+                  trainer.acceptingNewPairings !== false &&
                   trainer.employmentStatus === 'ACTIVE' &&
-                  trainer.skills.some((skill) => skill.id === request.skillId)
+                  trainer.skills.some((skill) =>
+                    skill.id === request.skillId
+                    && (skill.status === undefined ? trainer.status === 'ACTIVE' : skill.status === 'ACTIVE')
+                  )
                 );
                 const selectedTrainer = eligible.find(
                   (trainer) => String(trainer.userId) === selectedTrainers[request.id]
@@ -257,7 +262,13 @@ export function HrMatchingTab({
                 trainer.userId !== null &&
                 trainer.userId !== relationship.formerTrainerUserId &&
                 trainer.status === 'ACTIVE' &&
-                trainer.employmentStatus === 'ACTIVE'
+                trainer.acceptingNewPairings !== false &&
+                trainer.employmentStatus === 'ACTIVE' &&
+                (relationship.skillId === null || !trainer.skills.some((skill) =>
+                  skill.id === relationship.skillId
+                  && skill.status !== undefined
+                  && skill.status !== 'ACTIVE'
+                ))
               );
               const selectedTrainer = eligible.find(
                 (trainer) => String(trainer.userId) === selectedReassignmentTrainers[relationship.relationshipId]
@@ -272,11 +283,10 @@ export function HrMatchingTab({
               return (
                 <article
                   key={relationship.relationshipId}
-                  className="apid-card"
-                  style={{ border: '1px solid var(--border)' }}
+                  className="apid-card mentoring-reassignment-card"
                 >
                   <div className="boa-card-header">
-                    <div>
+                    <div className="mentoring-reassignment-summary">
                       <strong>{relationship.skillName ?? 'General mentoring'} · Former trainer: {relationship.formerTrainerName}</strong>
                       <p className="boa-card-subtitle">
                         {relationship.trainees.length} active trainee(s) · Started {new Date(relationship.startedAt).toLocaleDateString()}
@@ -297,8 +307,9 @@ export function HrMatchingTab({
                       No other active, employed trainer is available. Authorize a replacement trainer before reassignment.
                     </span>
                   ) : (
-                    <>
-                      <div style={{ display: 'flex', gap: '0.45rem', alignItems: 'center' }}>
+                    <div className="mentoring-reassignment-form">
+                      <label className="mentoring-reassignment-field">
+                        <span>Replacement mentor</span>
                         <select
                           className="apid-input"
                           aria-label={`Replacement trainer for relationship ${relationship.relationshipId}`}
@@ -313,42 +324,21 @@ export function HrMatchingTab({
                             <option key={trainer.userId ?? trainer.id} value={trainer.userId ?? ''}>
                               {trainer.fullName}
                               {relationship.skillId !== null && !trainer.skills.some((skill) => skill.id === relationship.skillId)
-                                ? ' · Skill mismatch—HR override required'
+                                ? ' · Skill mismatch (HR override)'
                                 : ''}
                               {` · ${trainer.activeTrainees + trainer.pendingTrainees}/${trainer.maxConcurrentTrainees}`}
                             </option>
                           ))}
                         </select>
-                        <button
-                          type="button"
-                          className="apid-btn apid-btn-primary apid-btn-sm"
-                          disabled={
-                            !selectedReassignmentTrainers[relationship.relationshipId] ||
-                            !reassignmentReasons[relationship.relationshipId]?.trim() ||
-                            (selectedTrainerNeedsSkillOverride
-                              && !reassignmentSkillOverrideReasons[relationship.relationshipId]?.trim()) ||
-                            reassignMutation.isPending
-                          }
-                          onClick={() => reassignMutation.mutate({
-                            relationshipId: relationship.relationshipId,
-                            trainerUserId: Number(selectedReassignmentTrainers[relationship.relationshipId]),
-                            reason: (reassignmentReasons[relationship.relationshipId] ?? '').trim(),
-                            overrideCapacity: reassignmentCapacityOverrides[relationship.relationshipId] ?? false,
-                            overrideReason: reassignmentOverrideReasons[relationship.relationshipId],
-                            skillOverrideReason: reassignmentSkillOverrideReasons[relationship.relationshipId],
-                          })}
-                        >
-                          <Link2 size={13} /> Reassign
-                        </button>
-                      </div>
-                      <label className="boa-stack" style={{ gap: '0.25rem', marginTop: '0.55rem' }}>
-                        Reassignment reason
+                      </label>
+                      <label className="mentoring-reassignment-field">
+                        <span>Reassignment reason</span>
                         <textarea
                           className="apid-input"
                           aria-label={`Reassignment reason for relationship ${relationship.relationshipId}`}
                           maxLength={1000}
                           required
-                          rows={2}
+                          rows={3}
                           value={reassignmentReasons[relationship.relationshipId] ?? ''}
                           onChange={(event) => setReassignmentReasons((previous) => ({
                             ...previous,
@@ -357,26 +347,32 @@ export function HrMatchingTab({
                         />
                       </label>
                       {selectedTrainerNeedsSkillOverride && (
-                        <label className="boa-stack" style={{ gap: '0.25rem', marginTop: '0.35rem' }}>
-                          Required skill-mismatch override reason for {relationship.skillName}
-                          <textarea
-                            className="apid-input"
-                            aria-label={`Skill override reason for relationship ${relationship.relationshipId}`}
-                            maxLength={1000}
-                            placeholder="Required reason for assigning a trainer without this skill"
-                            required
-                            rows={2}
-                            value={reassignmentSkillOverrideReasons[relationship.relationshipId] ?? ''}
-                            onChange={(event) => setReassignmentSkillOverrideReasons((previous) => ({
-                              ...previous,
-                              [relationship.relationshipId]: event.target.value,
-                            }))}
-                          />
-                        </label>
+                        <div className="mentoring-reassignment-override">
+                          <strong>Skill mismatch - HR override required</strong>
+                          <p>
+                            This mentor is not authorized for {relationship.skillName}. Enter a reason to continue.
+                          </p>
+                          <label className="mentoring-reassignment-field">
+                            <span>Skill override reason</span>
+                            <textarea
+                              className="apid-input"
+                              aria-label={`Skill override reason for relationship ${relationship.relationshipId}`}
+                              maxLength={1000}
+                              placeholder="Explain why this skill mismatch is acceptable"
+                              required
+                              rows={3}
+                              value={reassignmentSkillOverrideReasons[relationship.relationshipId] ?? ''}
+                              onChange={(event) => setReassignmentSkillOverrideReasons((previous) => ({
+                                ...previous,
+                                [relationship.relationshipId]: event.target.value,
+                              }))}
+                            />
+                          </label>
+                        </div>
                       )}
                       {selectedTrainerAtCapacity && (
-                        <div className="boa-stack" style={{ gap: '0.35rem', marginTop: '0.35rem' }}>
-                          <label style={{ display: 'flex', gap: '0.35rem', alignItems: 'center', fontSize: '0.8rem' }}>
+                        <div className="mentoring-reassignment-override">
+                          <label className="mentoring-reassignment-checkbox">
                             <input
                               type="checkbox"
                               checked={reassignmentCapacityOverrides[relationship.relationshipId] ?? false}
@@ -388,21 +384,52 @@ export function HrMatchingTab({
                             HR override capacity
                           </label>
                           {reassignmentCapacityOverrides[relationship.relationshipId] && (
-                            <input
-                              className="apid-input"
-                              aria-label={`Capacity override reason for relationship ${relationship.relationshipId}`}
-                              maxLength={1000}
-                              placeholder="Required reason for override"
-                              value={reassignmentOverrideReasons[relationship.relationshipId] ?? ''}
-                              onChange={(event) => setReassignmentOverrideReasons((previous) => ({
-                                ...previous,
-                                [relationship.relationshipId]: event.target.value,
-                              }))}
-                            />
+                            <label className="mentoring-reassignment-field">
+                              <span>Capacity override reason</span>
+                              <input
+                                className="apid-input"
+                                aria-label={`Capacity override reason for relationship ${relationship.relationshipId}`}
+                                maxLength={1000}
+                                placeholder="Explain why the capacity limit should be exceeded"
+                                value={reassignmentOverrideReasons[relationship.relationshipId] ?? ''}
+                                onChange={(event) => setReassignmentOverrideReasons((previous) => ({
+                                  ...previous,
+                                  [relationship.relationshipId]: event.target.value,
+                                }))}
+                              />
+                            </label>
                           )}
                         </div>
                       )}
-                    </>
+                      <div className="mentoring-reassignment-actions">
+                        <button
+                          type="button"
+                          className="apid-btn apid-btn-primary"
+                          disabled={
+                            !selectedReassignmentTrainers[relationship.relationshipId] ||
+                            !reassignmentReasons[relationship.relationshipId]?.trim() ||
+                            (selectedTrainerNeedsSkillOverride
+                              && !reassignmentSkillOverrideReasons[relationship.relationshipId]?.trim()) ||
+                            (selectedTrainerAtCapacity
+                              && (reassignmentCapacityOverrides[relationship.relationshipId] ?? false)
+                              && !reassignmentOverrideReasons[relationship.relationshipId]?.trim()) ||
+                            (selectedTrainerAtCapacity
+                              && !(reassignmentCapacityOverrides[relationship.relationshipId] ?? false)) ||
+                            reassignMutation.isPending
+                          }
+                          onClick={() => reassignMutation.mutate({
+                            relationshipId: relationship.relationshipId,
+                            trainerUserId: Number(selectedReassignmentTrainers[relationship.relationshipId]),
+                            reason: (reassignmentReasons[relationship.relationshipId] ?? '').trim(),
+                            overrideCapacity: reassignmentCapacityOverrides[relationship.relationshipId] ?? false,
+                            overrideReason: reassignmentOverrideReasons[relationship.relationshipId],
+                            skillOverrideReason: reassignmentSkillOverrideReasons[relationship.relationshipId],
+                          })}
+                        >
+                          <Link2 size={14} /> Reassign
+                        </button>
+                      </div>
+                    </div>
                   )}
                 </article>
               );

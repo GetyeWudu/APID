@@ -26,7 +26,7 @@ public interface MentoringRelationshipRepository extends JpaRepository<Mentoring
     @EntityGraph(attributePaths = {"request", "request.skill", "mentorUser"})
     List<MentoringRelationship> findByStatusOrderByStartedAtDesc(MentoringRelationshipStatus status);
 
-    @EntityGraph(attributePaths = {"request", "mentorUser"})
+    @EntityGraph(attributePaths = {"request", "request.skill", "mentorUser"})
     List<MentoringRelationship> findByMentorUser_IdAndStatus(
             Long mentorUserId,
             MentoringRelationshipStatus status
@@ -51,14 +51,17 @@ public interface MentoringRelationshipRepository extends JpaRepository<Mentoring
             SELECT CASE WHEN COUNT(member) > 0 THEN true ELSE false END
             FROM MentoringRelationshipMember member
             JOIN member.relationship relationship
+            LEFT JOIN member.skill skill
             WHERE member.mentorUser.id = :mentorUserId
               AND member.traineeUser.id = :traineeUserId
+              AND ((:skillId IS NULL AND skill IS NULL) OR skill.id = :skillId)
               AND member.status = com.boa.apid.mentoring.pairing.entity.MentoringRelationshipMemberStatus.ACTIVE
               AND relationship.status = :relationshipStatus
             """)
     boolean existsActivePair(
             @Param("mentorUserId") Long mentorUserId,
             @Param("traineeUserId") Long traineeUserId,
+            @Param("skillId") Long skillId,
             @Param("relationshipStatus") MentoringRelationshipStatus relationshipStatus
     );
 }

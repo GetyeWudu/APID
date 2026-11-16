@@ -40,6 +40,8 @@ import com.boa.apid.mentoring.pairing.repository.MentoringRequestRepository;
 import com.boa.apid.mentoring.trainer.entity.TrainerAuthorization;
 import com.boa.apid.mentoring.trainer.entity.TrainerAuthorizationStatus;
 import com.boa.apid.mentoring.trainer.repository.TrainerAuthorizationRepository;
+import com.boa.apid.mentoring.trainer.repository.TrainerAuthorizationSkillStatusRepository;
+import com.boa.apid.mentoring.trainer.service.MentorAvailabilityService;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
@@ -59,6 +61,8 @@ public class MentoringMatchService {
     private final UserRepository userRepository;
     private final SkillRepository skillRepository;
     private final TrainerAuthorizationRepository trainerAuthorizationRepository;
+    private final TrainerAuthorizationSkillStatusRepository skillStatusRepository;
+    private final MentorAvailabilityService availabilityService;
     private final MentoringRequestRepository mentoringRequestRepository;
     private final MentoringRequestRecipientRepository recipientRepository;
     private final MentoringRelationshipRepository relationshipRepository;
@@ -72,6 +76,8 @@ public class MentoringMatchService {
             UserRepository userRepository,
             SkillRepository skillRepository,
             TrainerAuthorizationRepository trainerAuthorizationRepository,
+            TrainerAuthorizationSkillStatusRepository skillStatusRepository,
+            MentorAvailabilityService availabilityService,
             MentoringRequestRepository mentoringRequestRepository,
             MentoringRequestRecipientRepository recipientRepository,
             MentoringRelationshipRepository relationshipRepository,
@@ -84,6 +90,8 @@ public class MentoringMatchService {
         this.userRepository = userRepository;
         this.skillRepository = skillRepository;
         this.trainerAuthorizationRepository = trainerAuthorizationRepository;
+        this.skillStatusRepository = skillStatusRepository;
+        this.availabilityService = availabilityService;
         this.mentoringRequestRepository = mentoringRequestRepository;
         this.recipientRepository = recipientRepository;
         this.relationshipRepository = relationshipRepository;
@@ -195,6 +203,7 @@ public class MentoringMatchService {
         User trainer = userRepository.findByIdForUpdate(input.trainerUserId())
                 .filter(user -> user.getStatus() == UserStatus.ACTIVE)
                 .orElseThrow(() -> new ResourceNotFoundException("Active trainer account not found"));
+        ensureAcceptingNewPairings(trainer.getId());
         TrainerAuthorization authorization = trainerAuthorizationRepository.findActiveByUserId(trainer.getId())
                 .stream().findFirst()
                 .orElseThrow(() -> new BusinessException(
@@ -203,7 +212,9 @@ public class MentoringMatchService {
                         HttpStatus.CONFLICT
                 ));
         boolean hasSkill = authorization.getSkills().stream()
-                .anyMatch(skill -> skill.getId().equals(matchRequest.getSkill().getId()) && skill.isActive());
+                .anyMatch(skill -> skill.getId().equals(matchRequest.getSkill().getId()) && skill.isActive())
+                && skillStatusRepository.existsByAuthorization_IdAndSkill_IdAndStatus(
+                        authorization.getId(), matchRequest.getSkill().getId(), TrainerAuthorizationStatus.ACTIVE);
         if (!hasSkill) {
             throw new BusinessException(
                     "TRAINER_SKILL_MISMATCH",
@@ -250,10 +261,14 @@ public class MentoringMatchService {
             );
         }
         if (relationshipRepository.existsActivePair(
-                trainer.getId(), traineeEmployee.getUserId(), MentoringRelationshipStatus.ACTIVE)) {
+                trainer.getId(), traineeEmployee.getUserId(), matchRequest.getSkill().getId(),
+                MentoringRelationshipStatus.ACTIVE)
+                || recipientRepository.existsByMentorTraineeAndStatus(
+                trainer.getId(), traineeEmployee.getUserId(), matchRequest.getSkill().getId(),
+                MentoringRequestRecipientStatus.PENDING)) {
             throw new BusinessException(
                     "MENTORING_RELATIONSHIP_EXISTS",
-                    "The selected trainer already has an active relationship with this employee.",
+                    "The selected trainer already has a relationship or pending request with this employee for this skill.",
                     HttpStatus.CONFLICT
             );
         }
@@ -287,6 +302,7 @@ public class MentoringMatchService {
         member.setRequestRecipient(savedRecipient);
         member.setMentorUser(trainer);
         member.setTraineeUser(trainee);
+        member.setSkill(matchRequest.getSkill());
         member.setStatus(MentoringRelationshipMemberStatus.ACTIVE);
         memberRepository.save(member);
 
@@ -345,6 +361,7 @@ public class MentoringMatchService {
         User mentor = userRepository.findByIdForUpdate(input.mentorUserId())
                 .filter(user -> user.getStatus() == UserStatus.ACTIVE)
                 .orElseThrow(() -> new ResourceNotFoundException("Active mentor account not found"));
+        ensureAcceptingNewPairings(mentor.getId());
         TrainerAuthorization authorization = trainerAuthorizationRepository.findActiveByUserId(mentor.getId())
                 .stream().findFirst()
                 .orElseThrow(() -> new BusinessException(
@@ -356,6 +373,18 @@ public class MentoringMatchService {
             throw new BusinessException(
                     "INACTIVE_TRAINER_CANDIDATE",
                     "Only an active employee can be assigned as a mentor.",
+                    HttpStatus.CONFLICT
+            );
+        }
+        Skill skill = skillRepository.findByIdAndActiveTrue(input.skillId())
+                .orElseThrow(() -> new ResourceNotFoundException("Active skill not found"));
+        if (!authorization.getSkills().stream()
+                .anyMatch(candidate -> candidate.getId().equals(skill.getId()) && candidate.isActive())
+                || !skillStatusRepository.existsByAuthorization_IdAndSkill_IdAndStatus(
+                authorization.getId(), skill.getId(), TrainerAuthorizationStatus.ACTIVE)) {
+            throw new BusinessException(
+                    "TRAINER_SKILL_MISMATCH",
+                    "The selected mentor is not authorized for this skill.",
                     HttpStatus.CONFLICT
             );
         }
@@ -371,18 +400,18 @@ public class MentoringMatchService {
                 ));
 
         if (relationshipRepository.existsActivePair(
-                mentor.getId(), trainee.getId(), MentoringRelationshipStatus.ACTIVE)) {
+                mentor.getId(), trainee.getId(), skill.getId(), MentoringRelationshipStatus.ACTIVE)) {
             throw new BusinessException(
                     "MENTORING_RELATIONSHIP_EXISTS",
-                    "The selected mentor and trainee already have an active relationship.",
+                    "The selected mentor and trainee already have an active relationship for this skill.",
                     HttpStatus.CONFLICT
             );
         }
         if (recipientRepository.existsByMentorTraineeAndStatus(
-                mentor.getId(), trainee.getId(), MentoringRequestRecipientStatus.PENDING)) {
+                mentor.getId(), trainee.getId(), skill.getId(), MentoringRequestRecipientStatus.PENDING)) {
             throw new BusinessException(
                     "MENTORING_PAIR_REQUEST_PENDING",
-                    "A pending mentoring request already exists for this mentor and trainee.",
+                    "A pending mentoring request already exists for this mentor and trainee for this skill.",
                     HttpStatus.CONFLICT
             );
         }
@@ -405,6 +434,7 @@ public class MentoringMatchService {
         request.setMentorUser(mentor);
         request.setInitiatedByUser(hrUser);
         request.setRequestType(MentoringRequestType.INDIVIDUAL);
+        request.setSkill(skill);
         MentoringRequest savedRequest = mentoringRequestRepository.save(request);
 
         MentoringRequestRecipient recipient = new MentoringRequestRecipient();
@@ -426,20 +456,23 @@ public class MentoringMatchService {
         member.setRequestRecipient(recipient);
         member.setMentorUser(mentor);
         member.setTraineeUser(trainee);
+        member.setSkill(skill);
         member.setStatus(MentoringRelationshipMemberStatus.ACTIVE);
         memberRepository.save(member);
 
         String mentorName = authorization.getEmployee().getFullName();
         String pairingLink = "/mentoring/pairing/" + savedRelationship.getId();
         notify(trainee.getId(), "MENTORING_HR_MATCHED", "A mentor has been matched",
-                "HR matched you with " + mentorName + ".", pairingLink);
+                "HR matched you with " + mentorName + " for " + skill.getName() + ".", pairingLink);
         notify(mentor.getId(), "MENTORING_HR_MATCHED", "A trainee has been matched",
-                traineeEmployee.getFullName() + " has been matched with you by HR.", pairingLink);
+                traineeEmployee.getFullName() + " has been matched with you for " + skill.getName() + " by HR.",
+                pairingLink);
 
         Map<String, Object> auditDetails = new LinkedHashMap<>();
         auditDetails.put("mentorUserId", mentor.getId());
         auditDetails.put("traineeUserId", trainee.getId());
         auditDetails.put("relationshipId", savedRelationship.getId());
+        auditDetails.put("skillId", skill.getId());
         auditService.record(new AuditService.AuditCommand(
                 null,
                 actor.getUserId(),
@@ -499,6 +532,7 @@ public class MentoringMatchService {
         User trainer = userRepository.findByIdForUpdate(input.trainerUserId())
                 .filter(user -> user.getStatus() == UserStatus.ACTIVE)
                 .orElseThrow(() -> new ResourceNotFoundException("Active trainer account not found"));
+        ensureAcceptingNewPairings(trainer.getId());
         if (trainer.getId().equals(previousRelationship.getMentorUser().getId())) {
             throw new BusinessException(
                     "MENTORING_REASSIGNMENT_SAME_TRAINER",
@@ -513,9 +547,38 @@ public class MentoringMatchService {
                         "Only an active trainer can receive a reassigned relationship.",
                         HttpStatus.CONFLICT
                 ));
-        boolean skillMismatch = previousRelationship.getRequest().getSkill() != null
-                && authorization.getSkills().stream().noneMatch(skill ->
-                skill.getId().equals(previousRelationship.getRequest().getSkill().getId()) && skill.isActive());
+        Long relationshipSkillId = previousRelationship.getRequest().getSkill() == null
+                ? null : previousRelationship.getRequest().getSkill().getId();
+        boolean hasSkill = relationshipSkillId != null && authorization.getSkills().stream()
+                .anyMatch(skill -> skill.getId().equals(relationshipSkillId));
+        if (hasSkill) {
+            boolean catalogSkillActive = authorization.getSkills().stream()
+                    .filter(skill -> skill.getId().equals(relationshipSkillId))
+                    .anyMatch(Skill::isActive);
+            if (!catalogSkillActive) {
+                throw new BusinessException(
+                        "TRAINER_SKILL_NOT_ACTIVE",
+                        "The selected skill is no longer active in the skill catalog.",
+                        HttpStatus.CONFLICT
+                );
+            }
+            TrainerAuthorizationStatus skillStatus = skillStatusRepository
+                    .findByAuthorization_IdAndSkill_Id(authorization.getId(), relationshipSkillId)
+                    .orElseThrow(() -> new BusinessException(
+                            "TRAINER_SKILL_STATUS_MISSING",
+                            "The selected trainer's authorization status for this skill is unavailable.",
+                            HttpStatus.CONFLICT
+                    ))
+                    .getStatus();
+            if (skillStatus != TrainerAuthorizationStatus.ACTIVE) {
+                throw new BusinessException(
+                        "TRAINER_SKILL_NOT_ACTIVE",
+                        "The selected trainer's authorization for this skill is suspended or revoked.",
+                        HttpStatus.CONFLICT
+                );
+            }
+        }
+        boolean skillMismatch = relationshipSkillId != null && !hasSkill;
         if (!employeeRepository.existsByUserIdAndEmploymentStatus(trainer.getId(), EmploymentStatus.ACTIVE)) {
             throw new BusinessException(
                     "INACTIVE_TRAINER_CANDIDATE",
@@ -525,10 +588,14 @@ public class MentoringMatchService {
         }
         for (MentoringRelationshipMember member : previousMembers) {
             if (relationshipRepository.existsActivePair(
-                    trainer.getId(), member.getTraineeUser().getId(), MentoringRelationshipStatus.ACTIVE)) {
+                    trainer.getId(), member.getTraineeUser().getId(), relationshipSkillId,
+                    MentoringRelationshipStatus.ACTIVE)
+                    || recipientRepository.existsByMentorTraineeAndStatus(
+                    trainer.getId(), member.getTraineeUser().getId(), relationshipSkillId,
+                    MentoringRequestRecipientStatus.PENDING)) {
                 throw new BusinessException(
                         "MENTORING_RELATIONSHIP_EXISTS",
-                        "The selected trainer already has an active relationship with one of these trainees.",
+                        "The selected trainer already has a relationship or pending request with one of these trainees for this skill.",
                         HttpStatus.CONFLICT
                 );
             }
@@ -613,6 +680,7 @@ public class MentoringMatchService {
             member.setRequestRecipient(recipient);
             member.setMentorUser(trainer);
             member.setTraineeUser(recipient.getTraineeUser());
+            member.setSkill(savedRequest.getSkill());
             member.setStatus(MentoringRelationshipMemberStatus.ACTIVE);
             newMembers.add(member);
         }
@@ -676,6 +744,16 @@ public class MentoringMatchService {
                 trainerName,
                 previousMembers.size()
         );
+    }
+
+    private void ensureAcceptingNewPairings(Long mentorUserId) {
+        if (!availabilityService.isAcceptingNewPairings(mentorUserId)) {
+            throw new BusinessException(
+                    "MENTOR_NOT_ACCEPTING_NEW_PAIRINGS",
+                    "This mentor is not accepting new mentoring pairings.",
+                    HttpStatus.CONFLICT
+            );
+        }
     }
 
     private MentoringMatchRequestDto toDto(MentoringMatchRequest request) {

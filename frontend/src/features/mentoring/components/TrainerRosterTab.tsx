@@ -40,6 +40,7 @@ export function TrainerRosterTab({
   const [appointBusy, setAppointBusy] = useState(false);
   const [statusTarget, setStatusTarget] = useState<{
     trainer: TrainerRosterItem;
+    skill: TrainerRosterItem['skills'][number];
     nextStatus: TrainerAuthorizationStatus;
   } | null>(null);
   const [policy, setPolicy] = useState<TrainerInFlightPolicy>('BLOCK_NEW_SESSIONS_ONLY');
@@ -97,6 +98,7 @@ export function TrainerRosterTab({
     setStatusBusy(true);
     try {
       await mentoringTrainerApi.changeStatus(statusTarget.trainer.id, {
+        skillId: statusTarget.skill.id,
         status: statusTarget.nextStatus,
         inFlightPolicy: statusTarget.nextStatus === 'ACTIVE' ? undefined : policy,
         reason: statusReason.trim(),
@@ -174,7 +176,15 @@ export function TrainerRosterTab({
                       )}
                     </td>
                     <td><StatusPill label={`Emp: ${trainer.employmentStatus}`} tone={employmentTone(trainer.employmentStatus)} /></td>
-                    <td><StatusPill label={`Auth: ${trainer.status}`} tone={authTone(trainer.status)} /></td>
+                    <td>
+                      <div className="boa-stack" style={{ gap: '0.3rem', alignItems: 'flex-start' }}>
+                        <StatusPill label={`Auth: ${trainer.status}`} tone={authTone(trainer.status)} />
+                        <StatusPill
+                          label={trainer.acceptingNewPairings === false ? 'Not accepting matches' : 'Accepting matches'}
+                          tone={trainer.acceptingNewPairings === false ? 'neutral' : 'ok'}
+                        />
+                      </div>
+                    </td>
                     <td>
                       <StatusPill
                         label={`${trainer.activeTrainees} active + ${trainer.pendingTrainees} pending / ${trainer.maxConcurrentTrainees}`}
@@ -182,51 +192,78 @@ export function TrainerRosterTab({
                       />
                     </td>
                     <td>
-                      <div style={{ display: 'flex', gap: '0.25rem', flexWrap: 'wrap' }}>
-                        {trainer.skills.map((skill) => <StatusPill key={skill.id} label={skill.name} tone="neutral" />)}
+                      <div className="boa-stack" style={{ gap: '0.3rem' }}>
+                        {trainer.skills.map((skill) => (
+                          <div key={skill.id} style={{ display: 'flex', gap: '0.35rem', alignItems: 'center', flexWrap: 'wrap' }}>
+                            <StatusPill label={skill.name} tone="neutral" />
+                            <StatusPill
+                              label={skill.status ?? trainer.status}
+                              tone={authTone(skill.status ?? trainer.status)}
+                            />
+                          </div>
+                        ))}
                       </div>
                     </td>
                     <td className="apid-actions-cell">
                       <PermissionGate permission="TRAINER_STATUS_MANAGE">
-                        {trainer.status === 'ACTIVE' ? (
-                          <>
-                            <button
-                              type="button"
-                              className="apid-btn apid-btn-outline apid-btn-sm"
-                              onClick={() => {
-                                setStatusTarget({ trainer, nextStatus: 'SUSPENDED' });
-                                setPolicy('BLOCK_NEW_SESSIONS_ONLY');
-                                setStatusReason('');
-                              }}
-                            >
-                              Suspend
-                            </button>
-                            <button
-                              type="button"
-                              className="apid-btn apid-btn-danger apid-btn-sm"
-                              onClick={() => {
-                                setStatusTarget({ trainer, nextStatus: 'REVOKED' });
-                                setPolicy('REQUIRE_HR_REASSIGNMENT');
-                                setStatusReason('');
-                              }}
-                            >
-                              Revoke
-                            </button>
-                          </>
-                        ) : trainer.status === 'SUSPENDED' ? (
-                          <button
-                            type="button"
-                            className="apid-btn apid-btn-outline apid-btn-sm"
-                            onClick={() => {
-                              setStatusTarget({ trainer, nextStatus: 'ACTIVE' });
-                              setStatusReason('');
-                            }}
-                          >
-                            Restore
-                          </button>
-                        ) : (
-                          <span className="boa-muted">Re-appointment required</span>
-                        )}
+                        <div className="boa-stack" style={{ gap: '0.35rem' }}>
+                          {trainer.skills.map((skill) => {
+                            const skillStatus = skill.status ?? trainer.status;
+                            return (
+                              <div key={skill.id} style={{ display: 'flex', gap: '0.35rem', alignItems: 'center', flexWrap: 'wrap' }}>
+                                <span className="boa-muted" style={{ fontSize: '0.77rem' }}>{skill.name}</span>
+                                {skillStatus === 'ACTIVE' ? (
+                                  <>
+                                    <button
+                                      type="button"
+                                      className="apid-btn apid-btn-outline apid-btn-sm"
+                                      onClick={() => {
+                                        setStatusTarget({ trainer, skill, nextStatus: 'SUSPENDED' });
+                                        setPolicy('BLOCK_NEW_SESSIONS_ONLY');
+                                        setStatusReason('');
+                                      }}
+                                    >
+                                      Suspend
+                                    </button>
+                                    <button
+                                      type="button"
+                                      className="apid-btn apid-btn-danger apid-btn-sm"
+                                      onClick={() => {
+                                        setStatusTarget({ trainer, skill, nextStatus: 'REVOKED' });
+                                        setPolicy('REQUIRE_HR_REASSIGNMENT');
+                                        setStatusReason('');
+                                      }}
+                                    >
+                                      Revoke
+                                    </button>
+                                  </>
+                                ) : skillStatus === 'SUSPENDED' ? (
+                                  <button
+                                    type="button"
+                                    className="apid-btn apid-btn-outline apid-btn-sm"
+                                    onClick={() => {
+                                      setStatusTarget({ trainer, skill, nextStatus: 'ACTIVE' });
+                                      setStatusReason('');
+                                    }}
+                                  >
+                                    Restore
+                                  </button>
+                                ) : (
+                                  <button
+                                    type="button"
+                                    className="apid-btn apid-btn-outline apid-btn-sm"
+                                    onClick={() => {
+                                      setStatusTarget({ trainer, skill, nextStatus: 'ACTIVE' });
+                                      setStatusReason('');
+                                    }}
+                                  >
+                                    Reauthorize
+                                  </button>
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
                       </PermissionGate>
                     </td>
                   </tr>
@@ -321,14 +358,12 @@ export function TrainerRosterTab({
           <div className="apid-card apid-modal">
             <h3 style={{ marginTop: 0 }}>
               {statusTarget.nextStatus === 'ACTIVE'
-                ? 'Restore Trainer Authorization'
-                : `${statusTarget.nextStatus === 'SUSPENDED' ? 'Suspend' : 'Revoke'} Trainer Authorization`}
+                ? `Restore ${statusTarget.skill.name} authorization`
+                : `${statusTarget.nextStatus === 'SUSPENDED' ? 'Suspend' : 'Revoke'} ${statusTarget.skill.name} authorization`}
             </h3>
             <div className="apid-alert apid-alert-warn" style={{ fontSize: '0.82rem' }}>
               <ShieldAlert size={14} style={{ verticalAlign: 'text-bottom', marginRight: '0.35rem' }} />
-              <strong>Impact:</strong> {statusTarget.trainer.fullName} has{' '}
-              <strong>{statusTarget.trainer.activeTrainees}</strong> active trainee(s) and{' '}
-              <strong>{statusTarget.trainer.pendingTrainees}</strong> pending request(s).
+              <strong>Impact:</strong> This change applies only to {statusTarget.skill.name}. Other skills and their pairings remain unchanged.
             </div>
             <form onSubmit={handleStatusSubmit} className="apid-form">
               {statusTarget.nextStatus !== 'ACTIVE' && (
@@ -340,8 +375,8 @@ export function TrainerRosterTab({
                     value={policy}
                     onChange={(event) => setPolicy(event.target.value as TrainerInFlightPolicy)}
                   >
-                    <option value="BLOCK_NEW_SESSIONS_ONLY">Keep active relationships; block new invitations</option>
-                    <option value="REQUIRE_HR_REASSIGNMENT">Pause relationships for HR reassignment</option>
+                    <option value="BLOCK_NEW_SESSIONS_ONLY">Keep this skill's active relationships; block new sessions</option>
+                    <option value="REQUIRE_HR_REASSIGNMENT">Pause this skill's relationships for HR reassignment</option>
                   </select>
                 </div>
               )}

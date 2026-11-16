@@ -44,9 +44,9 @@ describe('HrMatchingTab reassignment', () => {
       employmentStatus: 'ACTIVE',
       sourceType: 'APPLICATION',
       status: 'ACTIVE',
-      activeTrainees: 0,
+      activeTrainees: 1,
       pendingTrainees: 0,
-      maxConcurrentTrainees: 3,
+      maxConcurrentTrainees: 1,
       bio: null,
       availabilityNotes: null,
       skills: [],
@@ -68,7 +68,7 @@ describe('HrMatchingTab reassignment', () => {
     );
 
     const trainerSelect = await screen.findByLabelText('Replacement trainer for relationship 12');
-    expect(screen.getByRole('option', { name: /Skill mismatch—HR override required/ })).toBeInTheDocument();
+    expect(screen.getByRole('option', { name: /Skill mismatch \(HR override\)/ })).toBeInTheDocument();
     fireEvent.change(trainerSelect, { target: { value: '30' } });
     fireEvent.change(screen.getByLabelText('Reassignment reason for relationship 12'), {
       target: { value: 'Former trainer is unavailable.' },
@@ -80,6 +80,11 @@ describe('HrMatchingTab reassignment', () => {
     fireEvent.change(screen.getByLabelText('Skill override reason for relationship 12'), {
       target: { value: 'Temporary coverage approved by HR.' },
     });
+    expect(reassignButton).toBeDisabled();
+    fireEvent.click(screen.getByLabelText('HR override capacity'));
+    fireEvent.change(screen.getByLabelText('Capacity override reason for relationship 12'), {
+      target: { value: 'Temporary coverage approved by HR.' },
+    });
     expect(reassignButton).toBeEnabled();
     fireEvent.click(reassignButton);
 
@@ -88,8 +93,8 @@ describe('HrMatchingTab reassignment', () => {
         relationshipId: 12,
         trainerUserId: 30,
         reason: 'Former trainer is unavailable.',
-        overrideCapacity: false,
-        overrideReason: undefined,
+        overrideCapacity: true,
+        overrideReason: 'Temporary coverage approved by HR.',
         skillOverrideReason: 'Temporary coverage approved by HR.',
       });
     });
@@ -134,7 +139,7 @@ describe('HrDirectMatchingTab', () => {
       maxConcurrentTrainees: 3,
       bio: null,
       availabilityNotes: null,
-      skills: [],
+      skills: [{ id: 11, name: 'Java', category: 'Technical', status: 'ACTIVE' }],
       effectiveFrom: '2026-11-01T08:00:00Z',
       updatedAt: '2026-11-01T08:00:00Z',
     };
@@ -153,12 +158,13 @@ describe('HrDirectMatchingTab', () => {
     );
 
     fireEvent.change(screen.getByLabelText('Mentor'), { target: { value: '30' } });
+    fireEvent.change(screen.getByLabelText('Skill'), { target: { value: '11' } });
     fireEvent.change(screen.getByLabelText('Trainee'), { target: { value: '40' } });
     expect(screen.getByText(/Neither participant needs to approve/)).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Match mentor and trainee' }));
 
     await waitFor(() => {
-      expect(directMatch).toHaveBeenCalledWith({ mentorUserId: 30, traineeUserId: 40 });
+      expect(directMatch).toHaveBeenCalledWith({ mentorUserId: 30, traineeUserId: 40, skillId: 11 });
     });
   });
 });

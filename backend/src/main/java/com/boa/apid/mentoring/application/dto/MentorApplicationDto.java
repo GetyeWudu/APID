@@ -2,6 +2,7 @@ package com.boa.apid.mentoring.application.dto;
 
 import com.boa.apid.mentoring.application.entity.MentorApplication;
 import com.boa.apid.mentoring.application.entity.MentorApplicationStatus;
+import com.boa.apid.mentoring.application.entity.MentorApplicationType;
 
 import java.time.Instant;
 import java.util.ArrayList;
@@ -11,9 +12,12 @@ import java.util.List;
 public record MentorApplicationDto(
         Long id,
         String applicantUsername,
+        MentorApplicationType applicationType,
         MentorApplicationStatus status,
         String skillName,
         List<String> skillNames,
+        List<Long> catalogSkillIds,
+        String customSkill,
         Long proofFileId,
         String proofFileName,
         List<Evidence> evidenceFiles,
@@ -31,8 +35,12 @@ public record MentorApplicationDto(
         List<String> skillNames = new ArrayList<>(application.getCatalogSkills().stream()
                 .map(skill -> skill.getName())
                 .toList());
+        List<Long> catalogSkillIds = new ArrayList<>(application.getCatalogSkills().stream()
+                .map(skill -> skill.getId())
+                .toList());
         if (skillNames.isEmpty() && application.getCatalogSkill() != null) {
             skillNames.add(application.getCatalogSkill().getName());
+            catalogSkillIds.add(application.getCatalogSkill().getId());
         }
         if (application.getCustomSkill() != null
                 && !application.getCustomSkill().isBlank()
@@ -54,9 +62,12 @@ public record MentorApplicationDto(
         return new MentorApplicationDto(
                 application.getId(),
                 application.getApplicant().getUsername(),
+                application.getApplicationType(),
                 application.getStatus(),
                 skillName,
                 skillNames,
+                catalogSkillIds,
+                application.getCustomSkill(),
                 application.getProofDocument().getId(),
                 application.getProofDocument().getOriginalFilename(),
                 evidenceFiles,

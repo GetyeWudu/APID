@@ -27,7 +27,9 @@ import com.boa.apid.mentoring.application.dto.MentorApplicationReviewRequest;
 import com.boa.apid.mentoring.application.dto.MentorApplicationSubmittedDto;
 import com.boa.apid.mentoring.application.entity.MentorApplication;
 import com.boa.apid.mentoring.application.entity.MentorApplicationStatus;
+import com.boa.apid.mentoring.application.entity.MentorApplicationType;
 import com.boa.apid.mentoring.application.repository.MentorApplicationRepository;
+import com.boa.apid.mentoring.trainer.dto.TrainerSkillDto;
 import com.boa.apid.mentoring.trainer.service.TrainerAuthorizationService;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.security.access.AccessDeniedException;
@@ -130,6 +132,51 @@ public class MentorApplicationService {
             List<MultipartFile> supportingEvidence,
             ApidUserPrincipal actor
     ) {
+        return submitApplication(
+                catalogSkillIds,
+                customSkill,
+                note,
+                expertiseSummary,
+                availabilityNotes,
+                maxConcurrentTrainees,
+                supportingEvidence,
+                actor,
+                MentorApplicationType.INITIAL
+        );
+    }
+
+    @Transactional
+    public MentorApplicationSubmittedDto submitSkillAddition(
+            List<Long> catalogSkillIds,
+            String customSkill,
+            String note,
+            List<MultipartFile> supportingEvidence,
+            ApidUserPrincipal actor
+    ) {
+        return submitApplication(
+                catalogSkillIds,
+                customSkill,
+                note,
+                null,
+                null,
+                null,
+                supportingEvidence,
+                actor,
+                MentorApplicationType.SKILL_ADDITION
+        );
+    }
+
+    private MentorApplicationSubmittedDto submitApplication(
+            List<Long> catalogSkillIds,
+            String customSkill,
+            String note,
+            String expertiseSummary,
+            String availabilityNotes,
+            Integer maxConcurrentTrainees,
+            List<MultipartFile> supportingEvidence,
+            ApidUserPrincipal actor,
+            MentorApplicationType applicationType
+    ) {
         String normalizedCustomSkill = normalizeOptional(customSkill);
         String normalizedExpertise = normalizeOptional(expertiseSummary);
         String normalizedAvailability = normalizeOptional(availabilityNotes);
@@ -188,8 +235,71 @@ public class MentorApplicationService {
             );
         }
 
-        User applicant = userRepository.findById(actor.getUserId())
+        User applicant = userRepository.findByIdForUpdate(actor.getUserId())
                 .orElseThrow(() -> new ResourceNotFoundException("Applicant account not found"));
+        List<UserRole> activeRoles = userRoleRepository.findActiveByUserIdWithRole(applicant.getId());
+        boolean alreadyMentor = activeRoles.stream()
+                .anyMatch(userRole -> userRole.getRole().isActive()
+                        && "mentor".equalsIgnoreCase(userRole.getRole().getName()));
+
+        if (applicationType == MentorApplicationType.INITIAL) {
+            if (applicationRepository.existsByApplicant_IdAndApplicationType(
+                    applicant.getId(), MentorApplicationType.INITIAL)) {
+                throw new BusinessException(
+                        "MENTOR_APPLICATION_ALREADY_SUBMITTED",
+                        "You can submit only one initial mentor application.",
+                        HttpStatus.CONFLICT
+                );
+            }
+            if (alreadyMentor) {
+                throw new BusinessException(
+                        "ALREADY_APPROVED_MENTOR",
+                        "You are already an approved mentor. Request additional skills from your mentor profile.",
+                        HttpStatus.CONFLICT
+                );
+            }
+        } else {
+            if (!alreadyMentor) {
+                throw new BusinessException(
+                        "ACTIVE_MENTOR_REQUIRED",
+                        "Only an approved mentor can request additional skills.",
+                        HttpStatus.FORBIDDEN
+                );
+            }
+            List<TrainerSkillDto> activeTrainerSkills = trainerAuthorizationService.getOwnProfile(actor).skills();
+            Set<Long> activeSkillIds = activeTrainerSkills.stream()
+                    .map(TrainerSkillDto::id)
+                    .collect(java.util.stream.Collectors.toSet());
+            List<MentorApplication> pendingAdditions =
+                    applicationRepository.findAllByApplicant_IdAndApplicationTypeAndStatus(
+                            applicant.getId(),
+                            MentorApplicationType.SKILL_ADDITION,
+                            MentorApplicationStatus.PENDING
+                    );
+            Set<Long> pendingSkillIds = pendingAdditions.stream()
+                    .flatMap(application -> application.getCatalogSkills().stream())
+                    .map(Skill::getId)
+                    .collect(java.util.stream.Collectors.toSet());
+            boolean customSkillAlreadyActive = normalizedCustomSkill != null
+                    && activeTrainerSkills.stream()
+                    .anyMatch(skill -> normalizedCustomSkill.equalsIgnoreCase(skill.name()));
+            boolean customSkillAlreadyPending = normalizedCustomSkill != null
+                    && pendingAdditions.stream()
+                    .map(MentorApplication::getCustomSkill)
+                    .filter(existingSkill -> existingSkill != null)
+                    .anyMatch(existingSkill -> normalizedCustomSkill.equalsIgnoreCase(existingSkill.trim()));
+            if (uniqueSkillIds.stream().anyMatch(skillId ->
+                    activeSkillIds.contains(skillId) || pendingSkillIds.contains(skillId))
+                    || customSkillAlreadyActive
+                    || customSkillAlreadyPending) {
+                throw new BusinessException(
+                        "MENTOR_SKILL_ALREADY_ACTIVE_OR_PENDING",
+                        "One or more selected skills are already active or awaiting review.",
+                        HttpStatus.CONFLICT
+                );
+            }
+        }
+
         List<StoredFile> evidenceFiles = new ArrayList<>();
         for (MultipartFile evidenceUpload : evidenceUploads) {
             StoredFileDto uploadedFile = fileStorageService.store(evidenceUpload, FilePurpose.TRAINER_CERT, actor);
@@ -206,6 +316,7 @@ public class MentorApplicationService {
 
         MentorApplication application = new MentorApplication();
         application.setApplicant(applicant);
+        application.setApplicationType(applicationType);
         application.setProofDocument(evidenceFiles.get(0));
         application.setSupportingEvidence(new LinkedHashSet<>(evidenceFiles));
         application.setCatalogSkill(catalogSkills.isEmpty() ? null : catalogSkills.get(0));
@@ -219,6 +330,7 @@ public class MentorApplicationService {
         MentorApplication saved = applicationRepository.save(application);
         return new MentorApplicationSubmittedDto(
                 saved.getId(),
+                saved.getApplicationType(),
                 saved.getStatus(),
                 saved.getCatalogSkill() == null ? null : saved.getCatalogSkill().getId(),
                 catalogSkills.stream().map(Skill::getId).toList(),
@@ -230,6 +342,13 @@ public class MentorApplicationService {
     @Transactional(readOnly = true)
     public List<MentorApplicationDto> listApplications() {
         return applicationRepository.findAllByOrderBySubmittedAtDesc().stream()
+                .map(MentorApplicationDto::from)
+                .toList();
+    }
+
+    @Transactional(readOnly = true)
+    public List<MentorApplicationDto> listMyApplications(ApidUserPrincipal actor) {
+        return applicationRepository.findAllByApplicant_IdOrderBySubmittedAtDesc(actor.getUserId()).stream()
                 .map(MentorApplicationDto::from)
                 .toList();
     }
@@ -285,18 +404,28 @@ public class MentorApplicationService {
         MentorApplication saved = applicationRepository.save(application);
 
         String skillName = applicationSkillSummary(application);
+        boolean skillAddition = application.getApplicationType() == MentorApplicationType.SKILL_ADDITION;
+        String requestName = skillAddition ? "additional skill request" : "mentor application";
         String notificationMessage = request.decision() == MentorApplicationStatus.APPROVED
-                ? "Your mentor application for " + skillName + " was approved."
-                : "Your mentor application for " + skillName + " was declined. Reason: " + reason;
+                ? "Your " + requestName + " for " + skillName + " was approved."
+                : "Your " + requestName + " for " + skillName + " was declined. Reason: " + reason;
         notificationService.notify(
                 applicant.getId(),
                 NotificationModule.MENTORING,
-                request.decision() == MentorApplicationStatus.APPROVED
-                        ? "MENTOR_APPLICATION_APPROVED"
-                        : "MENTOR_APPLICATION_DECLINED",
-                request.decision() == MentorApplicationStatus.APPROVED
-                        ? "Mentor application approved"
-                        : "Mentor application declined",
+                skillAddition
+                        ? request.decision() == MentorApplicationStatus.APPROVED
+                            ? "MENTOR_SKILL_ADDITION_APPROVED"
+                            : "MENTOR_SKILL_ADDITION_DECLINED"
+                        : request.decision() == MentorApplicationStatus.APPROVED
+                            ? "MENTOR_APPLICATION_APPROVED"
+                            : "MENTOR_APPLICATION_DECLINED",
+                skillAddition
+                        ? request.decision() == MentorApplicationStatus.APPROVED
+                            ? "Mentor skill request approved"
+                            : "Mentor skill request declined"
+                        : request.decision() == MentorApplicationStatus.APPROVED
+                            ? "Mentor application approved"
+                            : "Mentor application declined",
                 notificationMessage,
                 "/mentoring?tab=applications"
         );
@@ -310,7 +439,8 @@ public class MentorApplicationService {
                 actor.getUsername(),
                 applicant.getId(),
                 "MENTORING",
-                "MENTOR_APPLICATION_" + request.decision().name(),
+                (skillAddition ? "MENTOR_SKILL_ADDITION_" : "MENTOR_APPLICATION_")
+                        + request.decision().name(),
                 "SUCCESS",
                 null,
                 "MENTOR_APPLICATION",

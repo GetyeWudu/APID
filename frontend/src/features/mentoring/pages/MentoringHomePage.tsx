@@ -183,7 +183,7 @@ export function MentoringHomePage() {
           subtitle="Keep your expertise, availability, and trainee capacity up to date for employees seeking a mentor."
           source="live"
         />
-        <MentorProfileForm />
+        <MentorProfileForm activeSkills={activeSkills} currentUserId={user?.id ?? 0} />
       </div>
     );
   }
@@ -273,13 +273,34 @@ export function MentoringHomePage() {
   }
 
   if (activeView === 'apply') {
+    if (isMentor) {
+      return (
+        <div className="boa-stack">
+          <PageHeader
+            title="Apply to Become a Mentor"
+            subtitle="Approved mentors can request additional skills from their profile."
+          />
+          <div className="apid-card">
+            <EmptyState
+              title="You Are Already a Mentor"
+              description="Use your mentor profile to request HR approval for additional skills."
+              action={
+                <Link to="/mentoring?view=trainer-profile" className="apid-btn apid-btn-primary apid-btn-sm">
+                  Open mentor profile
+                </Link>
+              }
+            />
+          </div>
+        </div>
+      );
+    }
     return (
       <div className="boa-stack">
         <PageHeader
           title="Apply to Become a Mentor"
-          subtitle="Choose a catalog skill, enter a custom skill, or provide both, then upload proof."
+          subtitle="Submit one application with all requested skills and supporting evidence."
         />
-        <ApplyForMentorForm activeSkills={activeSkills} />
+        <ApplyForMentorForm activeSkills={activeSkills} currentUserId={user?.id ?? 0} />
       </div>
     );
   }

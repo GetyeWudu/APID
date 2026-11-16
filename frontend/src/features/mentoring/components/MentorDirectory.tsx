@@ -77,6 +77,25 @@ export function MentorDirectory({
       (!availableOnly || mentor.remainingCapacity === undefined || mentor.remainingCapacity > 0)
   );
   const onlyOwnMentorProfile = mentors.length > 0 && otherMentors.length === 0;
+  const selectedSkillValue = selectedSkillId ? Number(selectedSkillId) : null;
+  const selectedMentorRequest = selectedMentor
+    ? requests.find(
+        (request) =>
+          request.mentorUserId === selectedMentor.userId &&
+          request.traineeUserId === currentUserId &&
+          request.skillId === selectedSkillValue &&
+          (request.status === 'PENDING' || request.status === 'ACCEPTED')
+      )
+    : undefined;
+  const selectedGeneralRequest = selectedMentor
+    ? requests.find(
+        (request) =>
+          request.mentorUserId === selectedMentor.userId &&
+          request.traineeUserId === currentUserId &&
+          request.skillId === null &&
+          (request.status === 'PENDING' || request.status === 'ACCEPTED')
+      )
+    : undefined;
 
   return (
     <div className="apid-card">
@@ -139,65 +158,79 @@ export function MentorDirectory({
         />
       ) : (
         <div className="boa-grid-2" style={{ marginBottom: 0 }}>
-          {filteredMentors.map((mentor) => (
-            <article
-              key={mentor.userId}
-              className="apid-card"
-              style={{ border: '1px solid var(--border)', marginBottom: 0 }}
-            >
-              <div style={{ fontWeight: 700 }}>{mentor.fullName}</div>
-              <div className="boa-muted" style={{ fontSize: '0.8rem' }}>
-                {[mentor.employeeNumber, mentor.departmentName].filter(Boolean).join(' · ') || mentor.username}
-              </div>
-              <div className="boa-muted" style={{ fontSize: '0.8rem', marginTop: '0.35rem' }}>
-                {mentor.remainingCapacity === undefined
-                  ? 'Capacity not available'
-                  : `${mentor.remainingCapacity} trainee slot${mentor.remainingCapacity === 1 ? '' : 's'} available`}
-                {mentor.availabilityNotes ? ` · ${mentor.availabilityNotes}` : ''}
-              </div>
-              {mentor.bio && <p className="boa-muted" style={{ fontSize: '0.84rem' }}>{mentor.bio}</p>}
-              <div style={{ display: 'flex', gap: '0.3rem', flexWrap: 'wrap', marginTop: '0.45rem' }}>
-                {mentor.skills.length > 0 ? (
-                  mentor.skills.map((skill) => (
-                    <StatusPill key={skill.id} label={skill.name} tone="neutral" />
-                  ))
-                ) : (
-                  <span className="boa-muted" style={{ fontSize: '0.8rem' }}>
-                    No skills linked yet
-                  </span>
-                )}
-              </div>
-              {currentUserId && (() => {
-                const existing = requests.find(
-                  (request) =>
-                    request.mentorUserId === mentor.userId &&
-                    request.traineeUserId === currentUserId &&
-                    (request.status === 'PENDING' || request.status === 'ACCEPTED')
-                );
-                return (
+          {filteredMentors.map((mentor) => {
+            const mentorRequests = requests.filter(
+              (request) =>
+                request.mentorUserId === mentor.userId &&
+                request.traineeUserId === currentUserId &&
+                (request.status === 'PENDING' || request.status === 'ACCEPTED')
+            );
+            const availableSkills = mentor.skills.filter(
+              (skill) => !mentorRequests.some((request) => request.skillId === skill.id)
+            );
+            const generalRequest = mentorRequests.find((request) => request.skillId === null);
+            const hasRequestablePairing = mentor.skills.length === 0
+              ? !generalRequest
+              : availableSkills.length > 0 || !generalRequest;
+            const hasExistingRequest = mentorRequests.length > 0;
+            const buttonLabel = !hasRequestablePairing
+              ? mentorRequests.some((request) => request.status === 'PENDING')
+                ? 'Request pending'
+                : 'Mentorship active'
+              : hasExistingRequest
+                ? availableSkills.length > 0
+                  ? 'Request another skill'
+                  : 'Send another request'
+                : 'Request mentorship';
+
+            return (
+              <article
+                key={mentor.userId}
+                className="apid-card"
+                style={{ border: '1px solid var(--border)', marginBottom: 0 }}
+              >
+                <div style={{ fontWeight: 700 }}>{mentor.fullName}</div>
+                <div className="boa-muted" style={{ fontSize: '0.8rem' }}>
+                  {[mentor.employeeNumber, mentor.departmentName].filter(Boolean).join(' · ') || mentor.username}
+                </div>
+                <div className="boa-muted" style={{ fontSize: '0.8rem', marginTop: '0.35rem' }}>
+                  {mentor.remainingCapacity === undefined
+                    ? 'Capacity not available'
+                    : `${mentor.remainingCapacity} trainee slot${mentor.remainingCapacity === 1 ? '' : 's'} available`}
+                  {mentor.availabilityNotes ? ` · ${mentor.availabilityNotes}` : ''}
+                </div>
+                {mentor.bio && <p className="boa-muted" style={{ fontSize: '0.84rem' }}>{mentor.bio}</p>}
+                <div style={{ display: 'flex', gap: '0.3rem', flexWrap: 'wrap', marginTop: '0.45rem' }}>
+                  {mentor.skills.length > 0 ? (
+                    mentor.skills.map((skill) => (
+                      <StatusPill key={skill.id} label={skill.name} tone="neutral" />
+                    ))
+                  ) : (
+                    <span className="boa-muted" style={{ fontSize: '0.8rem' }}>
+                      No skills linked yet
+                    </span>
+                  )}
+                </div>
+                {currentUserId && (
                   <button
                     type="button"
                     className="apid-btn apid-btn-primary apid-btn-sm"
                     style={{ marginTop: '0.75rem' }}
-                    disabled={Boolean(existing) || mentor.remainingCapacity === 0}
+                    disabled={!hasRequestablePairing || mentor.remainingCapacity === 0}
                     onClick={() => {
                       setSelectedMentor(mentor);
-                      setSelectedSkillId(mentor.skills[0] ? String(mentor.skills[0].id) : '');
+                      setSelectedSkillId(
+                        availableSkills[0] ? String(availableSkills[0].id) : ''
+                      );
                       setMessage('');
                     }}
                   >
-                    {existing?.status === 'ACCEPTED'
-                      ? 'Mentorship active'
-                      : existing
-                        ? 'Request pending'
-                        : mentor.remainingCapacity === 0
-                          ? 'At capacity'
-                          : 'Request mentorship'}
+                    {mentor.remainingCapacity === 0 ? 'At capacity' : buttonLabel}
                   </button>
-                );
-              })()}
-            </article>
-          ))}
+                )}
+              </article>
+            );
+          })}
         </div>
       )}
       {selectedMentor && (
@@ -223,10 +256,24 @@ export function MentorDirectory({
                     onChange={(event) => setSelectedSkillId(event.target.value)}
                     disabled={requestMutation.isPending}
                   >
-                    <option value="">General mentorship</option>
-                    {selectedMentor.skills.map((skill) => (
-                      <option key={skill.id} value={skill.id}>{skill.name}</option>
-                    ))}
+                    <option value="" disabled={Boolean(selectedGeneralRequest)}>
+                      General mentorship
+                    </option>
+                    {selectedMentor.skills.map((skill) => {
+                      const existing = requests.find(
+                        (request) =>
+                          request.mentorUserId === selectedMentor.userId &&
+                          request.traineeUserId === currentUserId &&
+                          request.skillId === skill.id &&
+                          (request.status === 'PENDING' || request.status === 'ACCEPTED')
+                      );
+                      return (
+                        <option key={skill.id} value={skill.id} disabled={Boolean(existing)}>
+                          {skill.name}
+                          {existing ? ` · ${existing.status === 'ACCEPTED' ? 'Mentorship active' : 'Request pending'}` : ''}
+                        </option>
+                      );
+                    })}
                   </select>
                 </div>
               )}
@@ -252,7 +299,15 @@ export function MentorDirectory({
                 >
                   Cancel
                 </button>
-                <button type="submit" className="apid-btn apid-btn-primary" disabled={requestMutation.isPending}>
+                <button
+                  type="submit"
+                  className="apid-btn apid-btn-primary"
+                  disabled={
+                    requestMutation.isPending ||
+                    selectedMentor.remainingCapacity === 0 ||
+                    Boolean(selectedMentorRequest)
+                  }
+                >
                   {requestMutation.isPending ? 'Sending...' : 'Send request'}
                 </button>
               </div>

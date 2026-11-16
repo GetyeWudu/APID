@@ -1,6 +1,5 @@
 import { useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { Award, CheckCircle2, ClipboardCheck, GitPullRequest } from 'lucide-react';
 import { useSearchParams } from 'react-router-dom';
 import { useAuth } from '../../../app/AuthContext';
 import {
@@ -9,7 +8,6 @@ import {
   LoadingSkeleton,
   PageHeader,
   PermissionGate,
-  StatCard,
 } from '../../../shared/components/ui';
 import { HR_MODULE_PERMISSIONS } from '../../../shared/auth/workspaceResolver';
 import { skillsApi } from '../../admin/skills/api/skillsApi';
@@ -19,11 +17,11 @@ import { mentoringTrainerApi } from '../api/mentoringTrainerApi';
 import { HrAnalyticsTab } from '../components/HrAnalyticsTab';
 import { HrDirectMatchingTab } from '../components/HrDirectMatchingTab';
 import { HrMatchingTab } from '../components/HrMatchingTab';
-import { SkillSupplyDemandCard } from '../components/SkillSupplyDemandCard';
+import { HrMentorSelfService } from '../components/HrMentorSelfService';
 import { TrainerApplicationsTab } from '../components/TrainerApplicationsTab';
 import { TrainerRosterTab } from '../components/TrainerRosterTab';
 
-type HrTabKey = 'overview' | 'applications' | 'trainers' | 'direct-matching' | 'matching' | 'analytics';
+type HrTabKey = 'my-mentor-profile' | 'applications' | 'trainers' | 'direct-matching' | 'matching' | 'analytics';
 
 interface HrTabMeta {
   key: HrTabKey;
@@ -32,7 +30,7 @@ interface HrTabMeta {
 }
 
 const HR_TABS: HrTabMeta[] = [
-  { key: 'overview', label: 'Mentoring Overview', anyPermissions: HR_MODULE_PERMISSIONS },
+  { key: 'my-mentor-profile', label: 'My Mentor Badge', anyPermissions: HR_MODULE_PERMISSIONS },
   { key: 'applications', label: 'Trainer Applications', anyPermissions: ['TRAINER_APPLICATION_REVIEW'] },
   {
     key: 'trainers',
@@ -98,7 +96,7 @@ export function HrMentoringDashboardPage() {
   const overviewQuery = useQuery({
     queryKey: ['mentoring', 'hr-overview'],
     queryFn: mentoringTrainerApi.getOverview,
-    enabled: canViewReports,
+    enabled: canViewReports && activeTab === 'analytics',
   });
 
   if (!hasAnyPermission(HR_MODULE_PERMISSIONS) || !activeTab) {
@@ -116,7 +114,7 @@ export function HrMentoringDashboardPage() {
     canManageMatches ? matchingEmployeesQuery : null,
     canAppointTrainers ? skillsQuery : null,
     canManageMatches ? matchRequestsQuery : null,
-    canViewReports ? overviewQuery : null,
+    canViewReports && activeTab === 'analytics' ? overviewQuery : null,
   ].filter((query): query is NonNullable<typeof query> => query !== null);
   const isLoading = activeQueries.some((query) => query.isLoading);
   const failedQuery = activeQueries.find((query) => query.isError);
@@ -148,8 +146,6 @@ export function HrMentoringDashboardPage() {
   const trainers = trainersQuery.data ?? [];
   const overview = overviewQuery.data;
   const matchRequests = matchRequestsQuery.data ?? [];
-  const activeTrainers = trainers.filter((trainer) => trainer.status === 'ACTIVE').length;
-  const openMatches = matchRequests.filter((request) => request.status === 'OPEN').length;
   const activeSkills = skillsQuery.data ?? [];
 
   return (
@@ -160,49 +156,7 @@ export function HrMentoringDashboardPage() {
         source="live"
       />
 
-      <div className="boa-kpi-grid" style={{ marginBottom: 0 }}>
-        {canReviewApplications && (
-          <StatCard
-            label="Pending Applications"
-            value={applications.filter((application) => application.status === 'PENDING').length}
-            subtext="Awaiting HR review"
-            icon={<ClipboardCheck size={16} />}
-          />
-        )}
-        {canManageTrainers && (
-          <StatCard label="Active Trainers" value={overview?.activeTrainers ?? activeTrainers} icon={<Award size={16} />} />
-        )}
-        {canManageMatches && (
-          <StatCard label="Awaiting Matching" value={openMatches} icon={<GitPullRequest size={16} />} />
-        )}
-        {canViewReports && overview && (
-          <StatCard
-            label="Relationship Completion"
-            value={`${overview.completionRatePct}%`}
-            subtext={`${overview.completedRelationships} completed relationships`}
-            icon={<CheckCircle2 size={16} />}
-          />
-        )}
-      </div>
-
-      {activeTab === 'overview' && (
-        <div className="boa-stack">
-          {overview && (
-            <SkillSupplyDemandCard
-              liveSkillNames={overview.skillSupplyDemand.map((row) => row.skillName)}
-              skillSupplyDemand={overview.skillSupplyDemand}
-            />
-          )}
-          {canReviewApplications && (
-            <PermissionGate permission="TRAINER_APPLICATION_REVIEW">
-              <TrainerApplicationsTab applications={applications} />
-            </PermissionGate>
-          )}
-          {!overview && !canReviewApplications && (
-            <EmptyState title="No overview data available" description="Your permissions do not include mentoring reports." />
-          )}
-        </div>
-      )}
+      {activeTab === 'my-mentor-profile' && <HrMentorSelfService />}
 
       {activeTab === 'applications' && (
         <PermissionGate permission="TRAINER_APPLICATION_REVIEW">

@@ -96,6 +96,7 @@ export function MentoringRecommendations({
                 (request) =>
                   request.mentorUserId === mentor.userId &&
                   request.traineeUserId === currentUserId &&
+                  request.skillId === selectedSkillId &&
                   (request.status === 'PENDING' || request.status === 'ACCEPTED')
               );
               return (

@@ -286,6 +286,7 @@ export const mentoringPairingApi = {
   async inviteTrainees(input: {
     requestType: MentoringRequestType;
     traineeUserIds: number[];
+    skillId?: number;
     message?: string;
   }): Promise<MentoringPairing[]> {
     const response = await apiClient.post<ApiResponse<MentoringPairing[]>>(

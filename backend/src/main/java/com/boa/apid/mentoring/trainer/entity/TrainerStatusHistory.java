@@ -1,6 +1,7 @@
 package com.boa.apid.mentoring.trainer.entity;
 
 import com.boa.apid.core.authorization.entity.User;
+import com.boa.apid.core.skills.entity.Skill;
 import jakarta.persistence.*;
 
 import java.time.Instant;
@@ -16,6 +17,10 @@ public class TrainerStatusHistory {
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "trainer_auth_id", nullable = false)
     private TrainerAuthorization authorization;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "skill_id")
+    private Skill skill;
 
     @Enumerated(EnumType.STRING)
     @Column(name = "previous_status", length = 20)
@@ -45,6 +50,8 @@ public class TrainerStatusHistory {
     public Long getId() { return id; }
     public TrainerAuthorization getAuthorization() { return authorization; }
     public void setAuthorization(TrainerAuthorization authorization) { this.authorization = authorization; }
+    public Skill getSkill() { return skill; }
+    public void setSkill(Skill skill) { this.skill = skill; }
     public TrainerAuthorizationStatus getPreviousStatus() { return previousStatus; }
     public void setPreviousStatus(TrainerAuthorizationStatus previousStatus) { this.previousStatus = previousStatus; }
     public TrainerAuthorizationStatus getNewStatus() { return newStatus; }

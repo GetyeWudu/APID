@@ -21,7 +21,10 @@ import com.boa.apid.mentoring.pairing.repository.MentoringRelationshipRepository
 import com.boa.apid.mentoring.pairing.repository.MentoringRequestRecipientRepository;
 import com.boa.apid.mentoring.pairing.repository.MentoringSessionRepository;
 import com.boa.apid.mentoring.trainer.entity.TrainerAuthorization;
+import com.boa.apid.mentoring.trainer.entity.TrainerAuthorizationSkillStatus;
+import com.boa.apid.mentoring.trainer.entity.TrainerAuthorizationStatus;
 import com.boa.apid.mentoring.trainer.repository.TrainerAuthorizationRepository;
+import com.boa.apid.mentoring.trainer.repository.TrainerAuthorizationSkillStatusRepository;
 import com.boa.apid.mentoring.trainer.repository.TrainerStatusHistoryRepository;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -46,6 +49,7 @@ import static org.mockito.Mockito.when;
 class TrainerAuthorizationServiceApplicationTest {
 
     @Mock private TrainerAuthorizationRepository authorizationRepository;
+    @Mock private TrainerAuthorizationSkillStatusRepository skillStatusRepository;
     @Mock private TrainerStatusHistoryRepository historyRepository;
     @Mock private MentorApplicationRepository applicationRepository;
     @Mock private EmployeeRepository employeeRepository;
@@ -98,5 +102,52 @@ class TrainerAuthorizationServiceApplicationTest {
         verify(authorizationRepository).save(authorizationCaptor.capture());
         assertEquals(applicationSkills, authorizationCaptor.getValue().getSkills());
         assertNotSame(application.getCatalogSkills(), authorizationCaptor.getValue().getSkills());
+    }
+
+    @Test
+    void addsApprovedApplicationSkillsToExistingAuthorizationInsteadOfCreatingAnother() {
+        User applicant = new User();
+        applicant.setId(8L);
+        Employee employee = new Employee();
+        employee.setId(6L);
+        employee.setUserId(8L);
+        employee.setEmploymentStatus(EmploymentStatus.ACTIVE);
+
+        Skill existingSkill = new Skill();
+        existingSkill.setId(1L);
+        Skill additionalSkill = new Skill();
+        additionalSkill.setId(2L);
+        TrainerAuthorization existingAuthorization = new TrainerAuthorization();
+        existingAuthorization.setEmployee(employee);
+        existingAuthorization.setSkills(new LinkedHashSet<>(List.of(existingSkill)));
+        org.springframework.test.util.ReflectionTestUtils.setField(existingAuthorization, "id", 66L);
+        TrainerAuthorizationSkillStatus existingSkillStatus = new TrainerAuthorizationSkillStatus();
+        existingSkillStatus.setSkill(existingSkill);
+        existingSkillStatus.setStatus(TrainerAuthorizationStatus.ACTIVE);
+        User reviewer = new User();
+        reviewer.setId(9L);
+
+        MentorApplication application = new MentorApplication();
+        org.springframework.test.util.ReflectionTestUtils.setField(application, "id", 4L);
+        application.setApplicant(applicant);
+        application.setCatalogSkill(existingSkill);
+        application.setCatalogSkills(new LinkedHashSet<>(List.of(existingSkill, additionalSkill)));
+
+        when(employeeRepository.findDetailedByUserId(8L)).thenReturn(Optional.of(employee));
+        when(authorizationRepository.findByEmployeeAndStatuses(
+                6L, List.of(TrainerAuthorizationStatus.ACTIVE, TrainerAuthorizationStatus.SUSPENDED)
+        )).thenReturn(List.of(existingAuthorization));
+        when(authorizationRepository.save(any(TrainerAuthorization.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+        when(skillStatusRepository.findByAuthorization_IdOrderBySkill_NameAsc(66L))
+                .thenReturn(List.of(existingSkillStatus));
+
+        TrainerAuthorization saved = service.authorizeApplication(application, reviewer);
+
+        assertEquals(existingAuthorization, saved);
+        assertEquals(Set.of(existingSkill, additionalSkill), saved.getSkills());
+        verify(authorizationRepository, org.mockito.Mockito.times(2)).save(existingAuthorization);
+        verify(skillStatusRepository).saveAll(any());
+        verify(historyRepository).saveAll(any());
     }
 }

@@ -21,6 +21,7 @@ import com.boa.apid.core.organization.repository.EmployeeRepository;
 import com.boa.apid.core.skills.entity.Skill;
 import com.boa.apid.core.skills.repository.SkillRepository;
 import com.boa.apid.mentoring.application.entity.MentorApplication;
+import com.boa.apid.mentoring.application.entity.MentorApplicationType;
 import com.boa.apid.mentoring.application.entity.MentorApplicationStatus;
 import com.boa.apid.mentoring.application.repository.MentorApplicationRepository;
 import com.boa.apid.mentoring.collaboration.repository.MentoringRelationshipFeedbackRepository;
@@ -36,6 +37,8 @@ import com.boa.apid.mentoring.pairing.repository.MentoringSessionRepository;
 import com.boa.apid.mentoring.pairing.entity.MentoringSessionStatus;
 import com.boa.apid.mentoring.trainer.dto.MentoringHrOverviewDto;
 import com.boa.apid.mentoring.trainer.dto.MentoringSkillDemandDto;
+import com.boa.apid.mentoring.trainer.dto.HrMentorProfileDto;
+import com.boa.apid.mentoring.trainer.dto.HrMentorProfileRequest;
 import com.boa.apid.mentoring.trainer.dto.TrainerAppointmentRequest;
 import com.boa.apid.mentoring.trainer.dto.TrainerDirectoryDto;
 import com.boa.apid.mentoring.trainer.dto.TrainerEmployeeCandidateDto;
@@ -46,8 +49,10 @@ import com.boa.apid.mentoring.trainer.dto.TrainerStatusRequest;
 import com.boa.apid.mentoring.trainer.entity.TrainerAuthorization;
 import com.boa.apid.mentoring.trainer.entity.TrainerAuthorizationSource;
 import com.boa.apid.mentoring.trainer.entity.TrainerAuthorizationStatus;
+import com.boa.apid.mentoring.trainer.entity.TrainerAuthorizationSkillStatus;
 import com.boa.apid.mentoring.trainer.entity.TrainerStatusHistory;
 import com.boa.apid.mentoring.trainer.repository.TrainerAuthorizationRepository;
+import com.boa.apid.mentoring.trainer.repository.TrainerAuthorizationSkillStatusRepository;
 import com.boa.apid.mentoring.trainer.repository.TrainerStatusHistoryRepository;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.http.HttpStatus;
@@ -71,12 +76,14 @@ public class TrainerAuthorizationService {
             List.of(TrainerAuthorizationStatus.ACTIVE, TrainerAuthorizationStatus.SUSPENDED);
 
     private final TrainerAuthorizationRepository authorizationRepository;
+    private final TrainerAuthorizationSkillStatusRepository skillStatusRepository;
     private final TrainerStatusHistoryRepository historyRepository;
     private final MentorApplicationRepository applicationRepository;
     private final EmployeeRepository employeeRepository;
     private final UserRepository userRepository;
     private final RoleRepository roleRepository;
     private final UserRoleRepository userRoleRepository;
+    private final MentorAvailabilityService availabilityService;
     private final SkillRepository skillRepository;
     private final MentoringRelationshipRepository relationshipRepository;
     private final MentoringRelationshipMemberRepository memberRepository;
@@ -91,12 +98,14 @@ public class TrainerAuthorizationService {
 
     public TrainerAuthorizationService(
             TrainerAuthorizationRepository authorizationRepository,
+            TrainerAuthorizationSkillStatusRepository skillStatusRepository,
             TrainerStatusHistoryRepository historyRepository,
             MentorApplicationRepository applicationRepository,
             EmployeeRepository employeeRepository,
             UserRepository userRepository,
             RoleRepository roleRepository,
             UserRoleRepository userRoleRepository,
+            MentorAvailabilityService availabilityService,
             SkillRepository skillRepository,
             MentoringRelationshipRepository relationshipRepository,
             MentoringRelationshipMemberRepository memberRepository,
@@ -110,12 +119,14 @@ public class TrainerAuthorizationService {
             ApplicationEventPublisher eventPublisher
     ) {
         this.authorizationRepository = authorizationRepository;
+        this.skillStatusRepository = skillStatusRepository;
         this.historyRepository = historyRepository;
         this.applicationRepository = applicationRepository;
         this.employeeRepository = employeeRepository;
         this.userRepository = userRepository;
         this.roleRepository = roleRepository;
         this.userRoleRepository = userRoleRepository;
+        this.availabilityService = availabilityService;
         this.skillRepository = skillRepository;
         this.relationshipRepository = relationshipRepository;
         this.memberRepository = memberRepository;
@@ -150,8 +161,7 @@ public class TrainerAuthorizationService {
                 .filter(authorization -> normalizedDepartment == null
                         || (authorization.getEmployee().getDepartmentName() != null
                         && authorization.getEmployee().getDepartmentName().toLowerCase().contains(normalizedDepartment)))
-                .filter(authorization -> skillId == null || authorization.getSkills().stream()
-                        .anyMatch(skill -> skill.getId().equals(skillId) && skill.isActive()))
+                .filter(authorization -> hasActiveSkill(authorization, skillId))
                 .toList();
         Set<Long> activeUserIds = userRepository.findAllById(
                         eligible.stream().map(authorization -> authorization.getEmployee().getUserId()).toList())
@@ -159,8 +169,10 @@ public class TrainerAuthorizationService {
                 .filter(user -> user.getStatus() == UserStatus.ACTIVE)
                 .map(User::getId)
                 .collect(java.util.stream.Collectors.toSet());
+        Set<Long> unavailableUserIds = availabilityService.notAcceptingNewPairings(activeUserIds);
         return eligible.stream()
                 .filter(authorization -> activeUserIds.contains(authorization.getEmployee().getUserId()))
+                .filter(authorization -> !unavailableUserIds.contains(authorization.getEmployee().getUserId()))
                 .map(this::toDirectoryDto)
                 .sorted(Comparator
                         .comparing((TrainerDirectoryDto trainer) -> skillId != null
@@ -259,6 +271,13 @@ public class TrainerAuthorizationService {
                         "Only an active account can be appointed as a trainer.",
                         HttpStatus.CONFLICT
                 ));
+        if (authorizationRepository.existsByEmployeeAndStatuses(employee.getId(), LIVE_STATUSES)) {
+            throw new BusinessException(
+                    "TRAINER_ALREADY_AUTHORIZED",
+                    "This employee already has a current trainer authorization.",
+                    HttpStatus.CONFLICT
+            );
+        }
         List<Skill> skills = resolveActiveSkills(skillIds);
         User appointingAdmin = userRepository.findById(actor.getUserId())
                 .orElseThrow(() -> new ResourceNotFoundException("HR account not found"));
@@ -273,7 +292,9 @@ public class TrainerAuthorizationService {
         authorization.setAuthorizedBy(appointingAdmin);
         authorization.setSkills(new LinkedHashSet<>(skills));
         TrainerAuthorization saved = authorizationRepository.save(authorization);
-        saveStatusHistory(saved, null, TrainerAuthorizationStatus.ACTIVE, request.appointmentReason().trim(), appointingAdmin);
+        saveSkillStatuses(saved, skills);
+        saveStatusHistory(saved, null, null, TrainerAuthorizationStatus.ACTIVE,
+                request.appointmentReason().trim(), appointingAdmin);
         notify(trainer.getId(), "TRAINER_DIRECTLY_APPOINTED", "You have been appointed as a mentor",
                 "HR appointed you to mentor employees. Set your mentoring profile and availability.",
                 "/mentoring?view=trainer");
@@ -286,30 +307,46 @@ public class TrainerAuthorizationService {
     public TrainerRosterDto changeStatus(Long authorizationId, TrainerStatusRequest request, ApidUserPrincipal actor) {
         TrainerAuthorization authorization = authorizationRepository.findByIdForUpdate(authorizationId)
                 .orElseThrow(() -> new ResourceNotFoundException("Trainer authorization not found"));
-        TrainerAuthorizationStatus previous = authorization.getStatus();
+        TrainerAuthorizationSkillStatus skillStatus = skillStatusRepository
+                .findByAuthorization_IdAndSkill_Id(authorizationId, request.skillId())
+                .orElseThrow(() -> new ResourceNotFoundException("Trainer skill authorization not found"));
+        TrainerAuthorizationStatus previous = skillStatus.getStatus();
         TrainerAuthorizationStatus next = request.status();
         validateStatusTransition(previous, next);
         String reason = request.reason().trim();
 
         if (next != TrainerAuthorizationStatus.ACTIVE) {
-            cancelPendingRequests(authorization.getEmployee().getUserId());
+            if (request.inFlightPolicy() == null) {
+                throw new BusinessException(
+                        "IN_FLIGHT_POLICY_REQUIRED",
+                        "Choose how existing relationships should be handled.",
+                        HttpStatus.BAD_REQUEST
+                );
+            }
+            cancelPendingRequests(authorization.getEmployee().getUserId(), request.skillId());
             if (request.inFlightPolicy() != TrainerInFlightPolicy.BLOCK_NEW_SESSIONS_ONLY) {
-                pauseActiveRelationships(authorization.getEmployee().getUserId());
+                pauseActiveRelationships(authorization.getEmployee().getUserId(), request.skillId());
             }
         }
 
-        authorization.setStatus(next);
-        authorization.setStatusReason(reason);
+        skillStatus.setStatus(next);
+        skillStatus.setStatusReason(reason);
+        skillStatusRepository.save(skillStatus);
+        authorization.setStatus(aggregateStatus(
+                skillStatusRepository.findByAuthorization_IdOrderBySkill_NameAsc(authorizationId)));
         TrainerAuthorization saved = authorizationRepository.save(authorization);
         User actorUser = userRepository.findById(actor.getUserId())
                 .orElseThrow(() -> new ResourceNotFoundException("HR account not found"));
-        saveStatusHistory(saved, previous, next, reason, actorUser);
-        notify(authorization.getEmployee().getUserId(), "TRAINER_STATUS_" + next.name(),
-                "Mentor authorization " + next.name().toLowerCase(),
-                "Your mentor authorization is now " + next.name().toLowerCase() + ". Reason: " + reason,
+        saveStatusHistory(saved, skillStatus.getSkill(), previous, next, reason, actorUser);
+        notify(authorization.getEmployee().getUserId(), "TRAINER_SKILL_STATUS_" + next.name(),
+                "Mentor skill " + next.name().toLowerCase(),
+                "Your authorization for " + skillStatus.getSkill().getName() + " is now "
+                        + next.name().toLowerCase() + ". Reason: " + reason,
                 "/mentoring?view=trainer");
-        recordAudit(actor, authorization.getEmployee().getUserId(), "TRAINER_STATUS_" + next.name(),
+        recordAudit(actor, authorization.getEmployee().getUserId(), "TRAINER_SKILL_STATUS_" + next.name(),
                 saved.getId(), Map.of("previousStatus", previous.name(), "newStatus", next.name(),
+                        "skillId", skillStatus.getSkill().getId(),
+                        "skillName", skillStatus.getSkill().getName(),
                         "reason", reason,
                         "inFlightPolicy", request.inFlightPolicy() == null ? "" : request.inFlightPolicy().name()));
         return toRosterDto(saved);
@@ -349,6 +386,102 @@ public class TrainerAuthorizationService {
         return toRosterDto(authorization);
     }
 
+    @Transactional(readOnly = true)
+    public HrMentorProfileDto getHrMentorProfile(ApidUserPrincipal actor) {
+        Employee employee = requireActiveEmployeeProfile(actor.getUserId());
+        TrainerAuthorization authorization = authorizationRepository
+                .findByEmployeeAndStatuses(employee.getId(), LIVE_STATUSES)
+                .stream()
+                .findFirst()
+                .orElse(null);
+        List<TrainerSkillDto> activeSkills = skillRepository.findAllByActiveTrueOrderByNameAsc().stream()
+                .map(skill -> new TrainerSkillDto(skill.getId(), skill.getName(), skill.getCategory(), null, null))
+                .toList();
+        return new HrMentorProfileDto(
+                availabilityService.isAcceptingNewPairings(actor.getUserId()),
+                authorization == null,
+                authorization == null ? null : toRosterDto(authorization),
+                activeSkills
+        );
+    }
+
+    @Transactional
+    public HrMentorProfileDto updateHrMentorProfile(
+            HrMentorProfileRequest request,
+            ApidUserPrincipal actor
+    ) {
+        User user = userRepository.findByIdForUpdate(actor.getUserId())
+                .orElseThrow(() -> new ResourceNotFoundException("HR account not found"));
+        Employee employee = requireActiveEmployeeProfile(actor.getUserId());
+        TrainerAuthorization authorization = authorizationRepository
+                .findByEmployeeAndStatuses(employee.getId(), LIVE_STATUSES)
+                .stream()
+                .findFirst()
+                .orElse(null);
+        boolean acceptingNewPairings = request.acceptingNewPairings();
+        boolean createdProfile = false;
+        List<Long> skillIds = request.skillIds() == null ? List.of() : request.skillIds();
+
+        if (authorization == null && acceptingNewPairings) {
+            if (skillIds.isEmpty() || skillIds.size() > 2) {
+                throw new BusinessException(
+                        "HR_MENTOR_SKILLS_REQUIRED",
+                        "Select one or two active skills to create your mentor profile."
+                );
+            }
+            List<Long> uniqueSkillIds = new ArrayList<>(new LinkedHashSet<>(skillIds));
+            if (uniqueSkillIds.size() != skillIds.size()) {
+                throw new BusinessException("DUPLICATE_TRAINER_SKILL", "Choose each mentor skill only once.");
+            }
+            List<Skill> skills = resolveActiveSkills(uniqueSkillIds);
+            authorization = new TrainerAuthorization();
+            authorization.setEmployee(employee);
+            authorization.setSourceType(TrainerAuthorizationSource.DIRECT_APPOINTMENT);
+            authorization.setStatus(TrainerAuthorizationStatus.ACTIVE);
+            authorization.setMaxConcurrentTrainees(
+                    request.maxConcurrentTrainees() == null ? 3 : request.maxConcurrentTrainees());
+            authorization.setAppointmentReason("HR administrator self-enabled mentor profile");
+            authorization.setAuthorizedBy(user);
+            authorization.setSkills(new LinkedHashSet<>(skills));
+            authorization = authorizationRepository.save(authorization);
+            saveSkillStatuses(authorization, skills);
+            saveStatusHistory(
+                    authorization,
+                    null,
+                    null,
+                    TrainerAuthorizationStatus.ACTIVE,
+                    "HR administrator self-enabled mentor profile",
+                    user
+            );
+            assignMentorRole(user, user);
+            createdProfile = true;
+        } else if (authorization != null && !skillIds.isEmpty()) {
+            authorization = addHrMentorSkills(authorization, skillIds, user);
+        } else if (authorization == null && !skillIds.isEmpty()) {
+            throw new BusinessException(
+                    "HR_MENTOR_PROFILE_REQUIRED",
+                    "Turn on your mentor badge to create a profile before adding skills."
+            );
+        }
+
+        availabilityService.setAcceptingNewPairings(actor.getUserId(), acceptingNewPairings);
+        Map<String, Object> auditDetails = new LinkedHashMap<>();
+        auditDetails.put("acceptingNewPairings", acceptingNewPairings);
+        auditDetails.put("profileCreated", createdProfile);
+        auditDetails.put("skillIds", skillIds);
+        String auditAction = skillIds.isEmpty()
+                ? "HR_MENTOR_AVAILABILITY_UPDATED"
+                : "HR_MENTOR_PROFILE_SKILLS_UPDATED";
+        recordAudit(
+                actor,
+                actor.getUserId(),
+                auditAction,
+                authorization == null ? null : authorization.getId(),
+                auditDetails
+        );
+        return getHrMentorProfile(actor);
+    }
+
     @Transactional
     public TrainerAuthorization authorizeApplication(MentorApplication application, User reviewer) {
         Employee employee = employeeRepository.findDetailedByUserId(application.getApplicant().getId())
@@ -358,6 +491,68 @@ public class TrainerAuthorizationService {
                         "A mentor applicant must have an active employee profile before approval.",
                         HttpStatus.CONFLICT
                 ));
+        Set<Skill> applicationSkills = application.getCatalogSkills().isEmpty()
+                ? (application.getCatalogSkill() == null ? Set.of() : Set.of(application.getCatalogSkill()))
+                : application.getCatalogSkills();
+        List<TrainerAuthorization> existingAuthorizations =
+                authorizationRepository.findByEmployeeAndStatuses(employee.getId(), LIVE_STATUSES);
+        if (!existingAuthorizations.isEmpty()) {
+            TrainerAuthorization authorization = existingAuthorizations.get(0);
+            Set<Skill> authorizedSkills = new LinkedHashSet<>(authorization.getSkills());
+            authorizedSkills.addAll(applicationSkills);
+            authorization.setSkills(authorizedSkills);
+            TrainerAuthorization saved = authorizationRepository.save(authorization);
+
+            String approvalSource = application.getApplicationType() == MentorApplicationType.SKILL_ADDITION
+                    ? "Mentor skill addition request"
+                    : "Mentor application";
+            String approvalReason = application.getId() == null
+                    ? approvalSource + " approved"
+                    : approvalSource + " " + application.getId() + " approved";
+            Map<Long, TrainerAuthorizationSkillStatus> statusesBySkillId =
+                    new LinkedHashMap<>();
+            skillStatusRepository.findByAuthorization_IdOrderBySkill_NameAsc(saved.getId())
+                    .forEach(status -> statusesBySkillId.put(status.getSkill().getId(), status));
+            List<TrainerAuthorizationSkillStatus> changedStatuses = new ArrayList<>();
+            List<TrainerStatusHistory> statusHistory = new ArrayList<>();
+            for (Skill skill : applicationSkills) {
+                TrainerAuthorizationSkillStatus skillStatus = statusesBySkillId.get(skill.getId());
+                TrainerAuthorizationStatus previousStatus = null;
+                if (skillStatus == null) {
+                    skillStatus = new TrainerAuthorizationSkillStatus();
+                    skillStatus.setAuthorization(saved);
+                    skillStatus.setSkill(skill);
+                } else {
+                    previousStatus = skillStatus.getStatus();
+                    if (previousStatus == TrainerAuthorizationStatus.ACTIVE) {
+                        continue;
+                    }
+                }
+                skillStatus.setStatus(TrainerAuthorizationStatus.ACTIVE);
+                skillStatus.setStatusReason(approvalReason);
+                changedStatuses.add(skillStatus);
+
+                TrainerStatusHistory history = new TrainerStatusHistory();
+                history.setAuthorization(saved);
+                history.setSkill(skill);
+                history.setPreviousStatus(previousStatus);
+                history.setNewStatus(TrainerAuthorizationStatus.ACTIVE);
+                history.setReason(approvalReason);
+                history.setChangedBy(reviewer);
+                statusHistory.add(history);
+            }
+            if (!changedStatuses.isEmpty()) {
+                skillStatusRepository.saveAll(changedStatuses);
+                historyRepository.saveAll(statusHistory);
+            }
+            List<TrainerAuthorizationSkillStatus> updatedStatuses =
+                    skillStatusRepository.findByAuthorization_IdOrderBySkill_NameAsc(saved.getId());
+            if (!updatedStatuses.isEmpty()) {
+                saved.setStatus(aggregateStatus(updatedStatuses));
+            }
+            return authorizationRepository.save(saved);
+        }
+
         TrainerAuthorization authorization = new TrainerAuthorization();
         authorization.setEmployee(employee);
         authorization.setSourceType(TrainerAuthorizationSource.APPLICATION);
@@ -369,11 +564,10 @@ public class TrainerAuthorizationService {
         authorization.setBio(application.getExpertiseSummary());
         authorization.setAvailabilityNotes(application.getAvailabilityNotes());
         authorization.setAuthorizedBy(reviewer);
-        Set<Skill> applicationSkills = application.getCatalogSkills().isEmpty()
-                ? (application.getCatalogSkill() == null ? Set.of() : Set.of(application.getCatalogSkill()))
-                : application.getCatalogSkills();
         authorization.setSkills(new LinkedHashSet<>(applicationSkills));
-        return authorizationRepository.save(authorization);
+        TrainerAuthorization saved = authorizationRepository.save(authorization);
+        saveSkillStatuses(saved, applicationSkills);
+        return saved;
     }
 
     @Transactional(readOnly = true)
@@ -386,13 +580,12 @@ public class TrainerAuthorizationService {
 
         List<MentoringSkillDemandDto> supply = skillRepository.findAllByActiveTrueOrderByNameAsc().stream()
                 .map(skill -> {
-                    long trainers = current.stream()
+                    List<TrainerAuthorization> skillTrainers = current.stream()
                             .filter(auth -> auth.getStatus() == TrainerAuthorizationStatus.ACTIVE)
-                            .filter(auth -> auth.getSkills().stream().anyMatch(candidate -> candidate.getId().equals(skill.getId())))
-                            .count();
-                    long slots = current.stream()
-                            .filter(auth -> auth.getStatus() == TrainerAuthorizationStatus.ACTIVE)
-                            .filter(auth -> auth.getSkills().stream().anyMatch(candidate -> candidate.getId().equals(skill.getId())))
+                            .filter(auth -> hasActiveSkill(auth, skill.getId()))
+                            .toList();
+                    long trainers = skillTrainers.size();
+                    long slots = skillTrainers.stream()
                             .mapToLong(auth -> Math.max(0,
                                     auth.getMaxConcurrentTrainees()
                                             - (int) relationshipRepository.countActiveTraineesByMentorUserId(
@@ -419,7 +612,10 @@ public class TrainerAuthorizationService {
                 applicationRepository.countByStatus(MentorApplicationStatus.PENDING),
                 applicationRepository.countByStatus(MentorApplicationStatus.APPROVED),
                 applicationRepository.countByStatus(MentorApplicationStatus.DECLINED),
-                current.stream().filter(auth -> auth.getStatus() == TrainerAuthorizationStatus.ACTIVE).count(),
+                current.stream()
+                        .filter(auth -> auth.getStatus() == TrainerAuthorizationStatus.ACTIVE)
+                        .filter(auth -> hasActiveSkill(auth, null))
+                        .count(),
                 current.stream().filter(auth -> auth.getStatus() == TrainerAuthorizationStatus.SUSPENDED).count(),
                 current.stream().filter(auth -> auth.getStatus() == TrainerAuthorizationStatus.REVOKED).count(),
                 relationshipRepository.countByStatus(MentoringRelationshipStatus.ACTIVE),
@@ -437,46 +633,49 @@ public class TrainerAuthorizationService {
         if (previous == next) {
             throw new BusinessException("TRAINER_STATUS_UNCHANGED", "Choose a different trainer status.");
         }
-        if (previous == TrainerAuthorizationStatus.REVOKED) {
-            throw new BusinessException(
-                    "TRAINER_AUTHORIZATION_REVOKED",
-                    "A revoked trainer cannot be restored; the employee must be reappointed.",
-                    HttpStatus.CONFLICT
-            );
-        }
         if (previous != TrainerAuthorizationStatus.ACTIVE && next != TrainerAuthorizationStatus.ACTIVE) {
-            throw new BusinessException("INVALID_TRAINER_STATUS_TRANSITION", "Restore the trainer before changing status again.");
+            throw new BusinessException(
+                    "INVALID_TRAINER_STATUS_TRANSITION",
+                    "Restore this skill before changing its status again."
+            );
         }
     }
 
-    private void cancelPendingRequests(Long mentorUserId) {
+    private void cancelPendingRequests(Long mentorUserId, Long skillId) {
         if (mentorUserId == null) {
             return;
         }
         List<com.boa.apid.mentoring.pairing.entity.MentoringRequestRecipient> pending =
                 recipientRepository.findByRequest_MentorUser_IdAndStatus(
-                        mentorUserId, MentoringRequestRecipientStatus.PENDING);
+                        mentorUserId, MentoringRequestRecipientStatus.PENDING).stream()
+                        .filter(recipient -> recipient.getRequest().getSkill() != null
+                                && recipient.getRequest().getSkill().getId().equals(skillId))
+                        .toList();
         for (var recipient : pending) {
             recipient.setStatus(MentoringRequestRecipientStatus.CANCELLED);
             recipient.setRespondedAt(Instant.now());
             notificationService.notify(
-                    recipient.getRequest().getInitiatedByUser().getId(),
+                    recipient.getTraineeUser().getId(),
                     NotificationModule.MENTORING,
                     "MENTORING_REQUEST_CANCELLED",
                     "Mentoring request cancelled",
-                    "A pending mentoring request was cancelled because the mentor's authorization changed.",
+                    "A pending mentoring request was cancelled because the mentor's authorization for "
+                            + recipient.getRequest().getSkill().getName() + " changed.",
                     "/mentoring?view=trainee"
             );
         }
         recipientRepository.saveAll(pending);
     }
 
-    private void pauseActiveRelationships(Long mentorUserId) {
+    private void pauseActiveRelationships(Long mentorUserId, Long skillId) {
         if (mentorUserId == null) {
             return;
         }
         List<MentoringRelationship> relationships = relationshipRepository.findByMentorUser_IdAndStatus(
-                mentorUserId, MentoringRelationshipStatus.ACTIVE);
+                mentorUserId, MentoringRelationshipStatus.ACTIVE).stream()
+                .filter(relationship -> relationship.getRequest().getSkill() != null
+                        && relationship.getRequest().getSkill().getId().equals(skillId))
+                .toList();
         for (MentoringRelationship relationship : relationships) {
             relationship.setStatus(MentoringRelationshipStatus.PAUSED);
             memberRepository.findByRelationship_IdOrderByJoinedAtAsc(relationship.getId()).stream()
@@ -486,7 +685,8 @@ public class TrainerAuthorizationService {
                             member.getTraineeUser().getId(),
                             "MENTORING_RELATIONSHIP_PAUSED",
                             "Mentoring relationship paused",
-                            "Your mentoring relationship has been paused while HR reviews the mentor's authorization.",
+                            "This relationship was paused while HR reviews the mentor's authorization for "
+                                    + relationship.getRequest().getSkill().getName() + ".",
                             "/mentoring/pairing/" + relationship.getId()
                     ));
         }
@@ -512,6 +712,87 @@ public class TrainerAuthorizationService {
             userRoleRepository.save(userRole);
             eventPublisher.publishEvent(PermissionCacheInvalidationEvent.forUser(trainer.getId()));
         }
+    }
+
+    private Employee requireActiveEmployeeProfile(Long userId) {
+        return employeeRepository.findDetailedByUserId(userId)
+                .filter(employee -> employee.getEmploymentStatus() == EmploymentStatus.ACTIVE)
+                .orElseThrow(() -> new BusinessException(
+                        "ACTIVE_EMPLOYEE_PROFILE_REQUIRED",
+                        "An active employee profile is required to become a mentor.",
+                        HttpStatus.CONFLICT
+                ));
+    }
+
+    private TrainerAuthorization addHrMentorSkills(
+            TrainerAuthorization authorization,
+            List<Long> skillIds,
+            User actor
+    ) {
+        if (authorization.getStatus() != TrainerAuthorizationStatus.ACTIVE) {
+            throw new BusinessException(
+                    "HR_MENTOR_AUTHORIZATION_INACTIVE",
+                    "Your mentor authorization must be active before updating its skills.",
+                    HttpStatus.CONFLICT
+            );
+        }
+        List<Long> uniqueSkillIds = new ArrayList<>(new LinkedHashSet<>(skillIds));
+        if (uniqueSkillIds.size() != skillIds.size()) {
+            throw new BusinessException("DUPLICATE_TRAINER_SKILL", "Choose each mentor skill only once.");
+        }
+
+        List<Skill> skillsToAdd = resolveActiveSkills(uniqueSkillIds);
+        Map<Long, TrainerAuthorizationSkillStatus> statusesBySkillId = new LinkedHashMap<>();
+        skillStatusRepository.findByAuthorization_IdOrderBySkill_NameAsc(authorization.getId())
+                .forEach(status -> statusesBySkillId.put(status.getSkill().getId(), status));
+        Set<Skill> authorizedSkills = new LinkedHashSet<>(authorization.getSkills());
+        List<TrainerAuthorizationSkillStatus> changedStatuses = new ArrayList<>();
+        List<TrainerStatusHistory> statusHistory = new ArrayList<>();
+        String reason = "HR administrator updated mentor skills";
+
+        for (Skill skill : skillsToAdd) {
+            TrainerAuthorizationSkillStatus skillStatus = statusesBySkillId.get(skill.getId());
+            TrainerAuthorizationStatus previousStatus = null;
+            if (skillStatus == null) {
+                skillStatus = new TrainerAuthorizationSkillStatus();
+                skillStatus.setAuthorization(authorization);
+                skillStatus.setSkill(skill);
+            } else {
+                throw new BusinessException(
+                        skillStatus.getStatus() == TrainerAuthorizationStatus.ACTIVE
+                                ? "MENTOR_SKILL_ALREADY_ACTIVE"
+                                : "MENTOR_SKILL_STATUS_MANAGED_BY_HR",
+                        skillStatus.getStatus() == TrainerAuthorizationStatus.ACTIVE
+                                ? skill.getName() + " is already active on your mentor profile."
+                                : skill.getName() + " already has an HR-managed status.",
+                        HttpStatus.CONFLICT
+                );
+            }
+            authorizedSkills.add(skill);
+            skillStatus.setStatus(TrainerAuthorizationStatus.ACTIVE);
+            skillStatus.setStatusReason(reason);
+            changedStatuses.add(skillStatus);
+
+            TrainerStatusHistory history = new TrainerStatusHistory();
+            history.setAuthorization(authorization);
+            history.setSkill(skill);
+            history.setPreviousStatus(previousStatus);
+            history.setNewStatus(TrainerAuthorizationStatus.ACTIVE);
+            history.setReason(reason);
+            history.setChangedBy(actor);
+            statusHistory.add(history);
+        }
+
+        authorization.setSkills(authorizedSkills);
+        TrainerAuthorization saved = authorizationRepository.save(authorization);
+        skillStatusRepository.saveAll(changedStatuses);
+        historyRepository.saveAll(statusHistory);
+        List<TrainerAuthorizationSkillStatus> updatedStatuses =
+                skillStatusRepository.findByAuthorization_IdOrderBySkill_NameAsc(saved.getId());
+        if (!updatedStatuses.isEmpty()) {
+            saved.setStatus(aggregateStatus(updatedStatuses));
+        }
+        return authorizationRepository.save(saved);
     }
 
     private List<Skill> resolveActiveSkills(List<Long> skillIds) {
@@ -541,12 +822,15 @@ public class TrainerAuthorizationService {
                 employee.getEmploymentStatus().name(),
                 authorization.getSourceType(),
                 authorization.getStatus(),
+                authorization.getStatus() == TrainerAuthorizationStatus.ACTIVE
+                        && userId != null
+                        && availabilityService.isAcceptingNewPairings(userId),
                 active,
                 pending,
                 authorization.getMaxConcurrentTrainees(),
                 authorization.getBio(),
                 authorization.getAvailabilityNotes(),
-                skills(authorization),
+                skills(authorization, false),
                 authorization.getEffectiveFrom(),
                 authorization.getUpdatedAt()
         );
@@ -572,20 +856,59 @@ public class TrainerAuthorizationService {
                 active,
                 Math.max(0, authorization.getMaxConcurrentTrainees() - active - pending),
                 averageRating == null ? 0 : averageRating,
-                skills(authorization)
+                skills(authorization, true)
         );
     }
 
-    private List<TrainerSkillDto> skills(TrainerAuthorization authorization) {
-        return authorization.getSkills().stream()
-                .filter(Skill::isActive)
-                .sorted(Comparator.comparing(Skill::getName, String.CASE_INSENSITIVE_ORDER))
-                .map(skill -> new TrainerSkillDto(skill.getId(), skill.getName(), skill.getCategory()))
+    private List<TrainerSkillDto> skills(TrainerAuthorization authorization, boolean activeOnly) {
+        return skillStatusRepository.findByAuthorization_IdOrderBySkill_NameAsc(authorization.getId()).stream()
+                .filter(status -> status.getSkill().isActive())
+                .filter(status -> !activeOnly || status.getStatus() == TrainerAuthorizationStatus.ACTIVE)
+                .map(status -> new TrainerSkillDto(
+                        status.getSkill().getId(),
+                        status.getSkill().getName(),
+                        status.getSkill().getCategory(),
+                        status.getStatus(),
+                        status.getStatusReason()
+                ))
                 .toList();
+    }
+
+    private void saveSkillStatuses(TrainerAuthorization authorization, Iterable<Skill> skills) {
+        List<TrainerAuthorizationSkillStatus> statuses = new ArrayList<>();
+        for (Skill skill : skills) {
+            TrainerAuthorizationSkillStatus status = new TrainerAuthorizationSkillStatus();
+            status.setAuthorization(authorization);
+            status.setSkill(skill);
+            status.setStatus(TrainerAuthorizationStatus.ACTIVE);
+            statuses.add(status);
+        }
+        skillStatusRepository.saveAll(statuses);
+    }
+
+    private boolean hasActiveSkill(TrainerAuthorization authorization, Long skillId) {
+        return skillStatusRepository.findByAuthorization_IdOrderBySkill_NameAsc(authorization.getId()).stream()
+                .anyMatch(status -> status.getStatus() == TrainerAuthorizationStatus.ACTIVE
+                        && status.getSkill().isActive()
+                        && (skillId == null || status.getSkill().getId().equals(skillId)));
+    }
+
+    private TrainerAuthorizationStatus aggregateStatus(List<TrainerAuthorizationSkillStatus> statuses) {
+        if (statuses.isEmpty()) {
+            throw new IllegalStateException("Trainer authorization has no skill status records.");
+        }
+        if (statuses.stream().anyMatch(status -> status.getStatus() == TrainerAuthorizationStatus.ACTIVE)) {
+            return TrainerAuthorizationStatus.ACTIVE;
+        }
+        if (statuses.stream().anyMatch(status -> status.getStatus() == TrainerAuthorizationStatus.SUSPENDED)) {
+            return TrainerAuthorizationStatus.SUSPENDED;
+        }
+        return TrainerAuthorizationStatus.REVOKED;
     }
 
     private void saveStatusHistory(
             TrainerAuthorization authorization,
+            Skill skill,
             TrainerAuthorizationStatus previous,
             TrainerAuthorizationStatus next,
             String reason,
@@ -593,6 +916,7 @@ public class TrainerAuthorizationService {
     ) {
         TrainerStatusHistory history = new TrainerStatusHistory();
         history.setAuthorization(authorization);
+        history.setSkill(skill);
         history.setPreviousStatus(previous);
         history.setNewStatus(next);
         history.setReason(reason);

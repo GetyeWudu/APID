@@ -52,11 +52,17 @@ export function TrainerApplicationsTab({
         queryClient.invalidateQueries({ queryKey: ['mentoring', 'hr-overview'] }),
         queryClient.invalidateQueries({ queryKey: ['mentoring', 'directory'] }),
       ]);
-      pushToast({
-        title: 'Application approved',
-        message: `${application.applicantUsername} is now an approved mentor.`,
-        tone: 'ok',
-      });
+      pushToast(application.applicationType === 'SKILL_ADDITION'
+        ? {
+            title: 'Skill request approved',
+            message: `The approved skills were added to ${application.applicantUsername}'s mentor profile.`,
+            tone: 'ok',
+          }
+        : {
+            title: 'Application approved',
+            message: `${application.applicantUsername} is now an approved mentor.`,
+            tone: 'ok',
+          });
     } catch (error) {
       pushToast({
         title: 'Unable to approve application',
@@ -89,8 +95,10 @@ export function TrainerApplicationsTab({
         queryClient.invalidateQueries({ queryKey: ['mentoring', 'hr-overview'] }),
       ]);
       pushToast({
-        title: 'Application declined',
-        message: 'The applicant has been notified of the decision.',
+        title: decisionTarget.applicationType === 'SKILL_ADDITION'
+          ? 'Skill request declined'
+          : 'Application declined',
+        message: `${decisionTarget.applicantUsername} has been notified of the decision.`,
         tone: 'info',
       });
       setDecisionTarget(null);
@@ -138,6 +146,7 @@ export function TrainerApplicationsTab({
             <thead>
               <tr>
                 <th>Applicant</th>
+                <th>Request type</th>
                 <th>Skill</th>
                 <th>Certificate Evidence</th>
                 <th>Status</th>
@@ -156,6 +165,7 @@ export function TrainerApplicationsTab({
                       Application #{app.id}
                     </div>
                   </td>
+                  <td>{app.applicationType === 'SKILL_ADDITION' ? 'Additional skills' : 'Initial mentor application'}</td>
                   <td>
                     <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.25rem' }}>
                       {(app.skillNames?.length ? app.skillNames : [app.skillName]).map((skillName) => (
@@ -255,7 +265,9 @@ export function TrainerApplicationsTab({
           aria-label="Decline mentor application"
         >
           <div className="apid-card apid-modal">
-            <h3 style={{ marginTop: 0 }}>Decline Application #{decisionTarget.id}</h3>
+            <h3 style={{ marginTop: 0 }}>
+              Decline {decisionTarget.applicationType === 'SKILL_ADDITION' ? 'Skill Request' : 'Application'} #{decisionTarget.id}
+            </h3>
             <p className="boa-muted" style={{ fontSize: '0.84rem' }}>
               Applicant: <strong>{decisionTarget.applicantUsername}</strong>
             </p>

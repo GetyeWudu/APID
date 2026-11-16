@@ -39,13 +39,17 @@ public interface MentoringRequestRecipientRepository extends JpaRepository<Mento
     @Query("""
             SELECT CASE WHEN COUNT(recipient) > 0 THEN true ELSE false END
             FROM MentoringRequestRecipient recipient
-            WHERE recipient.request.mentorUser.id = :mentorUserId
+            JOIN recipient.request request
+            LEFT JOIN request.skill skill
+            WHERE request.mentorUser.id = :mentorUserId
               AND recipient.traineeUser.id = :traineeUserId
+              AND ((:skillId IS NULL AND skill IS NULL) OR skill.id = :skillId)
               AND recipient.status = :status
             """)
     boolean existsByMentorTraineeAndStatus(
             @Param("mentorUserId") Long mentorUserId,
             @Param("traineeUserId") Long traineeUserId,
+            @Param("skillId") Long skillId,
             @Param("status") MentoringRequestRecipientStatus status
     );
 
@@ -60,7 +64,9 @@ public interface MentoringRequestRecipientRepository extends JpaRepository<Mento
             @Param("status") MentoringRequestRecipientStatus status
     );
 
-    @EntityGraph(attributePaths = {"request", "request.initiatedByUser", "recipientUser", "traineeUser"})
+    @EntityGraph(attributePaths = {
+            "request", "request.initiatedByUser", "request.skill", "recipientUser", "traineeUser"
+    })
     List<MentoringRequestRecipient> findByRequest_MentorUser_IdAndStatus(
             Long mentorUserId,
             MentoringRequestRecipientStatus status

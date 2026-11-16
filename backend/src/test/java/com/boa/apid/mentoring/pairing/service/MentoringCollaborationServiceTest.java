@@ -8,6 +8,7 @@ import com.boa.apid.core.authorization.repository.UserRepository;
 import com.boa.apid.core.authorization.repository.UserRoleRepository;
 import com.boa.apid.core.organization.entity.EmploymentStatus;
 import com.boa.apid.core.organization.repository.EmployeeRepository;
+import com.boa.apid.core.skills.entity.Skill;
 import com.boa.apid.mentoring.pairing.dto.MentoringChatMessageRequest;
 import com.boa.apid.mentoring.pairing.dto.MentoringSessionRequest;
 import com.boa.apid.mentoring.pairing.entity.MentoringDeliveryMode;
@@ -23,7 +24,10 @@ import com.boa.apid.mentoring.pairing.repository.MentoringRelationshipMemberRepo
 import com.boa.apid.mentoring.pairing.repository.MentoringRelationshipRepository;
 import com.boa.apid.mentoring.pairing.repository.MentoringSessionRepository;
 import com.boa.apid.mentoring.trainer.entity.TrainerAuthorization;
+import com.boa.apid.mentoring.trainer.entity.TrainerAuthorizationStatus;
+import com.boa.apid.mentoring.trainer.entity.TrainerAuthorizationSkillStatus;
 import com.boa.apid.mentoring.trainer.repository.TrainerAuthorizationRepository;
+import com.boa.apid.mentoring.trainer.repository.TrainerAuthorizationSkillStatusRepository;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -57,6 +61,7 @@ class MentoringCollaborationServiceTest {
     @Mock private UserRepository userRepository;
     @Mock private UserRoleRepository userRoleRepository;
     @Mock private TrainerAuthorizationRepository trainerAuthorizationRepository;
+    @Mock private TrainerAuthorizationSkillStatusRepository skillStatusRepository;
 
     @InjectMocks
     private MentoringCollaborationService service;
@@ -65,6 +70,7 @@ class MentoringCollaborationServiceTest {
     void provideActiveTrainerAuthorization() {
         TrainerAuthorization authorization = new TrainerAuthorization();
         authorization.setMaxConcurrentTrainees(3);
+        org.springframework.test.util.ReflectionTestUtils.setField(authorization, "id", 101L);
         org.mockito.Mockito.lenient()
                 .when(trainerAuthorizationRepository.findActiveByUserId(any()))
                 .thenReturn(List.of(authorization));
@@ -110,6 +116,33 @@ class MentoringCollaborationServiceTest {
         assertEquals(start, captor.getValue().getScheduledStart());
         assertEquals(MentoringDeliveryMode.ONLINE, captor.getValue().getDeliveryMode());
         assertEquals(1L, captor.getValue().getCreatedByUser().getId());
+    }
+
+    @Test
+    void cannotScheduleSessionWhenThatSkillAuthorizationIsInactive() {
+        User mentor = user(1L, "mentor");
+        MentoringRelationship relationship = relationship(mentor, MentoringRelationshipStatus.ACTIVE);
+        Skill skill = new Skill();
+        skill.setId(9L);
+        relationship.getRequest().setSkill(skill);
+        TrainerAuthorizationSkillStatus skillStatus = new TrainerAuthorizationSkillStatus();
+        skillStatus.setStatus(TrainerAuthorizationStatus.SUSPENDED);
+        when(relationshipRepository.findDetailedById(7L)).thenReturn(Optional.of(relationship));
+        when(userRoleRepository.existsActiveMentorRoleByUserId(1L)).thenReturn(true);
+        when(employeeRepository.existsByUserIdAndEmploymentStatus(1L, EmploymentStatus.ACTIVE)).thenReturn(true);
+        when(skillStatusRepository.findByAuthorization_IdAndSkill_Id(101L, 9L))
+                .thenReturn(Optional.of(skillStatus));
+
+        assertThrows(
+                BusinessException.class,
+                () -> service.createSession(
+                        7L,
+                        sessionRequest(Instant.now().plusSeconds(3600), Instant.now().plusSeconds(7200)),
+                        actor(1L, "mentor")
+                )
+        );
+
+        verify(sessionRepository, never()).save(any(MentoringSession.class));
     }
 
     @Test

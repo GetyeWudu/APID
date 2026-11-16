@@ -1,6 +1,7 @@
 package com.boa.apid.mentoring.pairing.entity;
 
 import com.boa.apid.core.authorization.entity.User;
+import com.boa.apid.core.skills.entity.Skill;
 import jakarta.persistence.*;
 
 import java.time.Instant;
@@ -29,6 +30,10 @@ public class MentoringRelationshipMember {
     @JoinColumn(name = "trainee_user_id", nullable = false)
     private User traineeUser;
 
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "skill_id")
+    private Skill skill;
+
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 20)
     private MentoringRelationshipMemberStatus status = MentoringRelationshipMemberStatus.ACTIVE;
@@ -55,6 +60,8 @@ public class MentoringRelationshipMember {
     public void setMentorUser(User mentorUser) { this.mentorUser = mentorUser; }
     public User getTraineeUser() { return traineeUser; }
     public void setTraineeUser(User traineeUser) { this.traineeUser = traineeUser; }
+    public Skill getSkill() { return skill; }
+    public void setSkill(Skill skill) { this.skill = skill; }
     public MentoringRelationshipMemberStatus getStatus() { return status; }
     public void setStatus(MentoringRelationshipMemberStatus status) { this.status = status; }
     public Instant getJoinedAt() { return joinedAt; }

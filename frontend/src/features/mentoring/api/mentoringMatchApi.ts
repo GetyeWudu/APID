@@ -78,7 +78,11 @@ export const mentoringMatchApi = {
     return response.data.data;
   },
 
-  async directMatch(input: { mentorUserId: number; traineeUserId: number }): Promise<MentoringDirectMatchResult> {
+  async directMatch(input: {
+    mentorUserId: number;
+    traineeUserId: number;
+    skillId: number;
+  }): Promise<MentoringDirectMatchResult> {
     const response = await apiClient.post<ApiResponse<MentoringDirectMatchResult>>(
       '/mentoring/hr/direct-matches',
       input

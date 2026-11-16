@@ -10,6 +10,8 @@ export interface TrainerSkill {
   id: number;
   name: string;
   category: string;
+  status?: TrainerAuthorizationStatus;
+  statusReason?: string | null;
 }
 
 export interface TrainerRosterItem {
@@ -22,6 +24,7 @@ export interface TrainerRosterItem {
   employmentStatus: string;
   sourceType: TrainerAuthorizationSource;
   status: TrainerAuthorizationStatus;
+  acceptingNewPairings?: boolean;
   activeTrainees: number;
   pendingTrainees: number;
   maxConcurrentTrainees: number;
@@ -78,6 +81,13 @@ export interface MentoringHrOverview {
   skillSupplyDemand: MentoringSkillDemand[];
 }
 
+export interface HrMentorProfile {
+  acceptingNewPairings: boolean;
+  profileSetupRequired: boolean;
+  profile: TrainerRosterItem | null;
+  activeSkills: TrainerSkill[];
+}
+
 export const mentoringTrainerApi = {
   async listRoster(): Promise<TrainerRosterItem[]> {
     const response = await apiClient.get<ApiResponse<TrainerRosterItem[]>>('/mentoring/hr/trainers');
@@ -124,6 +134,7 @@ export const mentoringTrainerApi = {
   async changeStatus(
     authorizationId: number,
     input: {
+      skillId: number;
       status: TrainerAuthorizationStatus;
       inFlightPolicy?: TrainerInFlightPolicy;
       reason: string;
@@ -147,6 +158,23 @@ export const mentoringTrainerApi = {
 
   async getProfile(): Promise<TrainerRosterItem> {
     const response = await apiClient.get<ApiResponse<TrainerRosterItem>>('/mentoring/trainer-profile');
+    return response.data.data;
+  },
+
+  async getHrMentorProfile(): Promise<HrMentorProfile> {
+    const response = await apiClient.get<ApiResponse<HrMentorProfile>>('/mentoring/hr/my-mentor-profile');
+    return response.data.data;
+  },
+
+  async updateHrMentorProfile(input: {
+    acceptingNewPairings: boolean;
+    skillIds?: number[];
+    maxConcurrentTrainees?: number;
+  }): Promise<HrMentorProfile> {
+    const response = await apiClient.patch<ApiResponse<HrMentorProfile>>(
+      '/mentoring/hr/my-mentor-profile',
+      input
+    );
     return response.data.data;
   },
 };

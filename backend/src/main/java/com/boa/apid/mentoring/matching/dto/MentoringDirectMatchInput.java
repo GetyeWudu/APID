@@ -4,6 +4,7 @@ import jakarta.validation.constraints.NotNull;
 
 public record MentoringDirectMatchInput(
         @NotNull Long mentorUserId,
-        @NotNull Long traineeUserId
+        @NotNull Long traineeUserId,
+        @NotNull Long skillId
 ) {
 }

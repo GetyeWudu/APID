@@ -16,10 +16,11 @@ export function HrDirectMatchingTab({
 }) {
   const [mentorUserId, setMentorUserId] = useState('');
   const [traineeUserId, setTraineeUserId] = useState('');
+  const [skillId, setSkillId] = useState('');
   const queryClient = useQueryClient();
   const { pushToast } = useToast();
   const matchMutation = useMutation({
-    mutationFn: (input: { mentorUserId: number; traineeUserId: number }) =>
+    mutationFn: (input: { mentorUserId: number; traineeUserId: number; skillId: number }) =>
       mentoringMatchApi.directMatch(input),
     onSuccess: async (match) => {
       await Promise.all([
@@ -30,6 +31,7 @@ export function HrDirectMatchingTab({
       ]);
       setMentorUserId('');
       setTraineeUserId('');
+      setSkillId('');
       pushToast({
         title: 'Mentor and trainee matched',
         message: `${match.mentorName} and ${match.traineeName} are now paired. Both participants were notified.`,
@@ -47,10 +49,15 @@ export function HrDirectMatchingTab({
   const eligibleMentors = trainers.filter((trainer) =>
     trainer.userId !== null &&
     trainer.status === 'ACTIVE' &&
+    trainer.acceptingNewPairings !== false &&
     trainer.employmentStatus === 'ACTIVE' &&
+    trainer.skills.some((skill) => skill.status === 'ACTIVE') &&
     trainer.activeTrainees + trainer.pendingTrainees < trainer.maxConcurrentTrainees
   );
   const selectedMentor = eligibleMentors.find((mentor) => String(mentor.userId) === mentorUserId);
+  const availableSkills = selectedMentor?.skills.filter((skill) =>
+    skill.status === undefined ? selectedMentor.status === 'ACTIVE' : skill.status === 'ACTIVE'
+  ) ?? [];
   const eligibleTrainees = employees.filter((employee) =>
     String(employee.userId) !== mentorUserId
   );
@@ -82,6 +89,7 @@ export function HrDirectMatchingTab({
               onChange={(event) => {
                 setMentorUserId(event.target.value);
                 if (event.target.value === traineeUserId) setTraineeUserId('');
+                setSkillId('');
               }}
             >
               <option value="">Select an active mentor</option>
@@ -89,6 +97,22 @@ export function HrDirectMatchingTab({
                 <option key={mentor.userId} value={mentor.userId ?? ''}>
                   {mentor.fullName} · {mentor.activeTrainees + mentor.pendingTrainees}/{mentor.maxConcurrentTrainees}
                 </option>
+              ))}
+            </select>
+          </label>
+          <label className="boa-stack" style={{ gap: '0.35rem' }}>
+            Skill
+            <select
+              className="apid-input"
+              aria-label="Skill"
+              value={skillId}
+              onChange={(event) => setSkillId(event.target.value)}
+              disabled={!selectedMentor}
+              required
+            >
+              <option value="">Select a skill for this pairing</option>
+              {availableSkills.map((skill) => (
+                <option key={skill.id} value={skill.id}>{skill.name}</option>
               ))}
             </select>
           </label>
@@ -113,10 +137,11 @@ export function HrDirectMatchingTab({
             <button
               type="button"
               className="apid-btn apid-btn-primary"
-              disabled={!selectedMentor || !traineeUserId || matchMutation.isPending}
+              disabled={!selectedMentor || !skillId || !traineeUserId || matchMutation.isPending}
               onClick={() => matchMutation.mutate({
                 mentorUserId: Number(mentorUserId),
                 traineeUserId: Number(traineeUserId),
+                skillId: Number(skillId),
               })}
             >
               <Link2 size={14} /> Match mentor and trainee

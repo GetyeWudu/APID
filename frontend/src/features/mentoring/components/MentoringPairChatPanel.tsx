@@ -79,8 +79,8 @@ export function MentoringPairChatPanel({ relationshipId }: { relationshipId: num
 
   const detail = detailQuery.data;
   const currentTrainee = detail.trainees.find((trainee) => trainee.userId === user?.id);
-  const canChat =
-    (detail.status === 'ACTIVE' || detail.status === 'PAUSED') &&
+  const canSendMessages =
+    detail.status === 'ACTIVE' &&
     (detail.currentUserRole === 'MENTOR' || currentTrainee?.status === 'ACTIVE');
   const messages = (chatQuery.data?.pages ?? [])
     .slice()
@@ -90,7 +90,7 @@ export function MentoringPairChatPanel({ relationshipId }: { relationshipId: num
   const handleSendMessage = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const body = messageBody.trim();
-    if (body && canChat) {
+    if (body && canSendMessages) {
       sendMessageMutation.mutate(body);
     }
   };
@@ -154,25 +154,27 @@ export function MentoringPairChatPanel({ relationshipId }: { relationshipId: num
         <textarea
           className="apid-input"
           aria-label="Write a message"
-          placeholder={canChat ? 'Write a message to this pairing...' : 'This pairing chat is read-only.'}
+          placeholder={canSendMessages ? 'Write a message to this pairing...' : 'This pairing chat is read-only.'}
           maxLength={4000}
           rows={2}
           value={messageBody}
           onChange={(event) => setMessageBody(event.target.value)}
-          disabled={!canChat || sendMessageMutation.isPending}
+          disabled={!canSendMessages || sendMessageMutation.isPending}
         />
         <button
           type="submit"
           className="apid-btn apid-btn-primary apid-btn-sm"
           aria-label="Send message"
-          disabled={!canChat || !messageBody.trim() || sendMessageMutation.isPending}
+          disabled={!canSendMessages || !messageBody.trim() || sendMessageMutation.isPending}
         >
           <Send size={16} />
         </button>
       </form>
-      {!canChat && (
+      {!canSendMessages && (
         <p className="boa-muted" style={{ marginBottom: 0, fontSize: '0.82rem' }}>
-          This relationship is closed or your membership is inactive. Chat history remains available to read.
+          {detail.status === 'PAUSED'
+            ? 'This relationship is paused. You can still read chat history, but sending messages is unavailable.'
+            : 'This relationship is closed or your membership is inactive. Chat history remains available to read.'}
         </p>
       )}
       <div style={{ marginTop: '0.75rem' }}>

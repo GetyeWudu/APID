@@ -21,7 +21,11 @@ import com.boa.apid.core.skills.service.SkillCacheInvalidationEvent;
 import com.boa.apid.mentoring.application.dto.MentorApplicationReviewRequest;
 import com.boa.apid.mentoring.application.entity.MentorApplication;
 import com.boa.apid.mentoring.application.entity.MentorApplicationStatus;
+import com.boa.apid.mentoring.application.entity.MentorApplicationType;
 import com.boa.apid.mentoring.application.repository.MentorApplicationRepository;
+import com.boa.apid.mentoring.trainer.dto.TrainerRosterDto;
+import com.boa.apid.mentoring.trainer.entity.TrainerAuthorizationSource;
+import com.boa.apid.mentoring.trainer.entity.TrainerAuthorizationStatus;
 import com.boa.apid.mentoring.trainer.service.TrainerAuthorizationService;
 import org.springframework.context.ApplicationEventPublisher;
 import org.junit.jupiter.api.Test;
@@ -94,7 +98,7 @@ class MentorApplicationServiceTest {
         StoredFile proofFile = proofFile(actor.getUserId());
         MockMultipartFile upload = proofUpload();
 
-        when(userRepository.findById(actor.getUserId())).thenReturn(Optional.of(applicant));
+        when(userRepository.findByIdForUpdate(actor.getUserId())).thenReturn(Optional.of(applicant));
         when(skillRepository.findByIdAndActiveTrue(12L)).thenReturn(Optional.of(skill));
         when(fileStorageService.store(upload, FilePurpose.TRAINER_CERT, actor))
                 .thenReturn(fileDto(actor.getUserId()));
@@ -107,6 +111,7 @@ class MentorApplicationServiceTest {
         ArgumentCaptor<MentorApplication> applicationCaptor = ArgumentCaptor.forClass(MentorApplication.class);
         verify(applicationRepository).save(applicationCaptor.capture());
         MentorApplication saved = applicationCaptor.getValue();
+        assertEquals(MentorApplicationType.INITIAL, saved.getApplicationType());
         assertEquals(MentorApplicationStatus.PENDING, saved.getStatus());
         assertSame(applicant, saved.getApplicant());
         assertSame(proofFile, saved.getProofDocument());
@@ -136,7 +141,7 @@ class MentorApplicationServiceTest {
         secondFile.setUploadedByUserId(actor.getUserId());
         secondFile.setPurpose(FilePurpose.TRAINER_CERT);
 
-        when(userRepository.findById(actor.getUserId())).thenReturn(Optional.of(applicant));
+        when(userRepository.findByIdForUpdate(actor.getUserId())).thenReturn(Optional.of(applicant));
         when(skillRepository.findByIdAndActiveTrue(12L)).thenReturn(Optional.of(firstSkill));
         when(skillRepository.findByIdAndActiveTrue(13L)).thenReturn(Optional.of(secondSkill));
         when(fileStorageService.store(firstUpload, FilePurpose.TRAINER_CERT, actor))
@@ -165,6 +170,7 @@ class MentorApplicationServiceTest {
         ArgumentCaptor<MentorApplication> applicationCaptor = ArgumentCaptor.forClass(MentorApplication.class);
         verify(applicationRepository).save(applicationCaptor.capture());
         MentorApplication saved = applicationCaptor.getValue();
+        assertEquals(MentorApplicationType.INITIAL, saved.getApplicationType());
         assertEquals(Set.of(firstSkill, secondSkill), saved.getCatalogSkills());
         assertEquals(Set.of(firstFile, secondFile), saved.getSupportingEvidence());
         assertSame(firstFile, saved.getProofDocument());
@@ -187,6 +193,87 @@ class MentorApplicationServiceTest {
                 storedFileRepository,
                 fileStorageService
         );
+    }
+
+    @Test
+    void submitRejectsASecondInitialApplicationBeforeUploadingEvidence() {
+        ApidUserPrincipal actor = actor();
+        User applicant = user(actor.getUserId(), actor.getUsername());
+        when(skillRepository.findByIdAndActiveTrue(12L)).thenReturn(Optional.of(new Skill()));
+        when(userRepository.findByIdForUpdate(actor.getUserId())).thenReturn(Optional.of(applicant));
+        when(applicationRepository.existsByApplicant_IdAndApplicationType(
+                actor.getUserId(), MentorApplicationType.INITIAL
+        )).thenReturn(true);
+
+        assertThrows(
+                BusinessException.class,
+                () -> service.submit(12L, null, null, proofUpload(), actor)
+        );
+
+        verifyNoInteractions(fileStorageService, storedFileRepository);
+    }
+
+    @Test
+    void approvedMentorCanSubmitAnAdditionalSkillForHrReview() {
+        ApidUserPrincipal actor = actor();
+        User applicant = user(actor.getUserId(), actor.getUsername());
+        Role mentorRole = new Role();
+        mentorRole.setName("Mentor");
+        UserRole activeMentorRole = new UserRole();
+        activeMentorRole.setRole(mentorRole);
+        Skill requestedSkill = new Skill();
+        requestedSkill.setId(13L);
+        MockMultipartFile upload = proofUpload();
+        StoredFile proofFile = proofFile(actor.getUserId());
+
+        when(userRepository.findByIdForUpdate(actor.getUserId())).thenReturn(Optional.of(applicant));
+        when(userRoleRepository.findActiveByUserIdWithRole(actor.getUserId()))
+                .thenReturn(List.of(activeMentorRole));
+        when(trainerAuthorizationService.getOwnProfile(actor)).thenReturn(new TrainerRosterDto(
+                1L,
+                2L,
+                actor.getUserId(),
+                "EMP-7",
+                "Mentor Applicant",
+                "Finance",
+                "ACTIVE",
+                TrainerAuthorizationSource.APPLICATION,
+                TrainerAuthorizationStatus.ACTIVE,
+                true,
+                0,
+                0,
+                3,
+                null,
+                null,
+                List.of(),
+                Instant.now(),
+                Instant.now()
+        ));
+        when(applicationRepository.findAllByApplicant_IdAndApplicationTypeAndStatus(
+                actor.getUserId(),
+                MentorApplicationType.SKILL_ADDITION,
+                MentorApplicationStatus.PENDING
+        )).thenReturn(List.of());
+        when(skillRepository.findByIdAndActiveTrue(13L)).thenReturn(Optional.of(requestedSkill));
+        when(fileStorageService.store(upload, FilePurpose.TRAINER_CERT, actor))
+                .thenReturn(fileDto(actor.getUserId()));
+        when(storedFileRepository.findByIdAndDeletedFalse(31L)).thenReturn(Optional.of(proofFile));
+        when(applicationRepository.save(any(MentorApplication.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+
+        var result = service.submitSkillAddition(
+                List.of(13L),
+                null,
+                null,
+                List.of(upload),
+                actor
+        );
+
+        ArgumentCaptor<MentorApplication> applicationCaptor = ArgumentCaptor.forClass(MentorApplication.class);
+        verify(applicationRepository).save(applicationCaptor.capture());
+        assertEquals(MentorApplicationType.SKILL_ADDITION, applicationCaptor.getValue().getApplicationType());
+        assertEquals(Set.of(requestedSkill), applicationCaptor.getValue().getCatalogSkills());
+        assertEquals(MentorApplicationType.SKILL_ADDITION, result.applicationType());
     }
 
     @Test
@@ -294,6 +381,50 @@ class MentorApplicationServiceTest {
         assertEquals("Custom Coaching", result.skillName());
         verify(eventPublisher).publishEvent(any(SkillCacheInvalidationEvent.class));
         verify(trainerAuthorizationService).authorizeApplication(application, reviewer);
+    }
+
+    @Test
+    void approvingSkillAdditionExtendsMentorAuthorizationWithoutAssigningMentorRoleAgain() {
+        ApidUserPrincipal actor = actor();
+        User applicant = user(11L, "applicant");
+        User reviewer = user(actor.getUserId(), actor.getUsername());
+        Skill skill = new Skill();
+        skill.setId(13L);
+        skill.setName("Financial Modeling");
+        MentorApplication application = application(applicant, skill);
+        application.setApplicationType(MentorApplicationType.SKILL_ADDITION);
+        Role mentorRole = new Role();
+        mentorRole.setId(4L);
+        mentorRole.setName("Mentor");
+        UserRole activeMentorRole = new UserRole();
+        activeMentorRole.setRole(mentorRole);
+
+        when(applicationRepository.findByIdForUpdate(50L)).thenReturn(Optional.of(application));
+        when(userRepository.findByIdForUpdate(11L)).thenReturn(Optional.of(applicant));
+        when(userRepository.findById(actor.getUserId())).thenReturn(Optional.of(reviewer));
+        when(roleRepository.findByNameIgnoreCase("Mentor")).thenReturn(Optional.of(mentorRole));
+        when(userRoleRepository.findActiveByUserIdWithRole(11L)).thenReturn(List.of(activeMentorRole));
+        when(applicationRepository.save(any(MentorApplication.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+
+        var result = service.reviewApplication(
+                50L,
+                new MentorApplicationReviewRequest(MentorApplicationStatus.APPROVED, null),
+                actor
+        );
+
+        assertEquals(MentorApplicationType.SKILL_ADDITION, result.applicationType());
+        assertEquals(MentorApplicationStatus.APPROVED, result.status());
+        verify(userRoleRepository, org.mockito.Mockito.never()).save(any(UserRole.class));
+        verify(trainerAuthorizationService).authorizeApplication(application, reviewer);
+        verify(notificationService).notify(
+                11L,
+                com.boa.apid.core.notifications.entity.NotificationModule.MENTORING,
+                "MENTOR_SKILL_ADDITION_APPROVED",
+                "Mentor skill request approved",
+                "Your additional skill request for Financial Modeling was approved.",
+                "/mentoring?tab=applications"
+        );
     }
 
     @Test
