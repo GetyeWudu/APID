@@ -73,11 +73,23 @@ public class MentoringCommunicationController {
     public ApiResponse<List<ConversationSummaryDto>> getMyMentoringConversations(
             @AuthenticationPrincipal ApidUserPrincipal actor
     ) {
+        communicationService.ensureMentoringConversationsForUser(actor.getUserId());
         List<ConversationSummaryDto> all = communicationService.getMyConversations(actor.getUserId());
         List<ConversationSummaryDto> mentoringOnly = all.stream()
                 .filter(c -> c.getContextType() != null && c.getContextType().name().startsWith("MENTORING_"))
                 .toList();
         return ApiResponse.ok(mentoringOnly);
+    }
+
+    /**
+     * Retrieves peers (other trainees sharing the same mentor & skill) who are eligible for 1:1 peer chat.
+     */
+    @GetMapping("/conversations/peers/eligible")
+    public ApiResponse<List<EligibleMentoringPeerDto>> getEligiblePeers(
+            @AuthenticationPrincipal ApidUserPrincipal actor
+    ) {
+        List<EligibleMentoringPeerDto> peers = communicationService.getEligibleMentoringPeers(actor.getUserId());
+        return ApiResponse.ok(peers);
     }
 
     /**
@@ -149,16 +161,13 @@ public class MentoringCommunicationController {
     }
 
     /**
-     * Resolve or start a private peer-to-peer 1-on-1 thread between two trainees in the same mentoring relationship.
+     * Resolve or start a private peer-to-peer 1-on-1 thread between two trainees in the same mentoring relationship or class.
      */
     @PostMapping("/conversations/peer")
     public ApiResponse<ConversationSummaryDto> getOrCreatePeerConversation(
             @Valid @RequestBody CreatePeerConversationRequest request,
             @AuthenticationPrincipal ApidUserPrincipal actor
     ) {
-        if (request.getMentoringRelationshipId() == null) {
-            throw new IllegalArgumentException("mentoringRelationshipId is required for mentoring peer conversations");
-        }
         ConversationSummaryDto conv = communicationService.createMentoringPeerConversation(
                 request.getMentoringRelationshipId(), actor.getUserId(), request.getTargetEmployeeId()
         );

@@ -23,15 +23,28 @@ public interface CoachingConversationRepository extends JpaRepository<CoachingCo
 
     @Query("""
             SELECT c FROM CoachingConversation c
-            WHERE c.mentoringRelationshipId = :relationshipId
-              AND c.contextType = 'MENTORING_PEER_DIRECT'
+            WHERE c.contextType = 'MENTORING_PEER_DIRECT'
               AND c.peerEmployeeAId = :empA
               AND c.peerEmployeeBId = :empB
+              AND c.status = 'ACTIVE'
             """)
     Optional<CoachingConversation> findMentoringPeerConversation(
-            @Param("relationshipId") Long relationshipId,
             @Param("empA") Long empA,
             @Param("empB") Long empB
+    );
+
+    @Query("""
+            SELECT c FROM CoachingConversation c
+            JOIN ConversationParticipant p ON p.conversationId = c.id
+            WHERE c.contextType = 'MENTORING_COHORT_GROUP'
+              AND c.skillId = :skillId
+              AND p.userId = :mentorUserId
+              AND p.role = 'TRAINER'
+              AND c.status = 'ACTIVE'
+            """)
+    Optional<CoachingConversation> findMentoringCohortGroup(
+            @Param("mentorUserId") Long mentorUserId,
+            @Param("skillId") Long skillId
     );
 
     @Query("""

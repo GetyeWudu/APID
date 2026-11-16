@@ -1,9 +1,15 @@
 import { apiClient, ApiResponse } from '../../../shared/api/apiClient';
 
 export type ConversationType = 'DIRECT' | 'GROUP';
-export type ConversationContextType = 'MANDATORY_ASSIGNMENT' | 'SKILL_COHORT_GROUP' | 'SKILL_PEER_DIRECT';
+export type ConversationContextType =
+  | 'MANDATORY_ASSIGNMENT'
+  | 'SKILL_COHORT_GROUP'
+  | 'SKILL_PEER_DIRECT'
+  | 'MENTORING_RELATIONSHIP_DIRECT'
+  | 'MENTORING_COHORT_GROUP'
+  | 'MENTORING_PEER_DIRECT';
 export type ConversationStatus = 'ACTIVE' | 'ARCHIVED';
-export type ConversationParticipantRole = 'COACH' | 'COACHEE' | 'PEER';
+export type ConversationParticipantRole = 'COACH' | 'COACHEE' | 'PEER' | 'TRAINER' | 'TRAINEE';
 export type ParticipantStatus = 'ACTIVE' | 'REMOVED';
 export type MessageType = 'TEXT' | 'FILE' | 'RESOURCE_LINK';
 export type AttachmentScanStatus = 'PENDING' | 'CLEAN' | 'REJECTED';
@@ -60,6 +66,8 @@ export interface ConversationSummaryDto {
   contextType: ConversationContextType;
   assignmentId?: number;
   skillRequestId?: number;
+  mentoringRelationshipId?: number | null;
+  skillId?: number | null;
   peerEmployeeAId?: number;
   peerEmployeeBId?: number;
   title: string;

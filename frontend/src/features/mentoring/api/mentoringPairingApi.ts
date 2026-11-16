@@ -6,6 +6,17 @@ import type {
   SendMessageRequest,
 } from '../../coaching/api/coachingCommunicationApi';
 
+export interface EligibleMentoringPeerDto {
+  employeeId: number;
+  userId: number;
+  fullName: string;
+  email: string | null;
+  jobTitle: string | null;
+  skillName: string | null;
+  mentorName: string | null;
+  relationshipId: number | null;
+}
+
 export type MentoringRequestType = 'INDIVIDUAL' | 'GROUP';
 export type MentoringRequestStatus = 'PENDING' | 'ACCEPTED' | 'DECLINED' | 'CANCELLED';
 
@@ -394,8 +405,29 @@ export const mentoringPairingApi = {
     window.URL.revokeObjectURL(url);
   },
 
+  async getMyMentoringConversations(): Promise<ConversationSummaryDto[]> {
+    const response = await apiClient.get<ApiResponse<ConversationSummaryDto[]>>(
+      '/mentoring/conversations'
+    );
+    return response.data.data;
+  },
+
+  async getEligibleMentoringPeers(): Promise<EligibleMentoringPeerDto[]> {
+    const response = await apiClient.get<ApiResponse<EligibleMentoringPeerDto[]>>(
+      '/mentoring/conversations/peers/eligible'
+    );
+    return response.data.data;
+  },
+
+  async togglePinMessage(conversationId: number, messageId: number): Promise<MessageDto> {
+    const response = await apiClient.post<ApiResponse<MessageDto>>(
+      `/mentoring/conversations/${conversationId}/messages/${messageId}/pin`
+    );
+    return response.data.data;
+  },
+
   async createPeerConversation(
-    mentoringRelationshipId: number,
+    mentoringRelationshipId: number | null | undefined,
     targetEmployeeId: number
   ): Promise<ConversationSummaryDto> {
     const response = await apiClient.post<ApiResponse<ConversationSummaryDto>>(

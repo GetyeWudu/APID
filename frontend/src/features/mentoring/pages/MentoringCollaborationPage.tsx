@@ -15,6 +15,7 @@ import {
 import { mentoringPairingApi, type MentoringRelationshipPair } from '../api/mentoringPairingApi';
 import { MentoringPairChatPanel } from '../components/MentoringPairChatPanel';
 import { MentoringResourcesPanel } from '../components/MentoringCollaborationTools';
+import { MentoringChatHub } from '../components/MentoringChatHub';
 import './MentoringCollaborationPage.css';
 
 type CollaborationMode = 'chat' | 'resources';
@@ -62,6 +63,26 @@ export function MentoringCollaborationPage({ mode }: { mode: CollaborationMode }
   const [searchParams, setSearchParams] = useSearchParams();
   const [search, setSearch] = useState('');
   const isChat = mode === 'chat';
+  const requestedRelationshipId = searchParams.get('relationshipId')
+    ? Number(searchParams.get('relationshipId'))
+    : null;
+
+  if (isChat) {
+    return (
+      <div className="boa-stack mentoring-hub mentoring-hub--chat">
+        <PageHeader
+          title="Mentoring Chat"
+          subtitle="Collaborate with your mentors, cohort class groups, and fellow trainees."
+          source="live"
+        />
+        <MentoringChatHub
+          currentUserId={user?.id}
+          initialRelationshipId={requestedRelationshipId}
+        />
+      </div>
+    );
+  }
+
   const relationshipsQuery = useQuery({
     queryKey: ['mentoring', 'pairing', 'relationships', user?.id],
     queryFn: mentoringPairingApi.listMyRelationships,
@@ -72,7 +93,6 @@ export function MentoringCollaborationPage({ mode }: { mode: CollaborationMode }
     () => getPairingOptions(relationshipsQuery.data ?? []),
     [relationshipsQuery.data]
   );
-  const requestedRelationshipId = Number(searchParams.get('relationshipId'));
   const selectedPairing =
     pairings.find((pairing) => pairing.relationshipId === requestedRelationshipId) ?? pairings[0];
   const filteredPairings = pairings.filter((pairing) => {

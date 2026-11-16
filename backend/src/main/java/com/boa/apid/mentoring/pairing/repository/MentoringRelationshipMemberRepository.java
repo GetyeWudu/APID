@@ -38,4 +38,18 @@ public interface MentoringRelationshipMemberRepository extends JpaRepository<Men
     );
 
     boolean existsByRelationship_IdAndTraineeUser_Id(Long relationshipId, Long traineeUserId);
+
+    @EntityGraph(attributePaths = {"relationship", "mentorUser", "traineeUser", "skill"})
+    @Query("""
+            SELECT member
+            FROM MentoringRelationshipMember member
+            WHERE member.mentorUser.id = :mentorUserId
+              AND member.skill.id = :skillId
+              AND member.status = com.boa.apid.mentoring.pairing.entity.MentoringRelationshipMemberStatus.ACTIVE
+              AND member.relationship.status = com.boa.apid.mentoring.pairing.entity.MentoringRelationshipStatus.ACTIVE
+            """)
+    List<MentoringRelationshipMember> findActiveByMentorAndSkill(
+            @Param("mentorUserId") Long mentorUserId,
+            @Param("skillId") Long skillId
+    );
 }
