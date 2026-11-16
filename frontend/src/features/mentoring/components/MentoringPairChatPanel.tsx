@@ -1,25 +1,20 @@
-import { useState, type FormEvent } from 'react';
+import { useState, useEffect } from 'react';
 import axios from 'axios';
-import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { MessageCircle, Send } from 'lucide-react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { MessageCircle } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../../../app/AuthContext';
-import type { ApiErrorPayload } from '../../../shared/api/apiClient';
+import { apiClient, type ApiErrorPayload } from '../../../shared/api/apiClient';
 import {
   EmptyState,
   ErrorState,
   LoadingSkeleton,
   StatusPill,
-  useToast,
 } from '../../../shared/components/ui';
 import { mentoringPairingApi } from '../api/mentoringPairingApi';
-
-function formatDateTime(value: string) {
-  const date = new Date(value);
-  return Number.isNaN(date.getTime())
-    ? 'Date unavailable'
-    : new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' }).format(date);
-}
+import type { MessageDto } from '../../coaching/api/coachingCommunicationApi';
+import { MessageThreadView } from '../../coaching/components/chat/MessageThreadView';
+import { MessageComposer } from '../../coaching/components/chat/MessageComposer';
 
 function getErrorMessage(error: unknown, fallback: string) {
   if (axios.isAxiosError<ApiErrorPayload>(error)) {
@@ -30,45 +25,67 @@ function getErrorMessage(error: unknown, fallback: string) {
 
 export function MentoringPairChatPanel({ relationshipId }: { relationshipId: number }) {
   const { user } = useAuth();
-  const [messageBody, setMessageBody] = useState('');
   const queryClient = useQueryClient();
-  const { pushToast } = useToast();
+  const [replyToMessage, setReplyToMessage] = useState<MessageDto | null>(null);
+
+  // 1. Fetch relationship metadata
   const detailQuery = useQuery({
     queryKey: ['mentoring', 'pairing', 'detail', relationshipId],
     queryFn: () => mentoringPairingApi.getRelationshipDetail(relationshipId),
   });
-  const chatQuery = useInfiniteQuery({
-    queryKey: ['mentoring', 'pairing', 'messages', relationshipId],
-    queryFn: ({ pageParam }) => mentoringPairingApi.listMessages(relationshipId, pageParam, 50),
-    initialPageParam: 0,
-    getNextPageParam: (lastPage) => (lastPage.hasMore ? lastPage.page + 1 : undefined),
-    refetchInterval: 10000,
-  });
-  const sendMessageMutation = useMutation({
-    mutationFn: (body: string) => mentoringPairingApi.sendMessage(relationshipId, body),
-    onSuccess: async () => {
-      setMessageBody('');
-      await Promise.all([
-        queryClient.invalidateQueries({
-          queryKey: ['mentoring', 'pairing', 'messages', relationshipId],
-        }),
-        queryClient.invalidateQueries({
-          queryKey: ['mentoring', 'pairing', 'messages-preview', relationshipId],
-        }),
-      ]);
-    },
-    onError: (error: unknown) =>
-      pushToast({
-        title: 'Unable to send message',
-        message: getErrorMessage(error, 'Please try again.'),
-        tone: 'err',
-      }),
+
+  // 2. Fetch or auto-provision the conversation for this relationship
+  const conversationQuery = useQuery({
+    queryKey: ['mentoring', 'relationship', 'conversation', relationshipId],
+    queryFn: () => mentoringPairingApi.getRelationshipConversation(relationshipId),
+    enabled: !!detailQuery.data,
   });
 
-  if (detailQuery.isLoading) {
+  const conversationId = conversationQuery.data?.id;
+
+  // 3. Fetch conversation messages with 3s live polling fallback
+  const messagesQuery = useQuery({
+    queryKey: ['mentoring', 'conversation', conversationId, 'messages'],
+    queryFn: () => mentoringPairingApi.getConversationMessages(conversationId!),
+    enabled: !!conversationId,
+    refetchInterval: 3000,
+  });
+
+  const messages = messagesQuery.data ?? [];
+
+  // 4. Automatically advance read marker when new messages are loaded
+  useEffect(() => {
+    if (conversationId && messages.length > 0) {
+      const lastMessage = messages[messages.length - 1];
+      if (lastMessage && lastMessage.id) {
+        void mentoringPairingApi.markConversationRead(conversationId, lastMessage.id);
+      }
+    }
+  }, [conversationId, messages]);
+
+  const detail = detailQuery.data;
+  const currentTrainee = detail?.trainees.find((t) => t.userId === user?.id);
+  const canSendMessages =
+    detail?.status === 'ACTIVE' &&
+    (detail.currentUserRole === 'MENTOR' || currentTrainee?.status === 'ACTIVE');
+
+  const handleTogglePin = async (msg: MessageDto) => {
+    if (!conversationId) return;
+    try {
+      await apiClient.post(`/mentoring/conversations/${conversationId}/messages/${msg.id}/pin`);
+      await queryClient.invalidateQueries({
+        queryKey: ['mentoring', 'conversation', conversationId, 'messages'],
+      });
+    } catch (err) {
+      console.error('Failed to toggle pin on message', err);
+    }
+  };
+
+  if (detailQuery.isLoading || (detailQuery.data && conversationQuery.isLoading)) {
     return <LoadingSkeleton rows={5} height={28} />;
   }
-  if (detailQuery.isError || !detailQuery.data) {
+
+  if (detailQuery.isError || !detail) {
     return (
       <ErrorState
         message={getErrorMessage(detailQuery.error, 'Unable to load this mentoring pairing.')}
@@ -77,32 +94,26 @@ export function MentoringPairChatPanel({ relationshipId }: { relationshipId: num
     );
   }
 
-  const detail = detailQuery.data;
-  const currentTrainee = detail.trainees.find((trainee) => trainee.userId === user?.id);
-  const canSendMessages =
-    detail.status === 'ACTIVE' &&
-    (detail.currentUserRole === 'MENTOR' || currentTrainee?.status === 'ACTIVE');
-  const messages = (chatQuery.data?.pages ?? [])
-    .slice()
-    .reverse()
-    .flatMap((page) => page.messages);
-
-  const handleSendMessage = (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    const body = messageBody.trim();
-    if (body && canSendMessages) {
-      sendMessageMutation.mutate(body);
-    }
-  };
+  if (conversationQuery.isError || !conversationQuery.data) {
+    return (
+      <ErrorState
+        message={getErrorMessage(conversationQuery.error, 'Unable to load conversation for this relationship.')}
+        onRetry={() => void conversationQuery.refetch()}
+      />
+    );
+  }
 
   return (
     <section className="apid-card mentoring-chat-panel">
       <div className="boa-card-header">
         <div>
-          <h2 className="boa-card-title">Chat with {detail.requestType === 'GROUP' ? 'your class' : 'your pairing'}</h2>
+          <h2 className="boa-card-title">
+            Chat with {detail.requestType === 'GROUP' ? 'your class' : 'your pairing'}
+          </h2>
           <p className="boa-card-subtitle">
             Mentor: {detail.mentorName} · {detail.trainees.length} trainee
             {detail.trainees.length === 1 ? '' : 's'}
+            {detail.skillName ? ` · ${detail.skillName}` : ''}
           </p>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
@@ -110,73 +121,62 @@ export function MentoringPairChatPanel({ relationshipId }: { relationshipId: num
           <MessageCircle size={20} aria-hidden="true" />
         </div>
       </div>
-      {chatQuery.isLoading ? (
+
+      {messagesQuery.isLoading ? (
         <LoadingSkeleton rows={5} height={28} />
-      ) : chatQuery.isError ? (
+      ) : messagesQuery.isError ? (
         <ErrorState
-          message={getErrorMessage(chatQuery.error, 'Unable to load chat history.')}
-          onRetry={() => void chatQuery.refetch()}
+          message={getErrorMessage(messagesQuery.error, 'Unable to load chat history.')}
+          onRetry={() => void messagesQuery.refetch()}
         />
       ) : messages.length === 0 ? (
-        <EmptyState title="No messages yet" description="Start the conversation with your mentoring pairing." />
-      ) : (
-        <div className="mentoring-chat-messages" aria-live="polite">
-          {chatQuery.hasNextPage && (
-            <div>
-              <button
-                type="button"
-                className="apid-btn apid-btn-outline apid-btn-sm"
-                disabled={chatQuery.isFetchingNextPage}
-                onClick={() => void chatQuery.fetchNextPage()}
-              >
-                {chatQuery.isFetchingNextPage ? 'Loading...' : 'Load older messages'}
-              </button>
-            </div>
-          )}
-          {messages.map((message) => (
-            <article
-              key={message.id}
-              className={`mentoring-chat-bubble ${message.mine ? 'is-mine' : ''}`}
-              style={{
-                alignSelf: message.mine ? 'flex-end' : 'flex-start',
-                maxWidth: 'min(90%, 680px)',
-              }}
-            >
-              <div className="boa-muted" style={{ fontSize: '0.8rem', marginBottom: '0.35rem' }}>
-                {message.mine ? 'You' : message.senderName} | {formatDateTime(message.createdAt)}
-              </div>
-              <p style={{ margin: 0, whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>{message.body}</p>
-            </article>
-          ))}
-        </div>
-      )}
-      <form onSubmit={handleSendMessage} className="mentoring-chat-composer">
-        <textarea
-          className="apid-input"
-          aria-label="Write a message"
-          placeholder={canSendMessages ? 'Write a message to this pairing...' : 'This pairing chat is read-only.'}
-          maxLength={4000}
-          rows={2}
-          value={messageBody}
-          onChange={(event) => setMessageBody(event.target.value)}
-          disabled={!canSendMessages || sendMessageMutation.isPending}
+        <EmptyState
+          title="No messages yet"
+          description="Start the conversation with your mentoring pairing. You can send messages, attach files, and share resources."
         />
-        <button
-          type="submit"
-          className="apid-btn apid-btn-primary apid-btn-sm"
-          aria-label="Send message"
-          disabled={!canSendMessages || !messageBody.trim() || sendMessageMutation.isPending}
-        >
-          <Send size={16} />
-        </button>
-      </form>
+      ) : (
+        <MessageThreadView
+          messages={messages}
+          currentUserId={user?.id}
+          isCoachOrAdmin={detail.currentUserRole === 'MENTOR'}
+          onReplyMessage={(msg) => setReplyToMessage(msg)}
+          onTogglePinMessage={(msg) => void handleTogglePin(msg)}
+          downloadAttachmentFn={(attId, fName) =>
+            mentoringPairingApi.downloadConversationAttachment(attId, fName)
+          }
+        />
+      )}
+
+      {conversationId && (
+        <MessageComposer
+          conversationId={conversationId}
+          replyToMessage={replyToMessage}
+          onCancelReply={() => setReplyToMessage(null)}
+          onMessageSent={() => {
+            setReplyToMessage(null);
+            void messagesQuery.refetch();
+          }}
+          disabled={!canSendMessages}
+          uploadAttachmentFn={(cId, file) =>
+            mentoringPairingApi.uploadConversationAttachment(cId, file)
+          }
+          sendMessageFn={(cId, req) =>
+            mentoringPairingApi.sendConversationMessage(cId, {
+              ...req,
+              content: req.content ?? '',
+            })
+          }
+        />
+      )}
+
       {!canSendMessages && (
-        <p className="boa-muted" style={{ marginBottom: 0, fontSize: '0.82rem' }}>
+        <p className="boa-muted" style={{ marginTop: '0.5rem', marginBottom: 0, fontSize: '0.82rem' }}>
           {detail.status === 'PAUSED'
             ? 'This relationship is paused. You can still read chat history, but sending messages is unavailable.'
             : 'This relationship is closed or your membership is inactive. Chat history remains available to read.'}
         </p>
       )}
+
       <div style={{ marginTop: '0.75rem' }}>
         <Link to={`/mentoring/pairing/${relationshipId}`} className="apid-btn apid-btn-outline apid-btn-sm">
           Back to pairing details

@@ -1,4 +1,10 @@
 import { apiClient, type ApiResponse } from '../../../shared/api/apiClient';
+import type {
+  ConversationSummaryDto,
+  MessageDto,
+  AttachmentDto,
+  SendMessageRequest,
+} from '../../coaching/api/coachingCommunicationApi';
 
 export type MentoringRequestType = 'INDIVIDUAL' | 'GROUP';
 export type MentoringRequestStatus = 'PENDING' | 'ACCEPTED' | 'DECLINED' | 'CANCELLED';
@@ -315,6 +321,86 @@ export const mentoringPairingApi = {
     const response = await apiClient.post<ApiResponse<MentoringPairing>>(
       `/mentoring/pairing/requests/${recipientId}/decision`,
       { decision }
+    );
+    return response.data.data;
+  },
+
+  async getRelationshipConversation(relationshipId: number): Promise<ConversationSummaryDto> {
+    const response = await apiClient.get<ApiResponse<ConversationSummaryDto>>(
+      `/mentoring/relationships/${relationshipId}/conversation`
+    );
+    return response.data.data;
+  },
+
+  async listMentoringConversations(): Promise<ConversationSummaryDto[]> {
+    const response = await apiClient.get<ApiResponse<ConversationSummaryDto[]>>(
+      '/mentoring/conversations'
+    );
+    return response.data.data;
+  },
+
+  async getConversationMessages(
+    conversationId: number,
+    afterId?: number,
+    beforeId?: number,
+    limit = 50
+  ): Promise<MessageDto[]> {
+    const response = await apiClient.get<ApiResponse<MessageDto[]>>(
+      `/mentoring/conversations/${conversationId}/messages`,
+      { params: { afterId, beforeId, limit } }
+    );
+    return response.data.data;
+  },
+
+  async sendConversationMessage(
+    conversationId: number,
+    request: SendMessageRequest
+  ): Promise<MessageDto> {
+    const response = await apiClient.post<ApiResponse<MessageDto>>(
+      `/mentoring/conversations/${conversationId}/messages`,
+      request
+    );
+    return response.data.data;
+  },
+
+  async markConversationRead(conversationId: number, lastReadMessageId: number): Promise<void> {
+    await apiClient.post(`/mentoring/conversations/${conversationId}/read`, { lastReadMessageId });
+  },
+
+  async uploadConversationAttachment(conversationId: number, file: File): Promise<AttachmentDto> {
+    const formData = new FormData();
+    formData.append('file', file);
+    const response = await apiClient.post<ApiResponse<AttachmentDto>>(
+      `/mentoring/conversations/${conversationId}/attachments`,
+      formData,
+      { headers: { 'Content-Type': 'multipart/form-data' } }
+    );
+    return response.data.data;
+  },
+
+  async downloadConversationAttachment(attachmentId: number, fileName: string): Promise<void> {
+    const response = await apiClient.get<Blob>(
+      `/mentoring/conversations/attachments/${attachmentId}`,
+      { responseType: 'blob' }
+    );
+    const blob = new Blob([response.data]);
+    const url = window.URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', fileName);
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.URL.revokeObjectURL(url);
+  },
+
+  async createPeerConversation(
+    mentoringRelationshipId: number,
+    targetEmployeeId: number
+  ): Promise<ConversationSummaryDto> {
+    const response = await apiClient.post<ApiResponse<ConversationSummaryDto>>(
+      '/mentoring/conversations/peer',
+      { mentoringRelationshipId, targetEmployeeId }
     );
     return response.data.data;
   },

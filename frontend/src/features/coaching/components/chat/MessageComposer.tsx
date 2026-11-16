@@ -17,6 +17,14 @@ interface MessageComposerProps {
   onCancelReply: () => void;
   onMessageSent: () => void;
   disabled?: boolean;
+  uploadAttachmentFn?: (conversationId: number, file: File) => Promise<AttachmentDto>;
+  sendMessageFn?: (conversationId: number, req: {
+    content?: string;
+    messageType?: 'TEXT' | 'FILE' | 'RESOURCE_LINK';
+    clientMessageId?: string;
+    replyToMessageId?: number;
+    attachmentIds?: number[];
+  }) => Promise<MessageDto>;
 }
 
 export const MessageComposer: React.FC<MessageComposerProps> = ({
@@ -25,6 +33,8 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({
   onCancelReply,
   onMessageSent,
   disabled = false,
+  uploadAttachmentFn,
+  sendMessageFn,
 }) => {
   const [content, setContent] = useState('');
   const [attachments, setAttachments] = useState<AttachmentDto[]>([]);
@@ -49,7 +59,8 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({
     setIsUploading(true);
     setErrorMsg(null);
     try {
-      const att = await coachingCommunicationApi.uploadAttachment(conversationId, file);
+      const uploader = uploadAttachmentFn ?? coachingCommunicationApi.uploadAttachment;
+      const att = await uploader(conversationId, file);
       setAttachments((prev) => [...prev, att]);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'File upload failed. Ensure format is permitted.';
@@ -75,7 +86,8 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({
     setErrorMsg(null);
     try {
       const clientMessageId = `web-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
-      await coachingCommunicationApi.sendMessage(conversationId, {
+      const sender = sendMessageFn ?? coachingCommunicationApi.sendMessage;
+      await sender(conversationId, {
         content: trimmed,
         messageType: attachments.length > 0 ? 'FILE' : 'TEXT',
         clientMessageId,

@@ -10,6 +10,12 @@ import com.boa.apid.coaching.skillrequest.repository.SkillCoachingRequestReposit
 import com.boa.apid.coaching.skillrequest.repository.SkillCoachingRequestTargetRepository;
 import com.boa.apid.core.organization.entity.Employee;
 import com.boa.apid.core.organization.repository.EmployeeRepository;
+import com.boa.apid.mentoring.pairing.entity.MentoringRelationship;
+import com.boa.apid.mentoring.pairing.entity.MentoringRelationshipMember;
+import com.boa.apid.mentoring.pairing.entity.MentoringRelationshipMemberStatus;
+import com.boa.apid.mentoring.pairing.entity.MentoringRelationshipStatus;
+import com.boa.apid.mentoring.pairing.repository.MentoringRelationshipMemberRepository;
+import com.boa.apid.mentoring.pairing.repository.MentoringRelationshipRepository;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
@@ -32,6 +38,8 @@ public class CoachingCommunicationService {
     private final EmployeeRepository employeeRepository;
     private final SkillCoachingRequestRepository skillRequestRepository;
     private final SkillCoachingRequestTargetRepository skillTargetRepository;
+    private final MentoringRelationshipRepository mentoringRelationshipRepository;
+    private final MentoringRelationshipMemberRepository mentoringRelationshipMemberRepository;
 
     public CoachingCommunicationService(
             CoachingConversationRepository conversationRepository,
@@ -42,7 +50,9 @@ public class CoachingCommunicationService {
             ConversationAccessService accessService,
             EmployeeRepository employeeRepository,
             SkillCoachingRequestRepository skillRequestRepository,
-            SkillCoachingRequestTargetRepository skillTargetRepository
+            SkillCoachingRequestTargetRepository skillTargetRepository,
+            MentoringRelationshipRepository mentoringRelationshipRepository,
+            MentoringRelationshipMemberRepository mentoringRelationshipMemberRepository
     ) {
         this.conversationRepository = conversationRepository;
         this.participantRepository = participantRepository;
@@ -53,6 +63,8 @@ public class CoachingCommunicationService {
         this.employeeRepository = employeeRepository;
         this.skillRequestRepository = skillRequestRepository;
         this.skillTargetRepository = skillTargetRepository;
+        this.mentoringRelationshipRepository = mentoringRelationshipRepository;
+        this.mentoringRelationshipMemberRepository = mentoringRelationshipMemberRepository;
     }
 
     /**
@@ -383,6 +395,138 @@ public class CoachingCommunicationService {
         return saved;
     }
 
+    /**
+     * Finds or auto-provisions a direct 1:1 conversation for a MentoringRelationship.
+     */
+    @Transactional
+    public ConversationSummaryDto getOrCreateMentoringRelationshipConversation(Long relationshipId, Long userId) {
+        Optional<CoachingConversation> existing = conversationRepository.findByMentoringRelationshipIdAndContextType(
+                relationshipId, ConversationContextType.MENTORING_RELATIONSHIP_DIRECT
+        );
+
+        if (existing.isPresent()) {
+            accessService.verifyParticipantForRead(existing.get().getId(), userId);
+            return buildConversationSummary(existing.get(), userId);
+        }
+
+        MentoringRelationship relationship = mentoringRelationshipRepository.findById(relationshipId)
+                .orElseThrow(() -> new IllegalArgumentException("Mentoring relationship not found: " + relationshipId));
+
+        if (relationship.getStatus() != MentoringRelationshipStatus.ACTIVE) {
+            throw new IllegalStateException("Cannot start chat on an inactive mentoring relationship.");
+        }
+
+        List<MentoringRelationshipMember> members = mentoringRelationshipMemberRepository.findByRelationship_IdOrderByJoinedAtAsc(relationshipId);
+        if (members.isEmpty()) {
+            throw new IllegalStateException("Mentoring relationship has no assigned trainees.");
+        }
+
+        // Mentor employee
+        Employee mentorEmp = employeeRepository.findByUserId(relationship.getMentorUser().getId())
+                .orElseThrow(() -> new IllegalStateException("Mentor does not have a linked employee profile."));
+
+        // Primary trainee employee
+        MentoringRelationshipMember primaryMember = members.get(0);
+        Employee traineeEmp = employeeRepository.findByUserId(primaryMember.getTraineeUser().getId())
+                .orElseThrow(() -> new IllegalStateException("Trainee does not have a linked employee profile."));
+
+        CoachingConversation conv = new CoachingConversation();
+        conv.setConversationType(ConversationType.DIRECT);
+        conv.setContextType(ConversationContextType.MENTORING_RELATIONSHIP_DIRECT);
+        conv.setMentoringRelationshipId(relationshipId);
+        conv.setSkillId(primaryMember.getSkill() != null ? primaryMember.getSkill().getId() : null);
+        conv.setTitle("Mentoring · " + mentorEmp.getFullName() + " & " + traineeEmp.getFullName());
+        conv.setStatus(ConversationStatus.ACTIVE);
+        conv.setCreatedByUserId(userId);
+
+        CoachingConversation savedConv = conversationRepository.save(conv);
+
+        // Add Trainer participant
+        ConversationParticipant trainerParticipant = new ConversationParticipant(
+                savedConv.getId(),
+                mentorEmp.getId(),
+                relationship.getMentorUser().getId(),
+                ConversationParticipantRole.TRAINER
+        );
+        participantRepository.save(trainerParticipant);
+
+        // Add Trainee participants (all active trainees in this relationship)
+        for (MentoringRelationshipMember member : members) {
+            if (member.getStatus() == MentoringRelationshipMemberStatus.ACTIVE) {
+                employeeRepository.findByUserId(member.getTraineeUser().getId()).ifPresent(tEmp -> {
+                    ConversationParticipant traineeParticipant = new ConversationParticipant(
+                            savedConv.getId(),
+                            tEmp.getId(),
+                            member.getTraineeUser().getId(),
+                            ConversationParticipantRole.TRAINEE
+                    );
+                    participantRepository.save(traineeParticipant);
+                });
+            }
+        }
+
+        accessService.verifyParticipantForRead(savedConv.getId(), userId);
+        return buildConversationSummary(savedConv, userId);
+    }
+
+    /**
+     * Creates or returns a private 1:1 peer conversation between two trainees in the same mentoring relationship.
+     */
+    @Transactional
+    public ConversationSummaryDto createMentoringPeerConversation(Long relationshipId, Long requestingUserId, Long targetEmployeeId) {
+        Employee requestingEmp = employeeRepository.findByUserId(requestingUserId)
+                .orElseThrow(() -> new IllegalStateException("Requesting user does not have a linked employee record."));
+
+        if (Objects.equals(requestingEmp.getId(), targetEmployeeId)) {
+            throw new IllegalArgumentException("Cannot create a peer conversation with yourself.");
+        }
+
+        Employee targetEmp = employeeRepository.findById(targetEmployeeId)
+                .orElseThrow(() -> new IllegalArgumentException("Target employee not found: " + targetEmployeeId));
+
+        if (targetEmp.getUserId() == null) {
+            throw new IllegalStateException("Target employee does not have an active user account.");
+        }
+
+        // Verify both trainees belong to this mentoring relationship
+        boolean requesterInRel = mentoringRelationshipMemberRepository.existsByRelationship_IdAndTraineeUser_Id(
+                relationshipId, requestingUserId
+        );
+        boolean targetInRel = mentoringRelationshipMemberRepository.existsByRelationship_IdAndTraineeUser_Id(
+                relationshipId, targetEmp.getUserId()
+        );
+
+        if (!requesterInRel || !targetInRel) {
+            throw new AccessDeniedException("Peer conversations are only allowed between trainees sharing the same mentoring relationship.");
+        }
+
+        long empA = Math.min(requestingEmp.getId(), targetEmp.getId());
+        long empB = Math.max(requestingEmp.getId(), targetEmp.getId());
+
+        Optional<CoachingConversation> existing = conversationRepository.findMentoringPeerConversation(relationshipId, empA, empB);
+        if (existing.isPresent()) {
+            return buildConversationSummary(existing.get(), requestingUserId);
+        }
+
+        CoachingConversation conv = new CoachingConversation();
+        conv.setConversationType(ConversationType.DIRECT);
+        conv.setContextType(ConversationContextType.MENTORING_PEER_DIRECT);
+        conv.setMentoringRelationshipId(relationshipId);
+        conv.setPeerEmployeeAId(empA);
+        conv.setPeerEmployeeBId(empB);
+        conv.setTitle("Mentoring Peer Chat · " + requestingEmp.getFullName() + " & " + targetEmp.getFullName());
+        conv.setStatus(ConversationStatus.ACTIVE);
+        conv.setCreatedByUserId(requestingUserId);
+
+        CoachingConversation saved = conversationRepository.save(conv);
+
+        // Add both as PEER participants
+        participantRepository.save(new ConversationParticipant(saved.getId(), requestingEmp.getId(), requestingUserId, ConversationParticipantRole.PEER));
+        participantRepository.save(new ConversationParticipant(saved.getId(), targetEmp.getId(), targetEmp.getUserId(), ConversationParticipantRole.PEER));
+
+        return buildConversationSummary(saved, requestingUserId);
+    }
+
     // ==========================================
     // Mapping & Helper Methods
     // ==========================================
@@ -394,6 +538,8 @@ public class CoachingCommunicationService {
         dto.setContextType(conv.getContextType());
         dto.setAssignmentId(conv.getAssignmentId());
         dto.setSkillRequestId(conv.getSkillRequestId());
+        dto.setMentoringRelationshipId(conv.getMentoringRelationshipId());
+        dto.setSkillId(conv.getSkillId());
         dto.setPeerEmployeeAId(conv.getPeerEmployeeAId());
         dto.setPeerEmployeeBId(conv.getPeerEmployeeBId());
         dto.setTitle(conv.getTitle());

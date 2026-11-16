@@ -17,6 +17,23 @@ public interface CoachingConversationRepository extends JpaRepository<CoachingCo
 
     Optional<CoachingConversation> findBySkillRequestIdAndContextType(Long skillRequestId, ConversationContextType contextType);
 
+    Optional<CoachingConversation> findByMentoringRelationshipIdAndContextType(Long mentoringRelationshipId, ConversationContextType contextType);
+
+    Optional<CoachingConversation> findByMentoringRelationshipIdAndSkillIdAndContextType(Long mentoringRelationshipId, Long skillId, ConversationContextType contextType);
+
+    @Query("""
+            SELECT c FROM CoachingConversation c
+            WHERE c.mentoringRelationshipId = :relationshipId
+              AND c.contextType = 'MENTORING_PEER_DIRECT'
+              AND c.peerEmployeeAId = :empA
+              AND c.peerEmployeeBId = :empB
+            """)
+    Optional<CoachingConversation> findMentoringPeerConversation(
+            @Param("relationshipId") Long relationshipId,
+            @Param("empA") Long empA,
+            @Param("empB") Long empB
+    );
+
     @Query("""
             SELECT c FROM CoachingConversation c
             WHERE c.skillRequestId = :skillRequestId

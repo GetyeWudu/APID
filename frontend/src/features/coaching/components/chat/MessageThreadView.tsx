@@ -20,6 +20,7 @@ interface MessageThreadViewProps {
   isCoachOrAdmin: boolean;
   onReplyMessage: (msg: MessageDto) => void;
   onTogglePinMessage: (msg: MessageDto) => void;
+  downloadAttachmentFn?: (attachmentId: number, fileName: string) => Promise<void>;
 }
 
 export const MessageThreadView: React.FC<MessageThreadViewProps> = ({
@@ -28,6 +29,7 @@ export const MessageThreadView: React.FC<MessageThreadViewProps> = ({
   isCoachOrAdmin,
   onReplyMessage,
   onTogglePinMessage,
+  downloadAttachmentFn,
 }) => {
   const bottomRef = useRef<HTMLDivElement>(null);
   const [downloadingId, setDownloadingId] = useState<number | null>(null);
@@ -36,7 +38,8 @@ export const MessageThreadView: React.FC<MessageThreadViewProps> = ({
     if (downloadingId === att.id) return;
     setDownloadingId(att.id);
     try {
-      await coachingCommunicationApi.downloadAttachment(att.id, att.fileName);
+      const downloader = downloadAttachmentFn ?? coachingCommunicationApi.downloadAttachment;
+      await downloader(att.id, att.fileName);
     } catch (err) {
       console.error('Failed to download attachment', err);
     } finally {

@@ -4,7 +4,7 @@ import jakarta.persistence.*;
 import java.time.Instant;
 
 @Entity
-@Table(name = "message_attachments", schema = "coaching")
+@Table(name = "message_attachments", schema = "core")
 public class MessageAttachment {
 
     @Id

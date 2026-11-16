@@ -4,7 +4,7 @@ import jakarta.persistence.*;
 import java.time.Instant;
 
 @Entity
-@Table(name = "conversations", schema = "coaching")
+@Table(name = "conversations", schema = "core")
 public class CoachingConversation {
 
     @Id
@@ -24,6 +24,12 @@ public class CoachingConversation {
 
     @Column(name = "skill_request_id")
     private Long skillRequestId;
+
+    @Column(name = "mentoring_relationship_id")
+    private Long mentoringRelationshipId;
+
+    @Column(name = "skill_id")
+    private Long skillId;
 
     @Column(name = "peer_employee_a_id")
     private Long peerEmployeeAId;
@@ -70,6 +76,10 @@ public class CoachingConversation {
     public void setAssignmentId(Long assignmentId) { this.assignmentId = assignmentId; }
     public Long getSkillRequestId() { return skillRequestId; }
     public void setSkillRequestId(Long skillRequestId) { this.skillRequestId = skillRequestId; }
+    public Long getMentoringRelationshipId() { return mentoringRelationshipId; }
+    public void setMentoringRelationshipId(Long mentoringRelationshipId) { this.mentoringRelationshipId = mentoringRelationshipId; }
+    public Long getSkillId() { return skillId; }
+    public void setSkillId(Long skillId) { this.skillId = skillId; }
     public Long getPeerEmployeeAId() { return peerEmployeeAId; }
     public void setPeerEmployeeAId(Long peerEmployeeAId) { this.peerEmployeeAId = peerEmployeeAId; }
     public Long getPeerEmployeeBId() { return peerEmployeeBId; }

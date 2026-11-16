@@ -4,7 +4,7 @@ import jakarta.persistence.*;
 import java.time.Instant;
 
 @Entity
-@Table(name = "conversation_read_state", schema = "coaching")
+@Table(name = "conversation_read_state", schema = "core")
 @IdClass(ConversationReadStateId.class)
 public class ConversationReadState {
 
