@@ -16,6 +16,9 @@ import { ApplyForMentorForm } from '../components/ApplyForMentorForm';
 import { MentorDirectory } from '../components/MentorDirectory';
 import { MentorInvitationForm } from '../components/MentorInvitationForm';
 import { MentoringRequestsPanel } from '../components/MentoringRequestsPanel';
+import { MentoringMatchRequestForm } from '../components/MentoringMatchRequestForm';
+import { MentoringRecommendations } from '../components/MentoringRecommendations';
+import { MentorProfileForm } from '../components/MentorProfileForm';
 import { MentoringSessionsPage } from './MentoringSessionsPage';
 
 type MentoringViewKey =
@@ -24,6 +27,7 @@ type MentoringViewKey =
   | 'trainee'
   | 'trainee-sessions'
   | 'trainer'
+  | 'trainer-profile'
   | 'trainer-sessions'
   | 'apply';
 
@@ -38,6 +42,7 @@ export function MentoringHomePage() {
     requestedView === 'trainee' ||
     requestedView === 'trainee-sessions' ||
     requestedView === 'trainer' ||
+    requestedView === 'trainer-profile' ||
     requestedView === 'trainer-sessions' ||
     requestedView === 'apply'
       ? requestedView
@@ -51,7 +56,7 @@ export function MentoringHomePage() {
 
   const mentorsQuery = useQuery({
     queryKey: ['mentoring', 'directory'],
-    queryFn: mentorDirectoryApi.listMentors,
+    queryFn: () => mentorDirectoryApi.listMentors(),
     enabled: activeView === 'directory' && hasAnyPermission(EMPLOYEE_WORKSPACE_PERMISSIONS),
   });
 
@@ -60,6 +65,7 @@ export function MentoringHomePage() {
     queryFn: mentoringPairingApi.listMyRequests,
     enabled:
       hasAnyPermission(EMPLOYEE_WORKSPACE_PERMISSIONS) &&
+      activeView !== 'trainer-profile' &&
       activeView !== 'trainer-sessions' &&
       activeView !== 'trainee-sessions',
   });
@@ -135,14 +141,49 @@ export function MentoringHomePage() {
       <div className="boa-stack">
         <PageHeader
           title="Find a Mentor"
-          subtitle="Browse active mentors by their linked skills."
+          subtitle="Find active mentors with available capacity for a skill, or ask HR to match you."
           source="live"
         />
+        {user?.id && (
+          <MentoringRecommendations
+            skills={activeSkills.map((skill) => ({ id: skill.id, name: skill.name }))}
+            currentUserId={user.id}
+            requests={pairingRequestsQuery.data ?? []}
+          />
+        )}
+        <MentoringMatchRequestForm skills={activeSkills} />
         <MentorDirectory
           mentors={mentorsQuery.data ?? []}
           currentUserId={user?.id}
           requests={pairingRequestsQuery.data ?? []}
         />
+      </div>
+    );
+  }
+
+  if (activeView === 'trainer-profile') {
+    if (!isMentor) {
+      return (
+        <div className="boa-stack">
+          <PageHeader title="Mentor Profile" subtitle="Manage your public mentor profile." source="live" />
+          <div className="apid-card">
+            <EmptyState
+              title="Mentor Access Required"
+              description="Only approved mentors can manage a public mentor profile."
+            />
+          </div>
+        </div>
+      );
+    }
+
+    return (
+      <div className="boa-stack">
+        <PageHeader
+          title="Mentor Profile"
+          subtitle="Keep your expertise, availability, and trainee capacity up to date for employees seeking a mentor."
+          source="live"
+        />
+        <MentorProfileForm />
       </div>
     );
   }
@@ -190,12 +231,24 @@ export function MentoringHomePage() {
     return (
       <div className="boa-stack">
         <PageHeader title={title} subtitle={subtitle} source="live" />
-        {activeView === 'trainer' && user?.id && <MentorInvitationForm currentUserId={user.id} />}
+        {activeView === 'trainer' && user?.id && (
+          <MentorInvitationForm currentUserId={user.id} />
+        )}
         {activeView === 'trainee' && (
-          <div>
-            <Link to="/mentoring?view=directory" className="apid-btn apid-btn-primary apid-btn-sm">
-              Find a Mentor
-            </Link>
+          <div className="boa-stack">
+            <div>
+              <Link to="/mentoring?view=directory" className="apid-btn apid-btn-primary apid-btn-sm">
+                Find a Mentor
+              </Link>
+            </div>
+            {user?.id && (
+              <MentoringRecommendations
+                skills={activeSkills.map((skill) => ({ id: skill.id, name: skill.name }))}
+                currentUserId={user.id}
+                requests={pairingRequestsQuery.data ?? []}
+              />
+            )}
+            <MentoringMatchRequestForm skills={activeSkills} />
           </div>
         )}
         {activeView === 'overview' && (

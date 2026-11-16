@@ -20,6 +20,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 
+import java.util.ArrayList;
 import java.util.List;
 
 @RestController
@@ -36,14 +37,42 @@ public class MentorApplicationController {
     @PreAuthorize("hasAuthority('EMPLOYEE_PORTAL_ACCESS')")
     public ApiResponse<MentorApplicationSubmittedDto> submit(
             @RequestParam(value = "catalogSkillId", required = false) Long catalogSkillId,
+            @RequestParam(value = "catalogSkillIds", required = false) List<Long> catalogSkillIds,
             @RequestParam(value = "customSkill", required = false) String customSkill,
             @RequestParam(value = "note", required = false) String note,
-            @RequestParam("proofDocument") MultipartFile proofDocument,
+            @RequestParam(value = "expertiseSummary", required = false) String expertiseSummary,
+            @RequestParam(value = "availabilityNotes", required = false) String availabilityNotes,
+            @RequestParam(value = "maxConcurrentTrainees", required = false) Integer maxConcurrentTrainees,
+            @RequestParam(value = "proofDocument", required = false) MultipartFile proofDocument,
+            @RequestParam(value = "supportingEvidence", required = false) List<MultipartFile> supportingEvidence,
             @AuthenticationPrincipal ApidUserPrincipal actor
     ) {
+        List<Long> selectedSkillIds = new ArrayList<>();
+        if (catalogSkillId != null) {
+            selectedSkillIds.add(catalogSkillId);
+        }
+        if (catalogSkillIds != null) {
+            selectedSkillIds.addAll(catalogSkillIds);
+        }
+        List<MultipartFile> evidenceFiles = new ArrayList<>();
+        if (supportingEvidence != null) {
+            evidenceFiles.addAll(supportingEvidence);
+        }
+        if (proofDocument != null) {
+            evidenceFiles.add(proofDocument);
+        }
         return ApiResponse.ok(
                 "Mentor application submitted",
-                mentorApplicationService.submit(catalogSkillId, customSkill, note, proofDocument, actor)
+                mentorApplicationService.submit(
+                        selectedSkillIds,
+                        customSkill,
+                        note,
+                        expertiseSummary,
+                        availabilityNotes,
+                        maxConcurrentTrainees,
+                        evidenceFiles,
+                        actor
+                )
         );
     }
 

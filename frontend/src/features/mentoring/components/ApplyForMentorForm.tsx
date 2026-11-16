@@ -7,28 +7,31 @@ import { mentorApplicationApi } from '../api/mentorApplicationApi';
 
 export function ApplyForMentorForm({ activeSkills }: { activeSkills: SkillItem[] }) {
   const { pushToast } = useToast();
-  const [skillId, setSkillId] = useState('');
+  const [skillIds, setSkillIds] = useState<string[]>([]);
   const [customSkill, setCustomSkill] = useState('');
   const [note, setNote] = useState('');
-  const [proofDocument, setProofDocument] = useState<File | null>(null);
+  const [expertiseSummary, setExpertiseSummary] = useState('');
+  const [availabilityNotes, setAvailabilityNotes] = useState('');
+  const [maxConcurrentTrainees, setMaxConcurrentTrainees] = useState('3');
+  const [supportingEvidence, setSupportingEvidence] = useState<File[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const form = event.currentTarget;
-    if (!skillId && !customSkill.trim()) {
+    if (skillIds.length === 0 && !customSkill.trim()) {
       pushToast({
         title: 'Skill required',
-        message: 'Choose a catalog skill or enter a custom skill to continue.',
+        message: 'Choose one or more catalog skills or enter a custom skill to continue.',
         tone: 'info',
       });
       return;
     }
 
-    if (!proofDocument) {
+    if (supportingEvidence.length === 0) {
       pushToast({
-        title: 'Proof document required',
-        message: 'Upload a proof document to send your application.',
+        title: 'Supporting evidence required',
+        message: 'Upload at least one certificate or other supporting document.',
         tone: 'err',
       });
       return;
@@ -37,20 +40,26 @@ export function ApplyForMentorForm({ activeSkills }: { activeSkills: SkillItem[]
     setIsSubmitting(true);
     try {
       await mentorApplicationApi.submit({
-        proofDocument,
-        catalogSkillId: skillId ? Number(skillId) : undefined,
+        supportingEvidence,
+        catalogSkillIds: skillIds.map(Number),
         customSkill: customSkill.trim() || undefined,
         note: note.trim() || undefined,
+        expertiseSummary: expertiseSummary.trim() || undefined,
+        availabilityNotes: availabilityNotes.trim() || undefined,
+        maxConcurrentTrainees: maxConcurrentTrainees ? Number(maxConcurrentTrainees) : undefined,
       });
       pushToast({
         title: 'Application sent',
         message: 'Your mentor application is pending review.',
         tone: 'ok',
       });
-      setSkillId('');
+      setSkillIds([]);
       setCustomSkill('');
       setNote('');
-      setProofDocument(null);
+      setExpertiseSummary('');
+      setAvailabilityNotes('');
+      setMaxConcurrentTrainees('3');
+      setSupportingEvidence([]);
       form.reset();
     } catch (error: unknown) {
       const message = axios.isAxiosError<ApiErrorPayload>(error)
@@ -74,23 +83,23 @@ export function ApplyForMentorForm({ activeSkills }: { activeSkills: SkillItem[]
         <div>
           <h3 className="boa-card-title">Apply for Mentor</h3>
           <p className="boa-card-subtitle">
-            Select a skill to mentor and upload a document as proof of your experience.
+            Select one or more skills to mentor and attach supporting evidence.
           </p>
         </div>
       </div>
       <form className="apid-form" onSubmit={handleSubmit}>
         <div className="apid-field">
-          <label htmlFor="mentor-application-skill">Catalog skill (optional)</label>
+          <label htmlFor="mentor-application-skill">Catalog skills (optional)</label>
           <select
             id="mentor-application-skill"
             className="apid-input"
-            value={skillId}
-            onChange={(event) => setSkillId(event.target.value)}
+            multiple
+            value={skillIds}
+            onChange={(event) => setSkillIds(
+              Array.from(event.target.selectedOptions, (option) => option.value)
+            )}
             disabled={isSubmitting || activeSkills.length === 0}
           >
-            <option value="">
-              {activeSkills.length === 0 ? 'No active skills available' : 'Select a catalog skill'}
-            </option>
             {activeSkills.map((skill) => (
               <option key={skill.id} value={skill.id}>
                 {skill.name}
@@ -98,8 +107,50 @@ export function ApplyForMentorForm({ activeSkills }: { activeSkills: SkillItem[]
             ))}
           </select>
           <span className="boa-muted" style={{ fontSize: '0.78rem' }}>
-            Enter a custom skill, choose a catalog skill, or provide both.
+            Select multiple skills with Ctrl/Command-click, and optionally add a custom skill.
           </span>
+        </div>
+
+        <div className="apid-field">
+          <label htmlFor="mentor-application-expertise">Experience and mentoring approach</label>
+          <textarea
+            id="mentor-application-expertise"
+            className="apid-input"
+            rows={4}
+            maxLength={2000}
+            value={expertiseSummary}
+            onChange={(event) => setExpertiseSummary(event.target.value)}
+            placeholder="Describe your experience, expertise, and how you would teach this skill."
+            disabled={isSubmitting}
+          />
+        </div>
+
+        <div className="apid-field">
+          <label htmlFor="mentor-application-availability">Weekly availability</label>
+          <textarea
+            id="mentor-application-availability"
+            className="apid-input"
+            rows={2}
+            maxLength={1000}
+            value={availabilityNotes}
+            onChange={(event) => setAvailabilityNotes(event.target.value)}
+            placeholder="For example: Tuesday and Thursday afternoons."
+            disabled={isSubmitting}
+          />
+        </div>
+
+        <div className="apid-field">
+          <label htmlFor="mentor-application-capacity">Maximum concurrent trainees</label>
+          <input
+            id="mentor-application-capacity"
+            type="number"
+            className="apid-input"
+            min={1}
+            max={100}
+            value={maxConcurrentTrainees}
+            onChange={(event) => setMaxConcurrentTrainees(event.target.value)}
+            disabled={isSubmitting}
+          />
         </div>
 
         <div className="apid-field">
@@ -117,18 +168,19 @@ export function ApplyForMentorForm({ activeSkills }: { activeSkills: SkillItem[]
         </div>
 
         <div className="apid-field">
-          <label htmlFor="mentor-application-proof">Proof document</label>
+          <label htmlFor="mentor-application-proof">Supporting evidence</label>
           <input
             id="mentor-application-proof"
             type="file"
             className="apid-input"
             accept=".pdf,.docx,.png,.jpg,.jpeg"
+            multiple
             required
             disabled={isSubmitting}
-            onChange={(event) => setProofDocument(event.target.files?.[0] ?? null)}
+            onChange={(event) => setSupportingEvidence(Array.from(event.target.files ?? []))}
           />
           <span className="boa-muted" style={{ fontSize: '0.78rem' }}>
-            PDF, DOCX, PNG, JPG, or JPEG; maximum file size 10 MB.
+            Select one or more PDF, DOCX, PNG, JPG, or JPEG files; maximum 10 MB each.
           </span>
         </div>
 

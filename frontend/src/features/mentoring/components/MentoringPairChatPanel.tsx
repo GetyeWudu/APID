@@ -96,7 +96,7 @@ export function MentoringPairChatPanel({ relationshipId }: { relationshipId: num
   };
 
   return (
-    <section className="apid-card">
+    <section className="apid-card mentoring-chat-panel">
       <div className="boa-card-header">
         <div>
           <h2 className="boa-card-title">Chat with {detail.requestType === 'GROUP' ? 'your class' : 'your pairing'}</h2>
@@ -120,7 +120,7 @@ export function MentoringPairChatPanel({ relationshipId }: { relationshipId: num
       ) : messages.length === 0 ? (
         <EmptyState title="No messages yet" description="Start the conversation with your mentoring pairing." />
       ) : (
-        <div className="boa-stack" aria-live="polite">
+        <div className="mentoring-chat-messages" aria-live="polite">
           {chatQuery.hasNextPage && (
             <div>
               <button
@@ -136,9 +136,8 @@ export function MentoringPairChatPanel({ relationshipId }: { relationshipId: num
           {messages.map((message) => (
             <article
               key={message.id}
-              className="apid-card"
+              className={`mentoring-chat-bubble ${message.mine ? 'is-mine' : ''}`}
               style={{
-                border: '1px solid var(--border)',
                 alignSelf: message.mine ? 'flex-end' : 'flex-start',
                 maxWidth: 'min(90%, 680px)',
               }}
@@ -151,7 +150,7 @@ export function MentoringPairChatPanel({ relationshipId }: { relationshipId: num
           ))}
         </div>
       )}
-      <form onSubmit={handleSendMessage} style={{ display: 'flex', gap: '0.55rem', marginTop: '1rem' }}>
+      <form onSubmit={handleSendMessage} className="mentoring-chat-composer">
         <textarea
           className="apid-input"
           aria-label="Write a message"

@@ -24,6 +24,14 @@ const MentoringPairingDetailPage = lazy(() =>
   import('./pages/MentoringPairingDetailPage').then((m) => ({ default: m.MentoringPairingDetailPage }))
 );
 
+const MentoringChatPage = lazy(() =>
+  import('./pages/MentoringCollaborationPage').then((m) => ({ default: m.MentoringChatPage }))
+);
+
+const MentoringResourcesPage = lazy(() =>
+  import('./pages/MentoringCollaborationPage').then((m) => ({ default: m.MentoringResourcesPage }))
+);
+
 function MentoringIndexGate() {
   const { hasAnyPermission } = useAuth();
   if (!hasAnyPermission(EMPLOYEE_WORKSPACE_PERMISSIONS)) {
@@ -62,6 +70,22 @@ export const mentoringRoutes: RouteObject[] = [
     element: (
       <ProtectedRoute requiredAnyPermissions={EMPLOYEE_WORKSPACE_PERMISSIONS}>
         <MentoringPairingDetailPage />
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: '/mentoring/chat',
+    element: (
+      <ProtectedRoute requiredAnyPermissions={EMPLOYEE_WORKSPACE_PERMISSIONS}>
+        <MentoringChatPage />
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: '/mentoring/resources',
+    element: (
+      <ProtectedRoute requiredAnyPermissions={EMPLOYEE_WORKSPACE_PERMISSIONS}>
+        <MentoringResourcesPage />
       </ProtectedRoute>
     ),
   },

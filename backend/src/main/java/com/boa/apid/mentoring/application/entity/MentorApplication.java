@@ -6,6 +6,8 @@ import com.boa.apid.core.skills.entity.Skill;
 import jakarta.persistence.*;
 
 import java.time.Instant;
+import java.util.LinkedHashSet;
+import java.util.Set;
 
 @Entity
 @Table(name = "mentor_applications", schema = "mentoring")
@@ -41,11 +43,38 @@ public class MentorApplication {
     @JoinColumn(name = "catalog_skill_id")
     private Skill catalogSkill;
 
+    @ManyToMany(fetch = FetchType.LAZY)
+    @JoinTable(
+            name = "mentor_application_skills",
+            schema = "mentoring",
+            joinColumns = @JoinColumn(name = "application_id"),
+            inverseJoinColumns = @JoinColumn(name = "skill_id")
+    )
+    private Set<Skill> catalogSkills = new LinkedHashSet<>();
+
+    @ManyToMany(fetch = FetchType.LAZY)
+    @JoinTable(
+            name = "mentor_application_evidence",
+            schema = "mentoring",
+            joinColumns = @JoinColumn(name = "application_id"),
+            inverseJoinColumns = @JoinColumn(name = "file_id")
+    )
+    private Set<StoredFile> supportingEvidence = new LinkedHashSet<>();
+
     @Column(name = "custom_skill", length = 150)
     private String customSkill;
 
     @Column(name = "note", columnDefinition = "TEXT")
     private String note;
+
+    @Column(name = "expertise_summary", length = 2000)
+    private String expertiseSummary;
+
+    @Column(name = "availability_notes", length = 1000)
+    private String availabilityNotes;
+
+    @Column(name = "max_concurrent_trainees")
+    private Integer maxConcurrentTrainees;
 
     @Column(name = "submitted_at", nullable = false, updatable = false)
     private Instant submittedAt;
@@ -80,11 +109,31 @@ public class MentorApplication {
     public Skill getCatalogSkill() { return catalogSkill; }
     public void setCatalogSkill(Skill catalogSkill) { this.catalogSkill = catalogSkill; }
 
+    public Set<Skill> getCatalogSkills() { return catalogSkills; }
+    public void setCatalogSkills(Set<Skill> catalogSkills) {
+        this.catalogSkills = catalogSkills == null ? new LinkedHashSet<>() : new LinkedHashSet<>(catalogSkills);
+    }
+
+    public Set<StoredFile> getSupportingEvidence() { return supportingEvidence; }
+    public void setSupportingEvidence(Set<StoredFile> supportingEvidence) {
+        this.supportingEvidence = supportingEvidence == null
+                ? new LinkedHashSet<>() : new LinkedHashSet<>(supportingEvidence);
+    }
+
     public String getCustomSkill() { return customSkill; }
     public void setCustomSkill(String customSkill) { this.customSkill = customSkill; }
 
     public String getNote() { return note; }
     public void setNote(String note) { this.note = note; }
+
+    public String getExpertiseSummary() { return expertiseSummary; }
+    public void setExpertiseSummary(String expertiseSummary) { this.expertiseSummary = expertiseSummary; }
+
+    public String getAvailabilityNotes() { return availabilityNotes; }
+    public void setAvailabilityNotes(String availabilityNotes) { this.availabilityNotes = availabilityNotes; }
+
+    public Integer getMaxConcurrentTrainees() { return maxConcurrentTrainees; }
+    public void setMaxConcurrentTrainees(Integer maxConcurrentTrainees) { this.maxConcurrentTrainees = maxConcurrentTrainees; }
 
     public Instant getSubmittedAt() { return submittedAt; }
 }

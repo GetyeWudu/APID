@@ -1,4 +1,4 @@
-import { DataSourceBadge, SvgHorizontalBarChart } from '../../../shared/components/ui';
+import { SvgHorizontalBarChart } from '../../../shared/components/ui';
 
 export function SkillSupplyDemandCard({
   liveSkillNames,
@@ -17,13 +17,8 @@ export function SkillSupplyDemandCard({
         <div>
           <h3 className="boa-card-title">Skill Demand vs Trainer Supply</h3>
           <p className="boa-card-subtitle">
-            Uses <strong>{liveSkillNames.length} active skills</strong> from the catalog alongside
-            sample request demand and trainer slot figures.
+            Live availability across <strong>{liveSkillNames.length} active skills</strong> in the catalog.
           </p>
-        </div>
-        <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap' }}>
-          <DataSourceBadge source="live" />
-          <DataSourceBadge source="preview" />
         </div>
       </div>
 

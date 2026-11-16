@@ -4,10 +4,13 @@ import com.boa.apid.mentoring.pairing.entity.MentoringRelationship;
 import com.boa.apid.mentoring.pairing.entity.MentoringRelationshipStatus;
 import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+import jakarta.persistence.LockModeType;
 import java.util.Optional;
+import java.util.List;
 
 public interface MentoringRelationshipRepository extends JpaRepository<MentoringRelationship, Long> {
 
@@ -15,6 +18,21 @@ public interface MentoringRelationshipRepository extends JpaRepository<Mentoring
 
     @EntityGraph(attributePaths = {"request", "request.skill", "mentorUser"})
     Optional<MentoringRelationship> findDetailedById(Long id);
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("SELECT relationship FROM MentoringRelationship relationship WHERE relationship.id = :id")
+    Optional<MentoringRelationship> findByIdForUpdate(@Param("id") Long id);
+
+    @EntityGraph(attributePaths = {"request", "request.skill", "mentorUser"})
+    List<MentoringRelationship> findByStatusOrderByStartedAtDesc(MentoringRelationshipStatus status);
+
+    @EntityGraph(attributePaths = {"request", "mentorUser"})
+    List<MentoringRelationship> findByMentorUser_IdAndStatus(
+            Long mentorUserId,
+            MentoringRelationshipStatus status
+    );
+
+    long countByStatus(MentoringRelationshipStatus status);
 
     @Query("""
             SELECT COUNT(member)

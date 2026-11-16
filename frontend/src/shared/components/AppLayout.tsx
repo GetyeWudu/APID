@@ -25,6 +25,7 @@ import {
   SlidersHorizontal,
   UserCheck,
   UserPlus,
+  UserRound,
   Users,
   X,
 } from 'lucide-react';
@@ -69,16 +70,21 @@ const EMPLOYEE_NAV_GROUP: NavGroup = {
       requiredAnyPermissions: EMPLOYEE_WORKSPACE_PERMISSIONS,
     },
     {
-      to: '/workspace?tab=chat',
-      label: 'Chat',
-      icon: <MessageSquare size={17} />,
-      requiredAnyPermissions: EMPLOYEE_WORKSPACE_PERMISSIONS,
-      matchSearch: '?tab=chat',
-    },
-    {
       to: '/mentoring/pairing',
       label: 'My Pairing',
       icon: <HeartHandshake size={17} />,
+      requiredAnyPermissions: EMPLOYEE_WORKSPACE_PERMISSIONS,
+    },
+    {
+      to: '/mentoring/chat',
+      label: 'Chat',
+      icon: <MessageSquare size={17} />,
+      requiredAnyPermissions: EMPLOYEE_WORKSPACE_PERMISSIONS,
+    },
+    {
+      to: '/mentoring/resources',
+      label: 'Resources',
+      icon: <BookOpen size={17} />,
       requiredAnyPermissions: EMPLOYEE_WORKSPACE_PERMISSIONS,
     },
   ],
@@ -213,13 +219,6 @@ export function AppLayout({ children }: { children: ReactNode }) {
           label: 'As a Trainee',
           items: [
             {
-              to: '/mentoring?view=trainee',
-              label: 'My Mentor',
-              icon: <Award size={17} />,
-              requiredAnyPermissions: EMPLOYEE_WORKSPACE_PERMISSIONS,
-              matchSearch: '?view=trainee',
-            },
-            {
               to: '/mentoring?view=trainee-sessions',
               label: 'My Sessions',
               icon: <MessageSquare size={17} />,
@@ -254,6 +253,13 @@ export function AppLayout({ children }: { children: ReactNode }) {
                     icon: <Users size={17} />,
                     requiredAnyPermissions: EMPLOYEE_WORKSPACE_PERMISSIONS,
                     matchSearch: '?view=trainer',
+                  },
+                  {
+                    to: '/mentoring?view=trainer-profile',
+                    label: 'Mentor Profile',
+                    icon: <UserRound size={17} />,
+                    requiredAnyPermissions: EMPLOYEE_WORKSPACE_PERMISSIONS,
+                    matchSearch: '?view=trainer-profile',
                   },
                   {
                     to: '/mentoring?view=trainer-sessions',

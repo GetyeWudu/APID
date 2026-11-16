@@ -18,6 +18,8 @@ export function MentorDirectory({
   const queryClient = useQueryClient();
   const { pushToast } = useToast();
   const [skillFilter, setSkillFilter] = useState('ALL');
+  const [departmentFilter, setDepartmentFilter] = useState('');
+  const [availableOnly, setAvailableOnly] = useState(true);
   const [selectedMentor, setSelectedMentor] = useState<MentorDirectoryItem | null>(null);
   const [selectedSkillId, setSelectedSkillId] = useState('');
   const [message, setMessage] = useState('');
@@ -68,7 +70,11 @@ export function MentorDirectory({
   }, [otherMentors]);
 
   const filteredMentors = otherMentors.filter(
-    (mentor) => skillFilter === 'ALL' || mentor.skills.some((skill) => String(skill.id) === skillFilter)
+    (mentor) =>
+      (skillFilter === 'ALL' || mentor.skills.some((skill) => String(skill.id) === skillFilter)) &&
+      (!departmentFilter.trim() ||
+        mentor.departmentName?.toLowerCase().includes(departmentFilter.trim().toLowerCase())) &&
+      (!availableOnly || mentor.remainingCapacity === undefined || mentor.remainingCapacity > 0)
   );
   const onlyOwnMentorProfile = mentors.length > 0 && otherMentors.length === 0;
 
@@ -77,22 +83,39 @@ export function MentorDirectory({
       <div className="boa-card-header">
         <div>
           <h3 className="boa-card-title">Mentor Directory</h3>
-          <p className="boa-card-subtitle">Browse active mentors and their linked skills.</p>
+          <p className="boa-card-subtitle">Browse mentors by skill or department and send a direct mentorship request.</p>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-          <select
-            className="apid-input"
-            aria-label="Filter mentors by skill"
-            value={skillFilter}
-            onChange={(event) => setSkillFilter(event.target.value)}
-          >
-            <option value="ALL">All Skills</option>
-            {skills.map((skill) => (
-              <option key={skill.id} value={skill.id}>
-                {skill.name}
-              </option>
-            ))}
-          </select>
+          <div className="boa-stack" style={{ gap: '0.35rem' }}>
+            <select
+              className="apid-input"
+              aria-label="Filter mentors by skill"
+              value={skillFilter}
+              onChange={(event) => setSkillFilter(event.target.value)}
+            >
+              <option value="ALL">All Skills</option>
+              {skills.map((skill) => (
+                <option key={skill.id} value={skill.id}>
+                  {skill.name}
+                </option>
+              ))}
+            </select>
+            <input
+              className="apid-input"
+              aria-label="Filter mentors by department"
+              placeholder="Department"
+              value={departmentFilter}
+              onChange={(event) => setDepartmentFilter(event.target.value)}
+            />
+            <label style={{ display: 'flex', gap: '0.35rem', alignItems: 'center', fontSize: '0.82rem' }}>
+              <input
+                type="checkbox"
+                checked={availableOnly}
+                onChange={(event) => setAvailableOnly(event.target.checked)}
+              />
+              Available capacity only
+            </label>
+          </div>
           <DataSourceBadge source="live" />
         </div>
       </div>
@@ -126,6 +149,13 @@ export function MentorDirectory({
               <div className="boa-muted" style={{ fontSize: '0.8rem' }}>
                 {[mentor.employeeNumber, mentor.departmentName].filter(Boolean).join(' · ') || mentor.username}
               </div>
+              <div className="boa-muted" style={{ fontSize: '0.8rem', marginTop: '0.35rem' }}>
+                {mentor.remainingCapacity === undefined
+                  ? 'Capacity not available'
+                  : `${mentor.remainingCapacity} trainee slot${mentor.remainingCapacity === 1 ? '' : 's'} available`}
+                {mentor.availabilityNotes ? ` · ${mentor.availabilityNotes}` : ''}
+              </div>
+              {mentor.bio && <p className="boa-muted" style={{ fontSize: '0.84rem' }}>{mentor.bio}</p>}
               <div style={{ display: 'flex', gap: '0.3rem', flexWrap: 'wrap', marginTop: '0.45rem' }}>
                 {mentor.skills.length > 0 ? (
                   mentor.skills.map((skill) => (
@@ -149,7 +179,7 @@ export function MentorDirectory({
                     type="button"
                     className="apid-btn apid-btn-primary apid-btn-sm"
                     style={{ marginTop: '0.75rem' }}
-                    disabled={Boolean(existing)}
+                    disabled={Boolean(existing) || mentor.remainingCapacity === 0}
                     onClick={() => {
                       setSelectedMentor(mentor);
                       setSelectedSkillId(mentor.skills[0] ? String(mentor.skills[0].id) : '');
@@ -160,7 +190,9 @@ export function MentorDirectory({
                       ? 'Mentorship active'
                       : existing
                         ? 'Request pending'
-                        : 'Request mentorship'}
+                        : mentor.remainingCapacity === 0
+                          ? 'At capacity'
+                          : 'Request mentorship'}
                   </button>
                 );
               })()}

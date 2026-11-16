@@ -26,6 +26,7 @@ import com.boa.apid.mentoring.pairing.repository.MentoringMessageRepository;
 import com.boa.apid.mentoring.pairing.repository.MentoringRelationshipMemberRepository;
 import com.boa.apid.mentoring.pairing.repository.MentoringRelationshipRepository;
 import com.boa.apid.mentoring.pairing.repository.MentoringSessionRepository;
+import com.boa.apid.mentoring.trainer.repository.TrainerAuthorizationRepository;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.access.AccessDeniedException;
@@ -56,6 +57,7 @@ public class MentoringCollaborationService {
     private final EmployeeRepository employeeRepository;
     private final UserRepository userRepository;
     private final UserRoleRepository userRoleRepository;
+    private final TrainerAuthorizationRepository trainerAuthorizationRepository;
 
     public MentoringCollaborationService(
             MentoringRelationshipRepository relationshipRepository,
@@ -64,7 +66,8 @@ public class MentoringCollaborationService {
             MentoringMessageRepository messageRepository,
             EmployeeRepository employeeRepository,
             UserRepository userRepository,
-            UserRoleRepository userRoleRepository
+            UserRoleRepository userRoleRepository,
+            TrainerAuthorizationRepository trainerAuthorizationRepository
     ) {
         this.relationshipRepository = relationshipRepository;
         this.memberRepository = memberRepository;
@@ -73,6 +76,7 @@ public class MentoringCollaborationService {
         this.employeeRepository = employeeRepository;
         this.userRepository = userRepository;
         this.userRoleRepository = userRoleRepository;
+        this.trainerAuthorizationRepository = trainerAuthorizationRepository;
     }
 
     @Transactional(readOnly = true)
@@ -162,6 +166,7 @@ public class MentoringCollaborationService {
             throw new AccessDeniedException("Only the mentor can schedule a session.");
         }
         if (!userRoleRepository.existsActiveMentorRoleByUserId(actor.getUserId())
+                || trainerAuthorizationRepository.findActiveByUserId(actor.getUserId()).isEmpty()
                 || !employeeRepository.existsByUserIdAndEmploymentStatus(actor.getUserId(), EmploymentStatus.ACTIVE)) {
             throw new AccessDeniedException("Only an active mentor can schedule a session.");
         }
@@ -267,12 +272,10 @@ public class MentoringCollaborationService {
     }
 
     private void ensureWritableParticipant(MentoringRelationship relationship, Long userId) {
-        if (relationship.getStatus() == MentoringRelationshipStatus.COMPLETED
-                || relationship.getStatus() == MentoringRelationshipStatus.CANCELLED
-                || relationship.getStatus() == MentoringRelationshipStatus.REASSIGNED) {
+        if (relationship.getStatus() != MentoringRelationshipStatus.ACTIVE) {
             throw new BusinessException(
                     "MENTORING_RELATIONSHIP_READ_ONLY",
-                    "Chat is read-only after a mentoring relationship is closed.",
+                    "Chat is read-only while a mentoring relationship is paused or closed.",
                     HttpStatus.CONFLICT
             );
         }

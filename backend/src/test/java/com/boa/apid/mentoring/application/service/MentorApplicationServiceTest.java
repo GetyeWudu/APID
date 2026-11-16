@@ -17,10 +17,12 @@ import com.boa.apid.core.authorization.repository.UserRoleRepository;
 import com.boa.apid.core.notifications.service.NotificationService;
 import com.boa.apid.core.skills.entity.Skill;
 import com.boa.apid.core.skills.repository.SkillRepository;
+import com.boa.apid.core.skills.service.SkillCacheInvalidationEvent;
 import com.boa.apid.mentoring.application.dto.MentorApplicationReviewRequest;
 import com.boa.apid.mentoring.application.entity.MentorApplication;
 import com.boa.apid.mentoring.application.entity.MentorApplicationStatus;
 import com.boa.apid.mentoring.application.repository.MentorApplicationRepository;
+import com.boa.apid.mentoring.trainer.service.TrainerAuthorizationService;
 import org.springframework.context.ApplicationEventPublisher;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -76,6 +78,9 @@ class MentorApplicationServiceTest {
     @Mock
     private ApplicationEventPublisher eventPublisher;
 
+    @Mock
+    private TrainerAuthorizationService trainerAuthorizationService;
+
     @InjectMocks
     private MentorApplicationService service;
 
@@ -110,6 +115,60 @@ class MentorApplicationServiceTest {
         assertEquals("Supporting note", saved.getNote());
         assertEquals(MentorApplicationStatus.PENDING, result.status());
         assertEquals(12L, result.catalogSkillId());
+    }
+
+    @Test
+    void submitSavesMultipleCatalogSkillsAndEvidenceFiles() {
+        ApidUserPrincipal actor = actor();
+        User applicant = new User();
+        applicant.setId(actor.getUserId());
+        Skill firstSkill = new Skill();
+        firstSkill.setId(12L);
+        Skill secondSkill = new Skill();
+        secondSkill.setId(13L);
+        MockMultipartFile firstUpload = proofUpload();
+        MockMultipartFile secondUpload = new MockMultipartFile(
+                "supportingEvidence", "portfolio.pdf", "application/pdf", new byte[]{4, 5, 6}
+        );
+        StoredFile firstFile = proofFile(actor.getUserId());
+        StoredFile secondFile = new StoredFile();
+        secondFile.setId(32L);
+        secondFile.setUploadedByUserId(actor.getUserId());
+        secondFile.setPurpose(FilePurpose.TRAINER_CERT);
+
+        when(userRepository.findById(actor.getUserId())).thenReturn(Optional.of(applicant));
+        when(skillRepository.findByIdAndActiveTrue(12L)).thenReturn(Optional.of(firstSkill));
+        when(skillRepository.findByIdAndActiveTrue(13L)).thenReturn(Optional.of(secondSkill));
+        when(fileStorageService.store(firstUpload, FilePurpose.TRAINER_CERT, actor))
+                .thenReturn(fileDto(actor.getUserId()));
+        when(fileStorageService.store(secondUpload, FilePurpose.TRAINER_CERT, actor))
+                .thenReturn(new StoredFileDto(
+                        32L, "portfolio.pdf", "application/pdf", 3L, "hash2",
+                        "MENTORING", FilePurpose.TRAINER_CERT, actor.getUserId(), Instant.now()
+                ));
+        when(storedFileRepository.findByIdAndDeletedFalse(31L)).thenReturn(Optional.of(firstFile));
+        when(storedFileRepository.findByIdAndDeletedFalse(32L)).thenReturn(Optional.of(secondFile));
+        when(applicationRepository.save(any(MentorApplication.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+
+        var result = service.submit(
+                List.of(12L, 13L),
+                null,
+                null,
+                "Experienced mentor",
+                "Weekdays",
+                3,
+                List.of(firstUpload, secondUpload),
+                actor
+        );
+
+        ArgumentCaptor<MentorApplication> applicationCaptor = ArgumentCaptor.forClass(MentorApplication.class);
+        verify(applicationRepository).save(applicationCaptor.capture());
+        MentorApplication saved = applicationCaptor.getValue();
+        assertEquals(Set.of(firstSkill, secondSkill), saved.getCatalogSkills());
+        assertEquals(Set.of(firstFile, secondFile), saved.getSupportingEvidence());
+        assertSame(firstFile, saved.getProofDocument());
+        assertEquals(List.of(12L, 13L), result.catalogSkillIds());
     }
 
     @Test
@@ -198,6 +257,43 @@ class MentorApplicationServiceTest {
                 "Your mentor application for Financial Analysis was approved.",
                 "/mentoring?tab=applications"
         );
+    }
+
+    @Test
+    void reviewApprovalAddsCustomSkillToSharedCatalogAndTrainerAuthorization() {
+        ApidUserPrincipal actor = actor();
+        User applicant = user(11L, "applicant");
+        User reviewer = user(actor.getUserId(), actor.getUsername());
+        MentorApplication application = application(applicant, null);
+        application.setCustomSkill("Custom Coaching");
+        Role mentorRole = new Role();
+        mentorRole.setId(4L);
+        mentorRole.setName("Mentor");
+
+        when(applicationRepository.findByIdForUpdate(50L)).thenReturn(Optional.of(application));
+        when(userRepository.findByIdForUpdate(11L)).thenReturn(Optional.of(applicant));
+        when(userRepository.findById(actor.getUserId())).thenReturn(Optional.of(reviewer));
+        when(userRepository.getReferenceById(actor.getUserId())).thenReturn(reviewer);
+        when(roleRepository.findByNameIgnoreCase("Mentor")).thenReturn(Optional.of(mentorRole));
+        when(userRoleRepository.findActiveByUserIdWithRole(11L)).thenReturn(List.of());
+        when(skillRepository.findByNameIgnoreCase("Custom Coaching")).thenReturn(Optional.empty());
+        when(skillRepository.save(any(Skill.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(applicationRepository.save(any(MentorApplication.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+
+        var result = service.reviewApplication(
+                50L,
+                new MentorApplicationReviewRequest(MentorApplicationStatus.APPROVED, null),
+                actor
+        );
+
+        Skill registeredSkill = application.getCatalogSkills().stream().findFirst().orElseThrow();
+        assertEquals("Custom Coaching", registeredSkill.getName());
+        assertEquals("Mentoring", registeredSkill.getCategory());
+        assertEquals(Set.of(registeredSkill), applicant.getSkills());
+        assertEquals("Custom Coaching", result.skillName());
+        verify(eventPublisher).publishEvent(any(SkillCacheInvalidationEvent.class));
+        verify(trainerAuthorizationService).authorizeApplication(application, reviewer);
     }
 
     @Test

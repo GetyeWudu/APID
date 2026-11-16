@@ -4,7 +4,6 @@ import type {
 } from '../../../shared/mocks/boaPreviewFixtures';
 
 export type TrainerSuspensionPolicy =
-  | 'PAUSE_EXISTING_RELATIONSHIPS'
   | 'BLOCK_NEW_SESSIONS_ONLY'
   | 'REQUIRE_HR_REASSIGNMENT';
 

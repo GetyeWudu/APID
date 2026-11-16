@@ -1,0 +1,252 @@
+.mentoring-hub__layout {
+  display: grid;
+  grid-template-columns: minmax(250px, 310px) minmax(0, 1fr);
+  gap: 1rem;
+  align-items: stretch;
+  min-height: 560px;
+}
+
+.mentoring-hub__sidebar {
+  min-width: 0;
+  padding: 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.mentoring-hub__sidebar-heading,
+.mentoring-hub__resource-heading {
+  display: flex;
+  align-items: center;
+  gap: 0.8rem;
+}
+
+.mentoring-hub__sidebar-heading {
+  justify-content: space-between;
+}
+
+.mentoring-hub__sidebar-heading .boa-card-subtitle {
+  margin-bottom: 0;
+}
+
+.mentoring-hub__count {
+  min-width: 2rem;
+  height: 2rem;
+  display: grid;
+  place-items: center;
+  border-radius: 999px;
+  background: var(--surface-subtle);
+  color: var(--muted);
+  font-size: 0.8rem;
+  font-weight: 700;
+}
+
+.mentoring-hub__search {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-width: 0;
+  padding: 0 0.7rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  color: var(--muted-soft);
+  background: var(--surface-subtle);
+}
+
+.mentoring-hub__search .apid-input {
+  min-width: 0;
+  border: 0;
+  padding-left: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.mentoring-hub__pair-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  overflow: auto;
+}
+
+.mentoring-hub__pair {
+  width: 100%;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  padding: 0.7rem;
+  border: 1px solid transparent;
+  border-radius: var(--radius-md);
+  color: var(--text);
+  text-align: left;
+  background: transparent;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease, transform 0.15s ease;
+}
+
+.mentoring-hub__pair:hover {
+  background: var(--surface-subtle);
+  border-color: var(--border);
+}
+
+.mentoring-hub__pair.is-selected {
+  background: var(--brand-soft);
+  border-color: var(--brand-soft-border);
+}
+
+.mentoring-hub__pair-copy {
+  min-width: 0;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
+.mentoring-hub__pair-copy strong,
+.mentoring-hub__pair-copy span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mentoring-hub__pair-copy strong {
+  font-size: 0.85rem;
+}
+
+.mentoring-hub__pair-copy span {
+  color: var(--muted);
+  font-size: 0.75rem;
+}
+
+.mentoring-hub__pair-copy .mentoring-hub__skill {
+  color: var(--brand);
+  font-weight: 600;
+}
+
+.mentoring-hub__pair-status {
+  align-self: flex-start;
+  padding-top: 0.25rem;
+}
+
+.mentoring-hub__status-dot {
+  width: 0.55rem;
+  height: 0.55rem;
+  display: block;
+  border-radius: 50%;
+  background: var(--muted-soft);
+}
+
+.mentoring-hub__status-dot.is-active {
+  background: var(--ok);
+}
+
+.mentoring-hub__status-dot.is-paused {
+  background: var(--warn);
+}
+
+.mentoring-hub__main {
+  min-width: 0;
+}
+
+.mentoring-hub__resource-panel {
+  min-height: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.mentoring-hub__resource-heading {
+  flex-wrap: wrap;
+}
+
+.mentoring-hub__resource-heading > div {
+  min-width: 0;
+  flex: 1;
+}
+
+.mentoring-hub__resource-heading .boa-card-subtitle {
+  margin-bottom: 0;
+}
+
+.mentoring-hub__no-results {
+  padding: 0.6rem 0.7rem;
+  font-size: 0.82rem;
+}
+
+.mentoring-chat-panel {
+  min-height: 560px;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.mentoring-chat-messages {
+  flex: 1;
+  min-height: 260px;
+  max-height: 56vh;
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+  overflow: auto;
+  padding: 0.2rem 0.1rem;
+}
+
+.mentoring-chat-bubble {
+  padding: 0.8rem 1rem;
+  border: 1px solid var(--border);
+  border-radius: 16px 16px 16px 4px;
+  background: var(--surface-subtle);
+  box-shadow: var(--shadow-xs);
+}
+
+.mentoring-chat-bubble.is-mine {
+  border-color: var(--brand-soft-border);
+  border-radius: 16px 16px 4px 16px;
+  background: var(--brand-soft);
+}
+
+.mentoring-chat-composer {
+  display: flex;
+  align-items: flex-end;
+  gap: 0.65rem;
+  padding: 0.65rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--surface-subtle);
+}
+
+.mentoring-chat-composer textarea {
+  min-height: 44px;
+  max-height: 140px;
+  resize: vertical;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.mentoring-chat-composer button {
+  width: 42px;
+  height: 42px;
+  flex: 0 0 42px;
+  display: grid;
+  place-items: center;
+}
+
+@media (max-width: 800px) {
+  .mentoring-hub__layout {
+    grid-template-columns: minmax(0, 1fr);
+    min-height: 0;
+  }
+
+  .mentoring-hub__sidebar {
+    max-height: 380px;
+  }
+
+  .mentoring-chat-panel {
+    min-height: 480px;
+  }
+
+  .mentoring-chat-messages {
+    max-height: 45vh;
+  }
+}

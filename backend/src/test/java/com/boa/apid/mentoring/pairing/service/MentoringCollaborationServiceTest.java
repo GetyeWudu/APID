@@ -22,13 +22,17 @@ import com.boa.apid.mentoring.pairing.repository.MentoringMessageRepository;
 import com.boa.apid.mentoring.pairing.repository.MentoringRelationshipMemberRepository;
 import com.boa.apid.mentoring.pairing.repository.MentoringRelationshipRepository;
 import com.boa.apid.mentoring.pairing.repository.MentoringSessionRepository;
+import com.boa.apid.mentoring.trainer.entity.TrainerAuthorization;
+import com.boa.apid.mentoring.trainer.repository.TrainerAuthorizationRepository;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.security.access.AccessDeniedException;
+import org.springframework.test.util.ReflectionTestUtils;
 
 import java.time.Instant;
 import java.util.List;
@@ -52,9 +56,19 @@ class MentoringCollaborationServiceTest {
     @Mock private EmployeeRepository employeeRepository;
     @Mock private UserRepository userRepository;
     @Mock private UserRoleRepository userRoleRepository;
+    @Mock private TrainerAuthorizationRepository trainerAuthorizationRepository;
 
     @InjectMocks
     private MentoringCollaborationService service;
+
+    @BeforeEach
+    void provideActiveTrainerAuthorization() {
+        TrainerAuthorization authorization = new TrainerAuthorization();
+        authorization.setMaxConcurrentTrainees(3);
+        org.mockito.Mockito.lenient()
+                .when(trainerAuthorizationRepository.findActiveByUserId(any()))
+                .thenReturn(List.of(authorization));
+    }
 
     @Test
     void onlyTheMentorCanScheduleASession() {
@@ -154,6 +168,7 @@ class MentoringCollaborationServiceTest {
         request.setRequestType(MentoringRequestType.INDIVIDUAL);
 
         MentoringRelationship relationship = new MentoringRelationship();
+        ReflectionTestUtils.setField(relationship, "id", 7L);
         relationship.setRequest(request);
         relationship.setMentorUser(mentor);
         relationship.setStatus(status);

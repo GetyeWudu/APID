@@ -1,7 +1,7 @@
 import { apiClient, type ApiResponse } from '../../../shared/api/apiClient';
 
 export type MentoringRequestType = 'INDIVIDUAL' | 'GROUP';
-export type MentoringRequestStatus = 'PENDING' | 'ACCEPTED' | 'DECLINED';
+export type MentoringRequestStatus = 'PENDING' | 'ACCEPTED' | 'DECLINED' | 'CANCELLED';
 
 export interface MentoringEmployeeCandidate {
   userId: number;
@@ -106,6 +106,33 @@ export interface MentoringChatHistory {
   hasMore: boolean;
 }
 
+export interface MentoringResource {
+  id: number;
+  relationshipId: number;
+  title: string;
+  resourceType: 'FILE' | 'LINK';
+  fileId: number | null;
+  fileName: string | null;
+  externalUrl: string | null;
+  uploadedByName: string;
+  createdAt: string;
+}
+
+export interface MentoringProgressNote {
+  id: number;
+  relationshipId: number;
+  authorUserId: number;
+  authorName: string;
+  note: string;
+  createdAt: string;
+}
+
+export interface MentoringFeedback {
+  rating: number;
+  feedback: string | null;
+  ratedAt: string;
+}
+
 export const mentoringPairingApi = {
   async listMyRequests(): Promise<MentoringPairing[]> {
     const response = await apiClient.get<ApiResponse<MentoringPairing[]>>('/mentoring/pairing/requests');
@@ -174,6 +201,79 @@ export const mentoringPairingApi = {
       { body }
     );
     return response.data.data;
+  },
+
+  async listResources(relationshipId: number): Promise<MentoringResource[]> {
+    const response = await apiClient.get<ApiResponse<MentoringResource[]>>(
+      `/mentoring/pairing/relationships/${relationshipId}/resources`
+    );
+    return response.data.data;
+  },
+
+  async addResource(
+    relationshipId: number,
+    input: { title: string; externalUrl?: string; file?: File }
+  ): Promise<MentoringResource> {
+    const formData = new FormData();
+    formData.append('title', input.title);
+    if (input.externalUrl) formData.append('externalUrl', input.externalUrl);
+    if (input.file) formData.append('file', input.file);
+    const response = await apiClient.post<ApiResponse<MentoringResource>>(
+      `/mentoring/pairing/relationships/${relationshipId}/resources`,
+      formData,
+      { headers: { 'Content-Type': 'multipart/form-data' } }
+    );
+    return response.data.data;
+  },
+
+  async downloadResource(relationshipId: number, resourceId: number): Promise<Blob> {
+    const response = await apiClient.get<Blob>(
+      `/mentoring/pairing/relationships/${relationshipId}/resources/${resourceId}/file`,
+      { responseType: 'blob' }
+    );
+    return response.data;
+  },
+
+  async listProgressNotes(relationshipId: number): Promise<MentoringProgressNote[]> {
+    const response = await apiClient.get<ApiResponse<MentoringProgressNote[]>>(
+      `/mentoring/pairing/relationships/${relationshipId}/progress-notes`
+    );
+    return response.data.data;
+  },
+
+  async addProgressNote(relationshipId: number, note: string): Promise<MentoringProgressNote> {
+    const response = await apiClient.post<ApiResponse<MentoringProgressNote>>(
+      `/mentoring/pairing/relationships/${relationshipId}/progress-notes`,
+      { note }
+    );
+    return response.data.data;
+  },
+
+  async getMyFeedback(relationshipId: number): Promise<MentoringFeedback | null> {
+    const response = await apiClient.get<ApiResponse<MentoringFeedback | null>>(
+      `/mentoring/pairing/relationships/${relationshipId}/feedback/mine`
+    );
+    return response.data.data;
+  },
+
+  async submitFeedback(
+    relationshipId: number,
+    input: { rating: number; feedback?: string }
+  ): Promise<void> {
+    await apiClient.post<ApiResponse<null>>(
+      `/mentoring/pairing/relationships/${relationshipId}/feedback`,
+      input
+    );
+  },
+
+  async closeRelationship(
+    relationshipId: number,
+    input: { status: 'COMPLETED' | 'CANCELLED'; reason: string }
+  ): Promise<void> {
+    await apiClient.patch<ApiResponse<null>>(
+      `/mentoring/pairing/relationships/${relationshipId}/status`,
+      input
+    );
   },
 
   async listEmployeeCandidates(): Promise<MentoringEmployeeCandidate[]> {

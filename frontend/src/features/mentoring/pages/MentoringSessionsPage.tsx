@@ -1,6 +1,6 @@
-import { useRef, useState, type FormEvent } from 'react';
+import { useState, type FormEvent } from 'react';
 import axios from 'axios';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query';
 import { CalendarDays, Video } from 'lucide-react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../../../app/AuthContext';
@@ -13,9 +13,32 @@ import {
   StatusPill,
   useToast,
 } from '../../../shared/components/ui';
-import { mentoringPairingApi, type MentoringDeliveryMode, type MentoringSession } from '../api/mentoringPairingApi';
+import { mentoringPairingApi, type MentoringSession } from '../api/mentoringPairingApi';
 
 type SessionView = 'mentor' | 'trainee';
+type SessionMeetingMode = 'IN_PERSON' | 'VIDEO_CALL' | 'PHONE_CALL';
+
+interface LocalSessionDraft {
+  id: string;
+  relationshipId: number;
+  title: string;
+  purpose: string;
+  scheduledStart: string;
+  scheduledEnd: string;
+  meetingMode: SessionMeetingMode;
+  meetingUrl: string;
+}
+
+function formatLocalSessionMode(mode: SessionMeetingMode) {
+  switch (mode) {
+    case 'IN_PERSON':
+      return 'In-person meeting';
+    case 'VIDEO_CALL':
+      return 'Video call';
+    case 'PHONE_CALL':
+      return 'Phone call';
+  }
+}
 
 function formatDateTime(value: string) {
   const date = new Date(value);
@@ -46,8 +69,7 @@ export function MentoringSessionsPage({ view }: { view: SessionView }) {
     searchParams.get('relationshipId') ?? ''
   );
   const [isCreateFormOpen, setCreateFormOpen] = useState(Boolean(searchParams.get('relationshipId')));
-  const formRef = useRef<HTMLFormElement>(null);
-  const queryClient = useQueryClient();
+  const [localSessionDrafts, setLocalSessionDrafts] = useState<LocalSessionDraft[]>([]);
   const { pushToast } = useToast();
   const relationshipsQuery = useQuery({
     queryKey: ['mentoring', 'pairing', 'relationships', user?.id],
@@ -56,37 +78,6 @@ export function MentoringSessionsPage({ view }: { view: SessionView }) {
   const sessionsQuery = useQuery({
     queryKey: ['mentoring', 'pairing', 'my-sessions', user?.id],
     queryFn: mentoringPairingApi.listMySessions,
-  });
-
-  const createSessionMutation = useMutation({
-    mutationFn: (input: {
-      relationshipId: number;
-      title: string;
-      agenda?: string;
-      scheduledStart: string;
-      scheduledEnd: string;
-      deliveryMode: MentoringDeliveryMode;
-      meetingUrl?: string;
-    }) => {
-      const { relationshipId, ...sessionInput } = input;
-      return mentoringPairingApi.createSession(relationshipId, sessionInput);
-    },
-    onSuccess: async (session) => {
-      await Promise.all([
-        queryClient.invalidateQueries({ queryKey: ['mentoring', 'pairing', 'my-sessions', user?.id] }),
-        queryClient.invalidateQueries({
-          queryKey: ['mentoring', 'pairing', 'sessions', session.relationshipId],
-        }),
-      ]);
-      formRef.current?.reset();
-      pushToast({ title: 'Session scheduled', message: 'Your pairing can now see the session.', tone: 'ok' });
-    },
-    onError: (error: unknown) =>
-      pushToast({
-        title: 'Unable to schedule session',
-        message: getErrorMessage(error, 'Please try again.'),
-        tone: 'err',
-      }),
   });
 
   if (relationshipsQuery.isLoading || sessionsQuery.isLoading) {
@@ -132,6 +123,9 @@ export function MentoringSessionsPage({ view }: { view: SessionView }) {
     (pair) => String(pair.relationshipId) === selectedRelationshipId
   );
   const title = view === 'mentor' ? 'Mentor Sessions' : 'My Sessions';
+  const localDraftsForView = localSessionDrafts.filter((draft) =>
+    relationshipsById.has(draft.relationshipId)
+  );
 
   const handleCreateSession = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -139,6 +133,9 @@ export function MentoringSessionsPage({ view }: { view: SessionView }) {
     const relationshipId = Number(formData.get('relationshipId'));
     const scheduledStart = String(formData.get('scheduledStart') ?? '');
     const scheduledEnd = String(formData.get('scheduledEnd') ?? '');
+    const purpose = String(formData.get('purpose') ?? '').trim();
+    const meetingMode = String(formData.get('meetingMode') ?? '') as SessionMeetingMode;
+    const meetingUrl = String(formData.get('meetingUrl') ?? '').trim();
     const startDate = new Date(scheduledStart);
     const endDate = new Date(scheduledEnd);
     if (
@@ -147,24 +144,36 @@ export function MentoringSessionsPage({ view }: { view: SessionView }) {
       Number.isNaN(startDate.getTime()) ||
       Number.isNaN(endDate.getTime()) ||
       startDate.getTime() <= Date.now() ||
-      endDate.getTime() <= startDate.getTime()
+      endDate.getTime() <= startDate.getTime() ||
+      !purpose ||
+      !['IN_PERSON', 'VIDEO_CALL', 'PHONE_CALL'].includes(meetingMode) ||
+      (meetingMode === 'VIDEO_CALL' && meetingUrl && !/^https?:\/\//i.test(meetingUrl))
     ) {
       pushToast({
         title: 'Invalid session details',
-        message: 'Choose an active pairing, a future start time, and an end time after the start.',
+        message: 'Choose an active pairing, describe the session, and enter a valid future schedule.',
         tone: 'err',
       });
       return;
     }
 
-    createSessionMutation.mutate({
+    const localDraft: LocalSessionDraft = {
+      id: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
       relationshipId,
       title: String(formData.get('title') ?? '').trim(),
-      agenda: String(formData.get('agenda') ?? '').trim() || undefined,
+      purpose,
       scheduledStart: startDate.toISOString(),
       scheduledEnd: endDate.toISOString(),
-      deliveryMode: String(formData.get('deliveryMode')) as MentoringDeliveryMode,
-      meetingUrl: String(formData.get('meetingUrl') ?? '').trim() || undefined,
+      meetingMode,
+      meetingUrl: meetingMode === 'VIDEO_CALL' ? meetingUrl : '',
+    };
+    setLocalSessionDrafts((drafts) => [localDraft, ...drafts]);
+    event.currentTarget.reset();
+    setSelectedRelationshipId(String(relationshipId));
+    pushToast({
+      title: 'Session plan added',
+      message: 'This is a local preview only and has not been saved to the mentoring service.',
+      tone: 'info',
     });
   };
 
@@ -193,10 +202,12 @@ export function MentoringSessionsPage({ view }: { view: SessionView }) {
       />
 
       {view === 'mentor' && isCreateFormOpen && (
-        <form ref={formRef} className="apid-card boa-stack" onSubmit={handleCreateSession}>
+        <form className="apid-card boa-stack" onSubmit={handleCreateSession}>
           <div>
-            <h2 className="boa-card-title">Create a mentoring session</h2>
-            <p className="boa-card-subtitle">The session will be shared with everyone in the selected pairing.</p>
+            <h2 className="boa-card-title">Plan a mentoring session</h2>
+            <p className="boa-card-subtitle">
+              Describe the session and choose how it will happen. This frontend-only plan is not saved or shared yet.
+            </p>
           </div>
           <label>
             Pairing
@@ -229,8 +240,15 @@ export function MentoringSessionsPage({ view }: { view: SessionView }) {
             <input className="apid-input" name="title" maxLength={180} required />
           </label>
           <label>
-            Agenda
-            <textarea className="apid-input" name="agenda" maxLength={2000} rows={3} />
+            What will you work on?
+            <textarea
+              className="apid-input"
+              name="purpose"
+              maxLength={2000}
+              rows={3}
+              placeholder="Describe the topic, activities, or goal for this session."
+              required
+            />
           </label>
           <div className="boa-grid-2">
             <label>
@@ -244,32 +262,38 @@ export function MentoringSessionsPage({ view }: { view: SessionView }) {
           </div>
           <div className="boa-grid-2">
             <label>
-              Delivery mode
-              <select className="apid-input" name="deliveryMode" defaultValue="ONLINE">
-                <option value="ONLINE">Online</option>
-                <option value="IN_PERSON">In person</option>
-                <option value="HYBRID">Hybrid</option>
+              How will you meet?
+              <select className="apid-input" name="meetingMode" defaultValue="VIDEO_CALL">
+                <option value="IN_PERSON">In-person meeting</option>
+                <option value="VIDEO_CALL">Video call</option>
+                <option value="PHONE_CALL">Phone call</option>
               </select>
             </label>
             <label>
-              Meeting link (optional)
-              <input className="apid-input" name="meetingUrl" type="url" maxLength={1000} />
+              Video meeting link (optional)
+              <input
+                className="apid-input"
+                name="meetingUrl"
+                type="url"
+                maxLength={1000}
+                placeholder="https://..."
+              />
             </label>
           </div>
           <div>
             <button
               type="submit"
               className="apid-btn apid-btn-primary apid-btn-sm"
-              disabled={createSessionMutation.isPending || !selectedRelationship}
+              disabled={!selectedRelationship}
             >
               <CalendarDays size={15} />
-              {createSessionMutation.isPending ? 'Scheduling...' : 'Schedule session'}
+              Add session plan
             </button>
           </div>
         </form>
       )}
 
-      {sessions.length === 0 ? (
+      {sessions.length === 0 && localDraftsForView.length === 0 ? (
         <section className="apid-card">
           <EmptyState
             title="No sessions yet"
@@ -284,8 +308,49 @@ export function MentoringSessionsPage({ view }: { view: SessionView }) {
         <section className="apid-card boa-stack">
           <div>
             <h2 className="boa-card-title">Session history</h2>
-            <p className="boa-card-subtitle">Sessions across your mentoring pairings.</p>
+            <p className="boa-card-subtitle">Saved sessions and local-only plans across your mentoring pairings.</p>
           </div>
+          {localDraftsForView.map((draft) => {
+            const pair = relationshipsById.get(draft.relationshipId);
+            const partnerLabel = pair
+              ? view === 'mentor'
+                ? (traineesByRelationship.get(pair.relationshipId) ?? [pair.traineeName]).join(', ')
+                : pair.mentorName
+              : 'Mentoring pairing';
+            return (
+              <article
+                key={draft.id}
+                className="apid-card"
+                style={{ border: '1px solid var(--border)' }}
+                data-testid="local-session-plan"
+              >
+                <div style={{ display: 'flex', justifyContent: 'space-between', gap: '0.7rem', flexWrap: 'wrap' }}>
+                  <div>
+                    <h3 style={{ margin: 0 }}>{draft.title}</h3>
+                    <p className="boa-muted" style={{ margin: '0.3rem 0 0', fontSize: '0.84rem' }}>
+                      {partnerLabel} · {formatDateTime(draft.scheduledStart)} to {formatDateTime(draft.scheduledEnd)}
+                    </p>
+                  </div>
+                  <StatusPill label="LOCAL PREVIEW" tone="warn" />
+                </div>
+                <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', marginTop: '0.7rem', flexWrap: 'wrap' }}>
+                  <StatusPill label={formatLocalSessionMode(draft.meetingMode)} tone="neutral" />
+                  <Link
+                    to={`/mentoring/pairing/${draft.relationshipId}`}
+                    className="apid-btn apid-btn-outline apid-btn-sm"
+                  >
+                    View pairing
+                  </Link>
+                  {draft.meetingUrl && (
+                    <a href={draft.meetingUrl} target="_blank" rel="noreferrer" className="apid-btn apid-btn-outline apid-btn-sm">
+                      <Video size={15} /> Meeting link
+                    </a>
+                  )}
+                </div>
+                <p className="boa-muted">{draft.purpose}</p>
+              </article>
+            );
+          })}
           {sessions.map((session) => {
             const pair = relationshipsById.get(session.relationshipId);
             const partnerLabel = pair

@@ -59,4 +59,10 @@ public interface MentoringRequestRecipientRepository extends JpaRepository<Mento
             @Param("mentorUserId") Long mentorUserId,
             @Param("status") MentoringRequestRecipientStatus status
     );
+
+    @EntityGraph(attributePaths = {"request", "request.initiatedByUser", "recipientUser", "traineeUser"})
+    List<MentoringRequestRecipient> findByRequest_MentorUser_IdAndStatus(
+            Long mentorUserId,
+            MentoringRequestRecipientStatus status
+    );
 }

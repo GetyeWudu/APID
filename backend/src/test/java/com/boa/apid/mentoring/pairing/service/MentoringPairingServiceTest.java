@@ -6,7 +6,6 @@ import com.boa.apid.core.authorization.entity.User;
 import com.boa.apid.core.authorization.entity.UserStatus;
 import com.boa.apid.core.authorization.repository.UserRepository;
 import com.boa.apid.core.authorization.repository.UserRoleRepository;
-import com.boa.apid.core.config.service.CoreConfigService;
 import com.boa.apid.core.notifications.entity.NotificationModule;
 import com.boa.apid.core.notifications.service.NotificationService;
 import com.boa.apid.core.organization.entity.Employee;
@@ -27,7 +26,10 @@ import com.boa.apid.mentoring.pairing.repository.MentoringRelationshipRepository
 import com.boa.apid.mentoring.pairing.repository.MentoringRelationshipMemberRepository;
 import com.boa.apid.mentoring.pairing.repository.MentoringRequestRecipientRepository;
 import com.boa.apid.mentoring.pairing.repository.MentoringRequestRepository;
+import com.boa.apid.mentoring.trainer.entity.TrainerAuthorization;
+import com.boa.apid.mentoring.trainer.repository.TrainerAuthorizationRepository;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
@@ -56,11 +58,20 @@ class MentoringPairingServiceTest {
     @Mock private UserRepository userRepository;
     @Mock private UserRoleRepository userRoleRepository;
     @Mock private EmployeeRepository employeeRepository;
-    @Mock private CoreConfigService coreConfigService;
     @Mock private NotificationService notificationService;
+    @Mock private TrainerAuthorizationRepository trainerAuthorizationRepository;
 
     @InjectMocks
     private MentoringPairingService service;
+
+    @BeforeEach
+    void provideActiveTrainerAuthorization() {
+        TrainerAuthorization authorization = new TrainerAuthorization();
+        authorization.setMaxConcurrentTrainees(3);
+        org.mockito.Mockito.lenient()
+                .when(trainerAuthorizationRepository.findActiveByUserId(any()))
+                .thenReturn(List.of(authorization));
+    }
 
     @Test
     void listsRelationshipsWhereTheCurrentUserIsEitherMentorOrTrainee() {
@@ -116,7 +127,6 @@ class MentoringPairingServiceTest {
         when(relationshipRepository.countActiveTraineesByMentorUserId(1L, MentoringRelationshipStatus.ACTIVE))
                 .thenReturn(0L);
         when(recipientRepository.countByMentorAndStatus(1L, MentoringRequestRecipientStatus.PENDING)).thenReturn(0L);
-        when(coreConfigService.getDefaultMaxTraineesPerTrainer()).thenReturn(3);
         when(requestRepository.save(any(MentoringRequest.class))).thenAnswer(invocation -> {
             MentoringRequest request = invocation.getArgument(0);
             request.setId(50L);
@@ -180,7 +190,6 @@ class MentoringPairingServiceTest {
         when(relationshipRepository.findByRequest_Id(50L)).thenReturn(Optional.empty());
         when(relationshipRepository.save(any(MentoringRelationship.class)))
                 .thenAnswer(invocation -> invocation.getArgument(0));
-        when(coreConfigService.getDefaultMaxTraineesPerTrainer()).thenReturn(3);
         when(employeeRepository.findDetailedByUserId(2L)).thenReturn(Optional.empty());
         when(employeeRepository.findDetailedByUserIdIn(any())).thenReturn(List.of());
 
@@ -237,7 +246,6 @@ class MentoringPairingServiceTest {
         when(relationshipRepository.existsActivePair(1L, 3L, MentoringRelationshipStatus.ACTIVE)).thenReturn(false);
         when(relationshipRepository.countActiveTraineesByMentorUserId(1L, MentoringRelationshipStatus.ACTIVE))
                 .thenReturn(0L, 1L);
-        when(coreConfigService.getDefaultMaxTraineesPerTrainer()).thenReturn(3);
         when(relationshipRepository.findByRequest_Id(50L))
                 .thenReturn(Optional.empty(), Optional.of(sharedRelationship));
         when(relationshipRepository.save(any(MentoringRelationship.class)))
@@ -284,8 +292,6 @@ class MentoringPairingServiceTest {
         )).thenReturn(false);
         when(relationshipRepository.countActiveTraineesByMentorUserId(1L, MentoringRelationshipStatus.ACTIVE))
                 .thenReturn(3L);
-        when(coreConfigService.getDefaultMaxTraineesPerTrainer()).thenReturn(3);
-
         assertThrows(
                 BusinessException.class,
                 () -> service.respond(

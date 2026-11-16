@@ -1,8 +1,16 @@
-import { useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { Award, Building2, ShieldAlert, Users } from 'lucide-react';
-import { Link, useSearchParams } from 'react-router-dom';
+import {
+  ArrowDownRight,
+  ArrowUpRight,
+  Building2,
+  HeartHandshake,
+  UserRound,
+  Users,
+  UsersRound,
+} from 'lucide-react';
+import { Link } from 'react-router-dom';
 import { useAuth } from '../../../app/AuthContext';
+import { EMPLOYEE_WORKSPACE_PERMISSIONS } from '../../../shared/auth/workspaceResolver';
 import {
   AvatarBadge,
   DataSourceBadge,
@@ -13,71 +21,36 @@ import {
   StatCard,
   StatusPill,
 } from '../../../shared/components/ui';
-import { EMPLOYEE_WORKSPACE_PERMISSIONS } from '../../../shared/auth/workspaceResolver';
 import { mentoringPairingApi } from '../../mentoring/api/mentoringPairingApi';
-import { MentoringPairChatPanel } from '../../mentoring/components/MentoringPairChatPanel';
 import { MentoringRequestsPanel } from '../../mentoring/components/MentoringRequestsPanel';
-import { workspaceLiveApi, workspacePreviewAdapter } from '../api/workspaceDashboardApi';
-import { IsolatedChatPanel, type ChatMessageItem } from '../components/IsolatedChatPanel';
+import { workspaceLiveApi } from '../api/workspaceDashboardApi';
 
-type WorkspaceTabKey = 'overview' | 'mentoring' | 'chat';
+function formatDate(value: string) {
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? 'Date unavailable' : date.toLocaleDateString();
+}
 
 export function WorkspaceDashboardPage() {
   const { user, hasPermission, hasAnyPermission } = useAuth();
-  const [searchParams, setSearchParams] = useSearchParams();
-  const isMentor = user?.roles.some((role) => role.trim().toLowerCase() === 'mentor') ?? false;
-  const requestedTab = (searchParams.get('tab') as WorkspaceTabKey | null) ?? 'overview';
-  const activeTab: WorkspaceTabKey =
-    requestedTab === 'mentoring' || requestedTab === 'chat'
-      ? requestedTab
-      : 'overview';
-  const pairingIdParam = searchParams.get('pairingId');
-  const isPairChat = activeTab === 'chat' && pairingIdParam !== null;
-
-  // Strictly dev-only participation flag toggles (never visible in production builds)
-  const [devTrainerOverride, setDevTrainerOverride] = useState<boolean | null>(null);
-
-  const [mentoringChatExtra, setMentoringChatExtra] = useState<ChatMessageItem[]>([]);
+  const canAccessWorkspace = hasAnyPermission(EMPLOYEE_WORKSPACE_PERMISSIONS);
 
   const identityQuery = useQuery({
     queryKey: ['workspace', 'identity', user?.id],
     queryFn: workspaceLiveApi.loadMyIdentity,
-    enabled: !isPairChat,
+    enabled: canAccessWorkspace,
   });
-
-  const previewQuery = useQuery({
-    queryKey: ['workspace', 'preview-participation'],
-    queryFn: workspacePreviewAdapter.getParticipationPreview,
-    enabled: !isPairChat,
-  });
-
   const pairingRequestsQuery = useQuery({
     queryKey: ['mentoring', 'pairing', 'requests', user?.id],
     queryFn: mentoringPairingApi.listMyRequests,
-    enabled: Boolean(user && hasAnyPermission(EMPLOYEE_WORKSPACE_PERMISSIONS) && !isPairChat),
+    enabled: canAccessWorkspace,
+  });
+  const relationshipsQuery = useQuery({
+    queryKey: ['mentoring', 'pairing', 'relationships', user?.id],
+    queryFn: mentoringPairingApi.listMyRelationships,
+    enabled: canAccessWorkspace,
   });
 
-  const selectTab = (key: WorkspaceTabKey) => {
-    const nextParams = new URLSearchParams();
-    if (key !== 'overview') nextParams.set('tab', key);
-    const pairingId = searchParams.get('pairingId');
-    if (key === 'chat' && pairingId) nextParams.set('pairingId', pairingId);
-    setSearchParams(nextParams);
-  };
-
-  const effectiveWorkspace = useMemo(() => {
-    const base = previewQuery.data?.workspace;
-    if (!base) return null;
-    return {
-      ...base,
-      isApprovedTrainer:
-        import.meta.env.DEV && devTrainerOverride !== null
-          ? devTrainerOverride
-          : base.isApprovedTrainer || isMentor,
-    };
-  }, [previewQuery.data, devTrainerOverride, isMentor]);
-
-  if (!hasAnyPermission(EMPLOYEE_WORKSPACE_PERMISSIONS)) {
+  if (!canAccessWorkspace) {
     return (
       <div className="apid-card">
         <EmptyState
@@ -88,28 +61,34 @@ export function WorkspaceDashboardPage() {
     );
   }
 
-  if (isPairChat) {
-    const pairingId = Number(pairingIdParam);
-    if (!Number.isSafeInteger(pairingId) || pairingId <= 0) {
-      return (
-        <div className="apid-card">
-          <EmptyState title="Invalid Pairing" description="The pairing identifier in this chat link is not valid." />
-        </div>
-      );
-    }
-    return (
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-        <PageHeader title="Chat" subtitle="Your private conversation for this mentoring pairing." source="live" />
-        <MentoringPairChatPanel relationshipId={pairingId} />
-      </div>
-    );
-  }
-
-  if (identityQuery.isLoading || previewQuery.isLoading) {
+  if (identityQuery.isLoading || pairingRequestsQuery.isLoading || relationshipsQuery.isLoading) {
     return <LoadingSkeleton rows={6} height={28} />;
   }
 
-  if (identityQuery.isError || !identityQuery.data) {
+  const failedQuery = identityQuery.isError
+    ? identityQuery
+    : pairingRequestsQuery.isError
+      ? pairingRequestsQuery
+      : relationshipsQuery.isError
+        ? relationshipsQuery
+        : null;
+  if (failedQuery) {
+    const message = failedQuery === identityQuery
+      ? 'Unable to load your live employee profile.'
+      : failedQuery === pairingRequestsQuery
+        ? 'Unable to load your mentoring requests.'
+        : 'Unable to load your mentoring relationships.';
+    return (
+      <ErrorState
+        message={message}
+        onRetry={() => {
+          void failedQuery.refetch();
+        }}
+      />
+    );
+  }
+
+  if (!identityQuery.data) {
     return (
       <ErrorState
         message="Unable to load your live employee profile."
@@ -118,23 +97,16 @@ export function WorkspaceDashboardPage() {
     );
   }
 
-  const { linkedEmployee, directReports, activeSkills } = identityQuery.data;
-
-  // Identity-driven honest empty state when login user has no linked employee profile yet
+  const { linkedEmployee, activeSkills } = identityQuery.data;
   if (!linkedEmployee) {
     return (
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-        <PageHeader
-          title="Employee Profile"
-          subtitle="Your employee profile and reporting information from Bank of Abyssinia."
-          source="live"
-        />
-
+      <div className="boa-stack">
+        <PageHeader title="Overview" subtitle="Your role-based employee and mentoring activity." source="live" />
         <div className="apid-card" data-testid="unlinked-profile-state">
           <EmptyState
             title="Profile Not Linked Yet"
             description={`Your account "${user?.username ?? ''}" is signed in, but it is not linked to an employee profile yet. Ask your Administrator to link your account under Employees & Org.`}
-            icon={<ShieldAlert size={34} />}
+            icon={<Building2 size={34} />}
             action={
               hasPermission('HIERARCHY_MANAGE') ? (
                 <Link to="/admin?tab=organization" className="apid-btn apid-btn-primary apid-btn-sm">
@@ -148,42 +120,57 @@ export function WorkspaceDashboardPage() {
     );
   }
 
-  const workspaceData = effectiveWorkspace!;
-  const allMentoringMsgs = [...workspaceData.chatMentoringMessages, ...mentoringChatExtra];
-
-  const appendMessage = (body: string) => {
-    const item: ChatMessageItem = {
-      id: `msg-${Date.now()}`,
-      sender: 'You',
-      body,
-      time: 'Just now',
-    };
-    setMentoringChatExtra((prev) => [...prev, item]);
-  };
-
-  const workspaceHeading =
-    activeTab === 'chat'
-      ? 'Chat'
-      : activeTab === 'mentoring'
-        ? 'My Mentoring'
-        : 'Employee Dashboard';
+  const requests = pairingRequestsQuery.data ?? [];
+  const relationships = relationshipsQuery.data ?? [];
+  const currentRelationships = relationships.filter(
+    (relationship) =>
+      relationship.memberStatus === 'ACTIVE' &&
+      (relationship.relationshipStatus === 'ACTIVE' || relationship.relationshipStatus === 'PAUSED')
+  );
+  const totalPairCount = new Set(relationships.map((relationship) => relationship.relationshipId)).size;
+  const mentorPairCount = new Set(
+    relationships
+      .filter((relationship) => relationship.currentUserRole === 'MENTOR')
+      .map((relationship) => relationship.relationshipId)
+  ).size;
+  const traineePairCount = new Set(
+    relationships
+      .filter((relationship) => relationship.currentUserRole === 'TRAINEE')
+      .map((relationship) => relationship.relationshipId)
+  ).size;
+  const incomingRequests = requests.filter((request) => request.status === 'PENDING' && request.incoming);
+  const outgoingRequests = requests.filter(
+    (request) =>
+      request.status === 'PENDING' &&
+      !request.incoming &&
+      request.initiatedByMentor &&
+      request.mentorUserId === user?.id
+  );
+  const isMentor = user?.roles.some((role) => role.trim().toLowerCase() === 'mentor') ?? false;
+  const activeRelationships = currentRelationships.filter(
+    (relationship) => relationship.relationshipStatus === 'ACTIVE'
+  );
+  const activePairCount = new Set(activeRelationships.map((relationship) => relationship.relationshipId)).size;
+  const activeMentorCount = new Set(
+    activeRelationships
+      .filter((relationship) => relationship.currentUserRole === 'TRAINEE')
+      .map((relationship) => relationship.mentorUserId)
+  ).size;
+  const activeTraineeCount = new Set(
+    activeRelationships
+      .filter((relationship) => relationship.currentUserRole === 'MENTOR')
+      .map((relationship) => relationship.traineeUserId)
+  ).size;
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+    <div className="boa-stack">
       <PageHeader
-        title={workspaceHeading}
-        subtitle={
-          activeTab === 'chat'
-            ? searchParams.has('pairingId')
-              ? 'Your private conversation for this mentoring pairing.'
-              : 'Your private conversations for active mentoring relationships.'
-            : 'Your employee overview, mentoring, and team reporting.'
-        }
+        title="Overview"
+        subtitle="Your live employee profile, team responsibilities, and mentoring activity."
         source="live"
       />
 
-      {/* Live Bank of Abyssinia Identity Card */}
-      <div className="apid-card">
+      <section className="apid-card">
         <div className="boa-card-header">
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.85rem', flexWrap: 'wrap' }}>
             <AvatarBadge name={linkedEmployee.fullName} size={46} />
@@ -207,219 +194,149 @@ export function WorkspaceDashboardPage() {
               label={linkedEmployee.employmentStatus}
               tone={linkedEmployee.employmentStatus === 'ACTIVE' ? 'ok' : 'warn'}
             />
+            {(user?.roles ?? []).map((role) => (
+              <StatusPill key={role} label={role} tone="neutral" />
+            ))}
             <DataSourceBadge source="live" />
           </div>
         </div>
+      </section>
 
-        {/* Navigation tabs */}
-        <div className="apid-tabs" role="tablist" aria-label="Workspace sections">
-          <button
-            type="button"
-            role="tab"
-            aria-selected={activeTab === 'overview'}
-            className={`apid-tab ${activeTab === 'overview' ? 'active' : ''}`}
-            onClick={() => selectTab('overview')}
-          >
-            Overview
-          </button>
-          <button
-            type="button"
-            role="tab"
-            aria-selected={activeTab === 'mentoring'}
-            className={`apid-tab ${activeTab === 'mentoring' ? 'active' : ''}`}
-            onClick={() => selectTab('mentoring')}
-          >
-            My Mentoring
-          </button>
-          <button
-            type="button"
-            role="tab"
-            aria-selected={activeTab === 'chat'}
-            className={`apid-tab ${activeTab === 'chat' ? 'active' : ''}`}
-            onClick={() => selectTab('chat')}
-          >
-            Chat
-          </button>
-        </div>
-      </div>
+      <section className="boa-kpi-grid" aria-label="Role overview metrics" style={{ marginBottom: 0 }}>
+        <StatCard
+          label="Active Mentors"
+          value={activeMentorCount}
+          subtext="Mentors currently mentoring you"
+          icon={<UserRound size={16} />}
+        />
+        <StatCard
+          label="Active Trainees"
+          value={activeTraineeCount}
+          subtext="Trainees you currently mentor"
+          icon={<UsersRound size={16} />}
+        />
+        <StatCard
+          label="Incoming Requests"
+          value={incomingRequests.length}
+          subtext="Awaiting your response"
+          icon={<Users size={16} />}
+        />
+        <StatCard
+          label="Outgoing Requests"
+          value={outgoingRequests.length}
+          subtext="Mentoring requests you sent awaiting a response"
+          icon={<ArrowUpRight size={16} />}
+        />
+        <StatCard
+          label="Available Skills"
+          value={activeSkills.length}
+          subtext="Active catalog skills, including approved custom skills"
+          icon={<Building2 size={16} />}
+        />
+      </section>
 
-      {/* Strictly development-only flag inspector */}
-      {import.meta.env.DEV && (
-        <div
-          className="apid-card"
-          data-testid="dev-participation-sandbox"
-          style={{ padding: '0.75rem 1rem', background: '#fffbeb', borderColor: '#fde68a' }}
-        >
-          <div
-            style={{
-              display: 'flex',
-              justifyContent: 'space-between',
-              alignItems: 'center',
-              gap: '0.75rem',
-              flexWrap: 'wrap',
-              fontSize: '0.8rem',
-            }}
-          >
-            <div>
-              <strong>Sample Role View:</strong> Toggle mentor status to preview mentor features.
-            </div>
-            <div style={{ display: 'flex', gap: '0.5rem' }}>
-              <button
-                type="button"
-                className="apid-btn apid-btn-outline apid-btn-sm"
-                onClick={() =>
-                  setDevTrainerOverride((prev) => !(prev ?? workspaceData.isApprovedTrainer))
-                }
-              >
-                Trainer Flag: {workspaceData.isApprovedTrainer ? 'ON' : 'OFF'}
-              </button>
-            </div>
+      <section className="boa-stack" aria-label="Pairing">
+        <div className="boa-card-header">
+          <div>
+            <h2 className="boa-card-title">Pairing</h2>
+            <p className="boa-card-subtitle">A summary of your mentoring relationships.</p>
           </div>
         </div>
-      )}
-
-      {activeTab === 'overview' && (
-        <div className="boa-stack">
-          <div className="boa-kpi-grid" style={{ marginBottom: 0 }}>
-            <StatCard
-              label="Direct Reports"
-              value={directReports.length}
-              subtext={
-                directReports.length > 0
-                  ? 'Employees reporting to you'
-                  : 'Individual contributor'
-              }
-              icon={<Users size={16} />}
-            />
-            <StatCard
-              label="Mentoring Sessions"
-              value={`${workspaceData.mentoringAsTrainee.sessionsCompleted}/${workspaceData.mentoringAsTrainee.sessionsPlanned}`}
-              subtext={workspaceData.mentoringAsTrainee.skillName}
-              badge="SAMPLE"
-              badgeTone="neutral"
-              icon={<Award size={16} />}
-            />
-            <StatCard
-              label="Available Skills"
-              value={activeSkills.length}
-              subtext="Bank of Abyssinia skills catalog"
-              icon={<Building2 size={16} />}
-            />
-          </div>
-
-          {directReports.length > 0 && (
-            <div className="apid-card">
-              <div className="boa-card-header">
-                <div>
-                  <h3 className="boa-card-title">My Direct Reports</h3>
-                  <p className="boa-card-subtitle">
-                    Employees reporting directly to {linkedEmployee.fullName}.
-                  </p>
-                </div>
-                <DataSourceBadge source="live" />
-              </div>
-              <div className="apid-table-wrap">
-                <table className="apid-table">
-                  <thead>
-                    <tr>
-                      <th>Emp #</th>
-                      <th>Name</th>
-                      <th>Department</th>
-                      <th>Position</th>
-                      <th>Status</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {directReports.map((dr) => (
-                      <tr key={dr.id}>
-                        <td className="tabular-nums"><strong>{dr.employeeNumber}</strong></td>
-                        <td>{dr.fullName}</td>
-                        <td>{dr.departmentName ?? '—'}</td>
-                        <td>{dr.position || dr.job || '—'}</td>
-                        <td>
-                          <StatusPill
-                            label={dr.employmentStatus}
-                            tone={dr.employmentStatus === 'ACTIVE' ? 'ok' : 'warn'}
-                          />
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          )}
-
-          <div className="apid-card">
-            <div className="boa-card-header">
-              <div>
-                <h3 className="boa-card-title">Quick Navigation</h3>
-                <p className="boa-card-subtitle">
-                  Explore Mentoring or open your employee Chat.
-                </p>
-              </div>
-              <DataSourceBadge source="preview" />
-            </div>
-            <div style={{ display: 'flex', gap: '0.65rem', flexWrap: 'wrap' }}>
-              <button
-                type="button"
-                className="apid-btn apid-btn-outline apid-btn-sm"
-                onClick={() => selectTab('mentoring')}
-              >
-                Open My Mentoring
-              </button>
-              <button
-                type="button"
-                className="apid-btn apid-btn-outline apid-btn-sm"
-                onClick={() => selectTab('chat')}
-              >
-                Open Chat
-              </button>
-            </div>
-          </div>
+        <div className="boa-kpi-grid" aria-label="Pairing metrics" style={{ marginBottom: 0 }}>
+          <StatCard
+            label="Total pairings"
+            value={totalPairCount}
+            subtext="All mentoring relationships"
+            icon={<HeartHandshake size={16} />}
+          />
+          <StatCard
+            label="As mentor"
+            value={mentorPairCount}
+            subtext="Relationships where you mentor"
+            icon={<ArrowUpRight size={16} />}
+          />
+          <StatCard
+            label="As trainee"
+            value={traineePairCount}
+            subtext="Relationships where you are mentored"
+            icon={<ArrowDownRight size={16} />}
+          />
+          <StatCard
+            label="Active"
+            value={activePairCount}
+            subtext="Current active relationships"
+            icon={<UsersRound size={16} />}
+          />
         </div>
-      )}
+      </section>
 
-      {activeTab === 'mentoring' &&
-        (pairingRequestsQuery.isLoading ? (
-          <LoadingSkeleton rows={6} height={28} />
-        ) : pairingRequestsQuery.isError ? (
-          <ErrorState
-            message="Unable to load your mentoring requests."
-            onRetry={() => void pairingRequestsQuery.refetch()}
+      <section className="apid-card" aria-label="My mentoring pairings">
+        <div className="boa-card-header">
+          <div>
+            <h3 className="boa-card-title">My Mentoring Pairings</h3>
+            <p className="boa-card-subtitle">Your active and paused pairs, with participants, skill, status, and start date.</p>
+          </div>
+          <Link to="/mentoring?view=directory" className="apid-btn apid-btn-outline apid-btn-sm">
+            Find a Mentor
+          </Link>
+        </div>
+        {currentRelationships.length === 0 ? (
+          <EmptyState
+            title="No Current Mentoring Relationships"
+            description="When you join or mentor a pairing, its status and participants will appear here."
           />
         ) : (
-          <div className="boa-stack">
-            <div>
-              <Link to="/mentoring?view=directory" className="apid-btn apid-btn-primary apid-btn-sm">
-                Find a Mentor
-              </Link>
-            </div>
-            <MentoringRequestsPanel
-              requests={pairingRequestsQuery.data ?? []}
-              currentUserId={user?.id ?? 0}
-            />
+          <div className="boa-grid-2" style={{ marginBottom: 0 }}>
+            {currentRelationships.map((relationship) => {
+              return (
+                <article key={relationship.memberId} className="apid-card" style={{ border: '1px solid var(--border)' }}>
+                  <div className="boa-card-header">
+                    <div>
+                      <strong>{relationship.mentorName} → {relationship.traineeName}</strong>
+                      <p className="boa-card-subtitle">
+                        {relationship.requestType === 'GROUP' ? 'Mentoring group' : 'One-to-one mentoring'}
+                        {' · '}
+                        {relationship.currentUserRole === 'MENTOR' ? 'You are the mentor' : 'You are the trainee'}
+                        {relationship.skillName ? ` · ${relationship.skillName}` : ''}
+                      </p>
+                    </div>
+                    <StatusPill
+                      label={relationship.relationshipStatus}
+                      tone={relationship.relationshipStatus === 'ACTIVE' ? 'ok' : 'warn'}
+                    />
+                  </div>
+                  <div className="boa-muted" style={{ fontSize: '0.8rem', marginBottom: '0.75rem' }}>
+                    Started {formatDate(relationship.startedAt)}
+                  </div>
+                  <Link
+                    to={`/mentoring/pairing/${relationship.relationshipId}`}
+                    className="apid-btn apid-btn-outline apid-btn-sm"
+                  >
+                    View relationship
+                  </Link>
+                </article>
+              );
+            })}
           </div>
-        ))}
+        )}
+      </section>
 
-      {activeTab === 'chat' && (
-        <div className="boa-stack">
-          {workspaceData.hasTraineeRelationship ||
-            workspaceData.mentoringAsTrainer.activeTrainees > 0 ? (
-            <IsolatedChatPanel
-              contextTitle="Mentoring Conversation"
-              contextKey="mentoring"
-              messages={allMentoringMsgs}
-              onSendMessage={appendMessage}
-            />
-          ) : (
-            <div className="apid-card">
-              <EmptyState
-                title="No Conversations Yet"
-                description="Mentoring conversations appear here when you have an active mentoring relationship."
-              />
-            </div>
-          )}
+      <MentoringRequestsPanel
+        requests={requests}
+        currentUserId={user?.id ?? 0}
+        view="all"
+        showActive={false}
+      />
+
+      {isMentor && (
+        <div className="apid-card" style={{ display: 'flex', justifyContent: 'space-between', gap: '1rem', flexWrap: 'wrap' }}>
+          <div>
+            <h3 className="boa-card-title">Mentor Workspace</h3>
+            <p className="boa-card-subtitle">Manage invitations, trainee requests, and your mentor profile.</p>
+          </div>
+          <Link to="/mentoring?view=trainer" className="apid-btn apid-btn-primary apid-btn-sm">
+            Open mentor workspace
+          </Link>
         </div>
       )}
     </div>

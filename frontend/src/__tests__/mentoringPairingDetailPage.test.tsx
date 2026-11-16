@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import * as AuthContextModule from '../app/AuthContext';
@@ -33,6 +33,14 @@ function renderDetailPage() {
         <MemoryRouter initialEntries={['/mentoring/pairing/77']}>
           <Routes>
             <Route path="/mentoring/pairing/:relationshipId" element={<MentoringPairingDetailPage />} />
+            <Route
+              path="/mentoring/chat"
+              element={<div>Mentoring Chat Workspace</div>}
+            />
+            <Route
+              path="/mentoring/resources"
+              element={<div>Mentoring Resources Workspace</div>}
+            />
           </Routes>
         </MemoryRouter>
       </ToastProvider>
@@ -108,68 +116,27 @@ describe('MentoringPairingDetailPage', () => {
     });
   });
 
-  it('shows previous sessions and lets the mentor schedule a shared class session', async () => {
-    const createSession = vi.spyOn(mentoringPairingApi, 'createSession').mockResolvedValue({
-      id: 5,
-      relationshipId: 77,
-      title: 'Career goals',
-      agenda: null,
-      scheduledStart: '2030-06-01T09:00:00Z',
-      scheduledEnd: '2030-06-01T10:00:00Z',
-      deliveryMode: 'ONLINE',
-      meetingUrl: null,
-      status: 'SCHEDULED',
-      createdByUserId: 7,
-      createdByName: 'Mentor One',
-      createdAt: '2026-04-20T08:00:00Z',
-    });
-
+  it('shows previous sessions and links to the session planner', async () => {
     renderDetailPage();
     await screen.findByRole('tab', { name: 'Sessions' });
     fireEvent.click(screen.getByRole('tab', { name: 'Sessions' }));
 
     expect(await screen.findByText('Previous session')).toBeInTheDocument();
-    fireEvent.change(screen.getByLabelText('Session title'), { target: { value: 'Career goals' } });
-    fireEvent.change(screen.getByLabelText('Starts'), { target: { value: '2030-06-01T09:00' } });
-    fireEvent.change(screen.getByLabelText('Ends'), { target: { value: '2030-06-01T10:00' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Schedule session' }));
-
-    await waitFor(() => {
-      expect(createSession).toHaveBeenCalledWith(
-        77,
-        expect.objectContaining({
-          title: 'Career goals',
-          scheduledStart: new Date('2030-06-01T09:00').toISOString(),
-          scheduledEnd: new Date('2030-06-01T10:00').toISOString(),
-          deliveryMode: 'ONLINE',
-        })
-      );
-    });
+    expect(screen.getByRole('link', { name: 'Create session' })).toHaveAttribute(
+      'href',
+      '/mentoring?view=trainer-sessions&relationshipId=77'
+    );
   });
 
-  it('loads previous chat and sends a new message to the pairing', async () => {
-    const sendMessage = vi.spyOn(mentoringPairingApi, 'sendMessage').mockResolvedValue({
-      id: 32,
-      relationshipId: 77,
-      senderUserId: 7,
-      senderName: 'Mentor One',
-      body: 'We can discuss it tomorrow.',
-      createdAt: '2026-04-25T11:00:00Z',
-      mine: true,
-    });
-
+  it('links chat and resources to their shared workspaces with the pairing selected', async () => {
     renderDetailPage();
-    await screen.findByRole('tab', { name: 'Pair chat' });
-    fireEvent.click(screen.getByRole('tab', { name: 'Pair chat' }));
-
-    expect(await screen.findByText('Hello mentor')).toBeInTheDocument();
-    fireEvent.change(screen.getByRole('textbox', { name: 'Write a message' }), {
-      target: { value: 'We can discuss it tomorrow.' },
-    });
-    fireEvent.click(screen.getByRole('button', { name: 'Send message' }));
-
-    await waitFor(() => {
-      expect(sendMessage).toHaveBeenCalledWith(77, 'We can discuss it tomorrow.');
-    });
+    const messageLink = await screen.findByRole('link', { name: 'Message' });
+    expect(messageLink).toHaveAttribute('href', '/mentoring/chat?relationshipId=77');
+    expect(screen.getByRole('tab', { name: 'Resources' })).toHaveAttribute(
+      'href',
+      '/mentoring/resources?relationshipId=77'
+    );
+    fireEvent.click(messageLink);
+    expect(await screen.findByText('Mentoring Chat Workspace')).toBeInTheDocument();
   });
 });

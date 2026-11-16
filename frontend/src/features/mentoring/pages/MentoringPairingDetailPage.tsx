@@ -1,8 +1,7 @@
-import { useState } from 'react';
 import axios from 'axios';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { ArrowLeft, CalendarDays, MessageCircle, Video } from 'lucide-react';
-import { Link, useParams } from 'react-router-dom';
+import { Link, useParams, useSearchParams } from 'react-router-dom';
 import type { ApiErrorPayload } from '../../../shared/api/apiClient';
 import {
   EmptyState,
@@ -12,8 +11,13 @@ import {
   StatusPill,
 } from '../../../shared/components/ui';
 import { mentoringPairingApi, type MentoringSession } from '../api/mentoringPairingApi';
+import {
+  MentoringFeedbackForm,
+  MentoringProgressPanel,
+  MentoringRelationshipClosure,
+} from '../components/MentoringCollaborationTools';
 
-type DetailTab = 'overview' | 'sessions' | 'chat';
+type DetailTab = 'overview' | 'sessions' | 'progress';
 
 function formatDateTime(value: string) {
   const date = new Date(value);
@@ -40,7 +44,20 @@ export function MentoringPairingDetailPage() {
   const { relationshipId: rawRelationshipId } = useParams();
   const relationshipId = Number(rawRelationshipId);
   const isValidRelationshipId = Number.isSafeInteger(relationshipId) && relationshipId > 0;
-  const [activeTab, setActiveTab] = useState<DetailTab>('overview');
+  const [searchParams, setSearchParams] = useSearchParams();
+  const requestedTab = searchParams.get('tab');
+  const activeTab: DetailTab =
+    requestedTab === 'sessions' || requestedTab === 'progress' ? requestedTab : 'overview';
+  const queryClient = useQueryClient();
+  const setActiveTab = (tab: DetailTab) => {
+    const nextParams = new URLSearchParams(searchParams);
+    if (tab === 'overview') {
+      nextParams.delete('tab');
+    } else {
+      nextParams.set('tab', tab);
+    }
+    setSearchParams(nextParams);
+  };
 
   const detailQuery = useQuery({
     queryKey: ['mentoring', 'pairing', 'detail', relationshipId],
@@ -55,8 +72,7 @@ export function MentoringPairingDetailPage() {
   const chatQuery = useQuery({
     queryKey: ['mentoring', 'pairing', 'messages-preview', relationshipId],
     queryFn: () => mentoringPairingApi.listMessages(relationshipId, 0, 20),
-    enabled: isValidRelationshipId && (activeTab === 'chat' || activeTab === 'overview'),
-    refetchInterval: activeTab === 'chat' ? 10000 : false,
+    enabled: isValidRelationshipId && activeTab === 'overview',
   });
 
   if (!isValidRelationshipId) {
@@ -95,7 +111,8 @@ export function MentoringPairingDetailPage() {
   const sessionsPath = `/mentoring?view=${sessionView}&relationshipId=${relationshipId}`;
   const sessionsAction =
     detail.currentUserRole === 'MENTOR' && detail.status === 'ACTIVE' ? 'Create session' : 'My Sessions';
-  const chatPath = `/workspace?tab=chat&pairingId=${relationshipId}`;
+  const chatPath = `/mentoring/chat?relationshipId=${relationshipId}`;
+  const resourcesPath = `/mentoring/resources?relationshipId=${relationshipId}`;
 
   const renderSessionCards = (items: MentoringSession[]) =>
     items.map((session) => {
@@ -127,6 +144,16 @@ export function MentoringPairingDetailPage() {
               >
                 <Video size={15} /> Join meeting
               </a>
+            )}
+
+            {activeTab === 'progress' && (
+              <section className="apid-card boa-stack">
+                <div>
+                  <h2 className="boa-card-title">Progress and milestones</h2>
+                  <p className="boa-card-subtitle">Record and review learning milestones, observations, and next steps.</p>
+                </div>
+                <MentoringProgressPanel relationshipId={relationshipId} canAdd={detail.status === 'ACTIVE'} />
+              </section>
             )}
           </div>
           {session.agenda && <p className="boa-muted">{session.agenda}</p>}
@@ -176,18 +203,33 @@ export function MentoringPairingDetailPage() {
           ['overview', 'Overview'],
           ['sessions', 'Sessions'],
           ['chat', 'Pair chat'],
+          ['resources', 'Resources'],
+          ['progress', 'Progress'],
         ] as const).map(([tab, label]) => (
-          <button
-            key={tab}
-            id={`pairing-tab-${tab}`}
-            type="button"
-            role="tab"
-            aria-selected={activeTab === tab}
-            className={`apid-btn apid-btn-sm ${activeTab === tab ? 'apid-btn-primary' : 'apid-btn-outline'}`}
-            onClick={() => setActiveTab(tab)}
-          >
-            {label}
-          </button>
+          tab === 'chat' || tab === 'resources' ? (
+            <Link
+              key={tab}
+              id={`pairing-tab-${tab}`}
+              to={tab === 'chat' ? chatPath : resourcesPath}
+              role="tab"
+              aria-selected="false"
+              className="apid-btn apid-btn-sm apid-btn-outline"
+            >
+              {label}
+            </Link>
+          ) : (
+            <button
+              key={tab}
+              id={`pairing-tab-${tab}`}
+              type="button"
+              role="tab"
+              aria-selected={activeTab === tab}
+              className={`apid-btn apid-btn-sm ${activeTab === tab ? 'apid-btn-primary' : 'apid-btn-outline'}`}
+              onClick={() => setActiveTab(tab)}
+            >
+              {label}
+            </button>
+          )
         ))}
       </div>
 
@@ -224,6 +266,33 @@ export function MentoringPairingDetailPage() {
               </div>
             )}
           </section>
+
+          {detail.currentUserRole === 'MENTOR' && (
+            <section className="apid-card">
+              <div className="boa-card-header">
+                <div>
+                  <h2 className="boa-card-title">Relationship lifecycle</h2>
+                  <p className="boa-card-subtitle">Complete the mentoring objectives or close the relationship with a reason.</p>
+                </div>
+                <MentoringRelationshipClosure
+                  relationshipId={relationshipId}
+                  relationshipStatus={detail.status}
+                  onClosed={() => {
+                    void Promise.all([
+                      queryClient.invalidateQueries({ queryKey: ['mentoring', 'pairing', 'detail', relationshipId] }),
+                      queryClient.invalidateQueries({ queryKey: ['mentoring', 'pairing', 'relationships'] }),
+                      queryClient.invalidateQueries({ queryKey: ['mentoring', 'pairing', 'requests'] }),
+                    ]);
+                  }}
+                />
+              </div>
+            </section>
+          )}
+
+          <MentoringFeedbackForm
+            relationshipId={relationshipId}
+            enabled={detail.currentUserRole === 'TRAINEE' && detail.status === 'COMPLETED'}
+          />
 
           <section className="apid-card boa-stack">
             <div className="boa-card-header">
@@ -311,30 +380,6 @@ export function MentoringPairingDetailPage() {
             </section>
           )}
         </div>
-      )}
-
-      {activeTab === 'chat' && (
-        <section className="apid-card boa-stack">
-          <div className="boa-card-header">
-            <div>
-              <h2 className="boa-card-title">Pair chat</h2>
-              <p className="boa-card-subtitle">Conversation shared by the mentor and all trainees in this pairing.</p>
-            </div>
-            {renderMessageAction}
-          </div>
-          {chatQuery.isLoading ? (
-            <LoadingSkeleton rows={5} height={28} />
-          ) : chatQuery.isError ? (
-            <ErrorState
-              message={getErrorMessage(chatQuery.error, 'Unable to load chat history.')}
-              onRetry={() => void chatQuery.refetch()}
-            />
-          ) : messages.length === 0 ? (
-            <EmptyState title="No messages yet" description="Start the conversation with your mentoring pairing." />
-          ) : (
-            <div className="boa-stack" aria-live="polite">{renderMessageCards(messages)}</div>
-          )}
-        </section>
       )}
     </div>
   );

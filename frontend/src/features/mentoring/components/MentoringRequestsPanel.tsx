@@ -10,10 +10,12 @@ export function MentoringRequestsPanel({
   requests,
   currentUserId,
   view = 'all',
+  showActive = true,
 }: {
   requests: MentoringPairing[];
   currentUserId: number;
   view?: PairingView;
+  showActive?: boolean;
 }) {
   const queryClient = useQueryClient();
   const { pushToast } = useToast();
@@ -150,24 +152,26 @@ export function MentoringRequestsPanel({
         )}
       </section>
 
-      <section className="apid-card">
-        <div className="boa-card-header">
-          <div>
-            <h3 className="boa-card-title">{view === 'mentor' ? 'Active Trainees' : 'Active Mentoring'}</h3>
-            <p className="boa-card-subtitle">Approved pairings and accepted class memberships.</p>
+      {showActive && (
+        <section className="apid-card">
+          <div className="boa-card-header">
+            <div>
+              <h3 className="boa-card-title">{view === 'mentor' ? 'Active Trainees' : 'Active Mentoring'}</h3>
+              <p className="boa-card-subtitle">Approved pairings and accepted class memberships.</p>
+            </div>
           </div>
-        </div>
-        {active.length === 0 ? (
-          <EmptyState
-            title="No Active Mentoring Relationships"
-            description="Accepted one-to-one pairings and class memberships will appear here."
-          />
-        ) : (
-          <div className="boa-grid-2" style={{ marginBottom: 0 }}>
-            {active.map((item) => requestCard(item, false))}
-          </div>
-        )}
-      </section>
+          {active.length === 0 ? (
+            <EmptyState
+              title="No Active Mentoring Relationships"
+              description="Accepted one-to-one pairings and class memberships will appear here."
+            />
+          ) : (
+            <div className="boa-grid-2" style={{ marginBottom: 0 }}>
+              {active.map((item) => requestCard(item, false))}
+            </div>
+          )}
+        </section>
+      )}
     </div>
   );
 }

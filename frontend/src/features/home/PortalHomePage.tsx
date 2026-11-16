@@ -97,7 +97,7 @@ export function PortalHomePage() {
     if (key === 'mentoring') {
       const items: string[] = [];
       if (hasEmployeeAccess) {
-        items.push('My Mentor', 'My Sessions', 'Find a Mentor');
+        items.push('Mentoring Overview', 'My Sessions', 'Find a Mentor');
         if (user.roles.some((role) => role.trim().toLowerCase() === 'mentor')) {
           items.push('My Trainees', 'Mentor Sessions');
         }
@@ -169,7 +169,7 @@ export function PortalHomePage() {
             />
           )}
           {activeSkillsCount > 0 && (
-            <StatusPill label={`${activeSkillsCount} Active Skills`} tone="neutral" />
+            <StatusPill label={`${activeSkillsCount} Available Skills`} tone="neutral" />
           )}
         </div>
       </section>

@@ -1,26 +1,13 @@
 import { apiClient, type ApiResponse } from '../../../shared/api/apiClient';
+import type { TrainerDirectoryItem } from './mentoringTrainerApi';
 
-export interface MentorDirectoryItem {
-  userId: number;
-  username: string;
-  employeeNumber: string | null;
-  fullName: string;
-  departmentName: string | null;
-  skills: Array<{
-    id: number;
-    name: string;
-    category: string;
-  }>;
-}
+export type MentorDirectoryItem = TrainerDirectoryItem;
 
 export const mentorDirectoryApi = {
-  async countActiveMentors(): Promise<number> {
-    const response = await apiClient.get<ApiResponse<number>>('/core/mentors/count');
-    return response.data.data;
-  },
-
-  async listMentors(): Promise<MentorDirectoryItem[]> {
-    const response = await apiClient.get<ApiResponse<MentorDirectoryItem[]>>('/core/mentors');
+  async listMentors(filters: { skillId?: number; department?: string } = {}): Promise<MentorDirectoryItem[]> {
+    const response = await apiClient.get<ApiResponse<MentorDirectoryItem[]>>('/mentoring/directory', {
+      params: filters,
+    });
     return response.data.data;
   },
 };

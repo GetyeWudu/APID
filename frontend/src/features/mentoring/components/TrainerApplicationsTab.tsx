@@ -1,7 +1,7 @@
 import { useState, type FormEvent } from 'react';
 import axios from 'axios';
 import { useQueryClient } from '@tanstack/react-query';
-import { Check, FileText, XCircle } from 'lucide-react';
+import { Check, Download, FileText, XCircle } from 'lucide-react';
 import { DataSourceBadge, EmptyState, StatusPill, useToast } from '../../../shared/components/ui';
 import type { MentorApplication } from '../api/mentorApplicationApi';
 import { mentorApplicationApi } from '../api/mentorApplicationApi';
@@ -17,6 +17,30 @@ export function TrainerApplicationsTab({
   const [reason, setReason] = useState('');
   const [reasonError, setReasonError] = useState('');
   const [busyId, setBusyId] = useState<number | null>(null);
+  const [downloadingId, setDownloadingId] = useState<number | null>(null);
+
+  const handleDownloadEvidence = async (fileId: number, fileName: string) => {
+    setDownloadingId(fileId);
+    try {
+      const blob = await mentorApplicationApi.downloadProofDocument(fileId);
+      const objectUrl = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = objectUrl;
+      link.download = fileName;
+      link.click();
+      URL.revokeObjectURL(objectUrl);
+    } catch (error) {
+      pushToast({
+        title: 'Unable to download certificate',
+        message: axios.isAxiosError(error)
+          ? error.response?.data?.message || 'Please try again.'
+          : error instanceof Error ? error.message : 'Please try again.',
+        tone: 'err',
+      });
+    } finally {
+      setDownloadingId(null);
+    }
+  };
 
   const handleApprove = async (application: MentorApplication) => {
     setBusyId(application.id);
@@ -24,7 +48,9 @@ export function TrainerApplicationsTab({
       await mentorApplicationApi.review(application.id, { decision: 'APPROVED' });
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ['mentoring', 'applications'] }),
-        queryClient.invalidateQueries({ queryKey: ['mentoring', 'active-mentor-count'] }),
+        queryClient.invalidateQueries({ queryKey: ['mentoring', 'trainers'] }),
+        queryClient.invalidateQueries({ queryKey: ['mentoring', 'hr-overview'] }),
+        queryClient.invalidateQueries({ queryKey: ['mentoring', 'directory'] }),
       ]);
       pushToast({
         title: 'Application approved',
@@ -58,7 +84,10 @@ export function TrainerApplicationsTab({
         decision: 'DECLINED',
         reason: reason.trim(),
       });
-      await queryClient.invalidateQueries({ queryKey: ['mentoring', 'applications'] });
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['mentoring', 'applications'] }),
+        queryClient.invalidateQueries({ queryKey: ['mentoring', 'hr-overview'] }),
+      ]);
       pushToast({
         title: 'Application declined',
         message: 'The applicant has been notified of the decision.',
@@ -113,6 +142,7 @@ export function TrainerApplicationsTab({
                 <th>Certificate Evidence</th>
                 <th>Status</th>
                 <th>Submitted</th>
+                <th>Experience &amp; availability</th>
                 <th>Applicant Note</th>
                 <th>Actions</th>
               </tr>
@@ -127,12 +157,35 @@ export function TrainerApplicationsTab({
                     </div>
                   </td>
                   <td>
-                    <StatusPill label={app.skillName} tone="neutral" />
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.25rem' }}>
+                      {(app.skillNames?.length ? app.skillNames : [app.skillName]).map((skillName) => (
+                        <StatusPill key={skillName} label={skillName} tone="neutral" />
+                      ))}
+                    </div>
                   </td>
                   <td>
-                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem', fontSize: '0.82rem' }}>
-                      <FileText size={14} /> {app.proofFileName}
-                    </span>
+                    <div className="boa-stack" style={{ gap: '0.35rem' }}>
+                      {(app.evidenceFiles?.length
+                        ? app.evidenceFiles
+                        : [{ fileId: app.proofFileId, fileName: app.proofFileName }]
+                      ).map((evidence) => (
+                        <div key={evidence.fileId}>
+                          <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem', fontSize: '0.82rem' }}>
+                            <FileText size={14} /> {evidence.fileName}
+                          </span>
+                          <button
+                            type="button"
+                            className="apid-btn apid-btn-outline apid-btn-sm"
+                            style={{ marginTop: '0.35rem' }}
+                            disabled={downloadingId !== null}
+                            onClick={() => void handleDownloadEvidence(evidence.fileId, evidence.fileName)}
+                          >
+                            <Download size={13} />
+                            {downloadingId === evidence.fileId ? 'Downloading…' : 'Download evidence'}
+                          </button>
+                        </div>
+                      ))}
+                    </div>
                   </td>
                   <td>
                     {renderStatus(app.status)}
@@ -143,6 +196,19 @@ export function TrainerApplicationsTab({
                     )}
                   </td>
                   <td>{new Date(app.submittedAt).toLocaleString()}</td>
+                  <td>
+                    <div>{app.expertiseSummary || '—'}</div>
+                    {app.availabilityNotes && (
+                      <div className="boa-muted" style={{ fontSize: '0.78rem', marginTop: '0.25rem' }}>
+                        Weekly availability: {app.availabilityNotes}
+                      </div>
+                    )}
+                    {app.maxConcurrentTrainees !== null && (
+                      <div className="boa-muted" style={{ fontSize: '0.78rem' }}>
+                        Requested capacity: {app.maxConcurrentTrainees}
+                      </div>
+                    )}
+                  </td>
                   <td>{app.note || '—'}</td>
                   <td className="apid-actions-cell">
                     {app.status === 'PENDING' ? (

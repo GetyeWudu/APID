@@ -16,6 +16,8 @@ public interface MentorApplicationRepository extends JpaRepository<MentorApplica
 
     List<MentorApplication> findAllByOrderBySubmittedAtDesc();
 
+    long countByStatus(com.boa.apid.mentoring.application.entity.MentorApplicationStatus status);
+
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("SELECT application FROM MentorApplication application WHERE application.id = :id")
     Optional<MentorApplication> findByIdForUpdate(@Param("id") Long id);

@@ -7,7 +7,6 @@ import com.boa.apid.core.authorization.entity.User;
 import com.boa.apid.core.authorization.entity.UserStatus;
 import com.boa.apid.core.authorization.repository.UserRepository;
 import com.boa.apid.core.authorization.repository.UserRoleRepository;
-import com.boa.apid.core.config.service.CoreConfigService;
 import com.boa.apid.core.notifications.entity.NotificationModule;
 import com.boa.apid.core.notifications.service.NotificationService;
 import com.boa.apid.core.organization.entity.Employee;
@@ -32,6 +31,8 @@ import com.boa.apid.mentoring.pairing.repository.MentoringRelationshipRepository
 import com.boa.apid.mentoring.pairing.repository.MentoringRelationshipMemberRepository;
 import com.boa.apid.mentoring.pairing.repository.MentoringRequestRecipientRepository;
 import com.boa.apid.mentoring.pairing.repository.MentoringRequestRepository;
+import com.boa.apid.mentoring.trainer.entity.TrainerAuthorization;
+import com.boa.apid.mentoring.trainer.repository.TrainerAuthorizationRepository;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
@@ -56,8 +57,8 @@ public class MentoringPairingService {
     private final UserRepository userRepository;
     private final UserRoleRepository userRoleRepository;
     private final EmployeeRepository employeeRepository;
-    private final CoreConfigService coreConfigService;
     private final NotificationService notificationService;
+    private final TrainerAuthorizationRepository trainerAuthorizationRepository;
 
     public MentoringPairingService(
             MentoringRequestRepository requestRepository,
@@ -67,8 +68,8 @@ public class MentoringPairingService {
             UserRepository userRepository,
             UserRoleRepository userRoleRepository,
             EmployeeRepository employeeRepository,
-            CoreConfigService coreConfigService,
-            NotificationService notificationService
+            NotificationService notificationService,
+            TrainerAuthorizationRepository trainerAuthorizationRepository
     ) {
         this.requestRepository = requestRepository;
         this.recipientRepository = recipientRepository;
@@ -77,8 +78,8 @@ public class MentoringPairingService {
         this.userRepository = userRepository;
         this.userRoleRepository = userRoleRepository;
         this.employeeRepository = employeeRepository;
-        this.coreConfigService = coreConfigService;
         this.notificationService = notificationService;
+        this.trainerAuthorizationRepository = trainerAuthorizationRepository;
     }
 
     @Transactional(readOnly = true)
@@ -176,6 +177,7 @@ public class MentoringPairingService {
         User mentor = userRepository.findByIdForUpdate(actor.getUserId())
                 .orElseThrow(() -> new ResourceNotFoundException("Mentor account not found"));
         ensureActiveMentor(mentor);
+        TrainerAuthorization authorization = requireActiveAuthorization(mentor.getId());
 
         List<Long> traineeIds = new ArrayList<>(new LinkedHashSet<>(body.traineeUserIds()));
         if (traineeIds.size() != body.traineeUserIds().size()) {
@@ -207,7 +209,7 @@ public class MentoringPairingService {
                 mentor.getId(), MentoringRequestRecipientStatus.PENDING
         );
         if (activeTrainees + pendingInvitations + traineeIds.size()
-                > coreConfigService.getDefaultMaxTraineesPerTrainer()) {
+                > authorization.getMaxConcurrentTrainees()) {
             throw new BusinessException(
                     "MENTOR_CAPACITY_REACHED",
                     "There is not enough remaining capacity to invite the selected employees.",
@@ -265,6 +267,7 @@ public class MentoringPairingService {
         User mentor = userRepository.findByIdForUpdate(body.mentorUserId())
                 .orElseThrow(() -> new ResourceNotFoundException("Mentor account not found"));
         ensureActiveMentor(mentor);
+        TrainerAuthorization authorization = requireActiveAuthorization(mentor.getId());
         Skill skill = resolveMentorSkill(mentor, body.skillId());
         ensureNoExistingPairRequest(mentor.getId(), trainee.getId());
         long activeTrainees = relationshipRepository.countActiveTraineesByMentorUserId(
@@ -273,7 +276,7 @@ public class MentoringPairingService {
         long pendingRequests = recipientRepository.countByMentorAndStatus(
                 mentor.getId(), MentoringRequestRecipientStatus.PENDING
         );
-        if (activeTrainees + pendingRequests >= coreConfigService.getDefaultMaxTraineesPerTrainer()) {
+        if (activeTrainees + pendingRequests >= authorization.getMaxConcurrentTrainees()) {
             throw new BusinessException(
                     "MENTOR_CAPACITY_REACHED",
                     "This mentor has no remaining capacity for new requests.",
@@ -336,6 +339,7 @@ public class MentoringPairingService {
             mentor = userRepository.findByIdForUpdate(mentor.getId())
                     .orElseThrow(() -> new ResourceNotFoundException("Mentor account not found"));
             ensureActiveMentor(mentor);
+            TrainerAuthorization authorization = requireActiveAuthorization(mentor.getId());
             ensureActiveEmployee(trainee.getId());
             if (relationshipRepository.existsActivePair(
                     mentor.getId(), trainee.getId(), MentoringRelationshipStatus.ACTIVE)) {
@@ -347,7 +351,7 @@ public class MentoringPairingService {
             }
             if (relationshipRepository.countActiveTraineesByMentorUserId(
                     mentor.getId(), MentoringRelationshipStatus.ACTIVE
-            ) >= coreConfigService.getDefaultMaxTraineesPerTrainer()) {
+            ) >= authorization.getMaxConcurrentTrainees()) {
                 throw new BusinessException(
                         "MENTOR_CAPACITY_REACHED",
                         "This mentor has reached the maximum number of active trainees.",
@@ -465,6 +469,17 @@ public class MentoringPairingService {
                     HttpStatus.FORBIDDEN
             );
         }
+        requireActiveAuthorization(mentor.getId());
+    }
+
+    private TrainerAuthorization requireActiveAuthorization(Long userId) {
+        return trainerAuthorizationRepository.findActiveByUserId(userId).stream()
+                .findFirst()
+                .orElseThrow(() -> new BusinessException(
+                        "ACTIVE_TRAINER_AUTHORIZATION_REQUIRED",
+                        "This action requires an active trainer authorization.",
+                        HttpStatus.FORBIDDEN
+                ));
     }
 
     private void ensureActiveEmployee(Long userId) {

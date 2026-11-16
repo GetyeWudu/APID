@@ -17,6 +17,8 @@ public interface SkillRepository extends JpaRepository<Skill, Long>, JpaSpecific
     @Query("SELECT CASE WHEN COUNT(s) > 0 THEN true ELSE false END FROM Skill s WHERE LOWER(s.name) = LOWER(:name) AND s.id <> :id")
     boolean existsByNameIgnoreCaseAndIdNot(@Param("name") String name, @Param("id") Long id);
 
+    Optional<Skill> findByNameIgnoreCase(String name);
+
     List<Skill> findAllByActiveTrueOrderByNameAsc();
 
     Optional<Skill> findByIdAndActiveTrue(Long id);
