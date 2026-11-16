@@ -43,6 +43,15 @@ public class TrainerAuthorization {
     @Column(name = "availability_notes", length = 1000)
     private String availabilityNotes;
 
+    @Column(name = "experience_years")
+    private Integer experienceYears;
+
+    @Column(name = "mentoring_approach", length = 2000)
+    private String mentoringApproach;
+
+    @Column(name = "sessions_per_week")
+    private Integer sessionsPerWeek;
+
     @Column(name = "appointment_reason", length = 1000)
     private String appointmentReason;
 
@@ -97,6 +106,12 @@ public class TrainerAuthorization {
     public void setBio(String bio) { this.bio = bio; }
     public String getAvailabilityNotes() { return availabilityNotes; }
     public void setAvailabilityNotes(String availabilityNotes) { this.availabilityNotes = availabilityNotes; }
+    public Integer getExperienceYears() { return experienceYears; }
+    public void setExperienceYears(Integer experienceYears) { this.experienceYears = experienceYears; }
+    public String getMentoringApproach() { return mentoringApproach; }
+    public void setMentoringApproach(String mentoringApproach) { this.mentoringApproach = mentoringApproach; }
+    public Integer getSessionsPerWeek() { return sessionsPerWeek; }
+    public void setSessionsPerWeek(Integer sessionsPerWeek) { this.sessionsPerWeek = sessionsPerWeek; }
     public String getAppointmentReason() { return appointmentReason; }
     public void setAppointmentReason(String appointmentReason) { this.appointmentReason = appointmentReason; }
     public User getAuthorizedBy() { return authorizedBy; }

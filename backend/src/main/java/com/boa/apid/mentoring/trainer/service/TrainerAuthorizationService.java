@@ -372,8 +372,17 @@ public class TrainerAuthorizationService {
             }
             authorization.setMaxConcurrentTrainees(request.maxConcurrentTrainees());
         }
-        authorization.setBio(normalizeOptional(request.bio()));
-        authorization.setAvailabilityNotes(normalizeOptional(request.availabilityNotes()));
+        if (request.mentoringApproach() != null || request.bio() != null) {
+            String approach = normalizeOptional(
+                    request.mentoringApproach() == null ? request.bio() : request.mentoringApproach());
+            authorization.setMentoringApproach(approach);
+            authorization.setBio(approach);
+        }
+        if (request.availabilityNotes() != null) {
+            authorization.setAvailabilityNotes(normalizeOptional(request.availabilityNotes()));
+        }
+        authorization.setExperienceYears(request.experienceYears());
+        authorization.setSessionsPerWeek(request.sessionsPerWeek());
         return toRosterDto(authorizationRepository.save(authorization));
     }
 
@@ -561,8 +570,14 @@ public class TrainerAuthorizationService {
         authorization.setMaxConcurrentTrainees(application.getMaxConcurrentTrainees() == null
                 ? configService.getDefaultMaxTraineesPerTrainer()
                 : application.getMaxConcurrentTrainees());
-        authorization.setBio(application.getExpertiseSummary());
+        String mentoringApproach = application.getMentoringApproach() == null
+                ? application.getExpertiseSummary()
+                : application.getMentoringApproach();
+        authorization.setBio(mentoringApproach);
+        authorization.setMentoringApproach(mentoringApproach);
         authorization.setAvailabilityNotes(application.getAvailabilityNotes());
+        authorization.setExperienceYears(application.getExperienceYears());
+        authorization.setSessionsPerWeek(application.getSessionsPerWeek());
         authorization.setAuthorizedBy(reviewer);
         authorization.setSkills(new LinkedHashSet<>(applicationSkills));
         TrainerAuthorization saved = authorizationRepository.save(authorization);
@@ -832,7 +847,10 @@ public class TrainerAuthorizationService {
                 authorization.getAvailabilityNotes(),
                 skills(authorization, false),
                 authorization.getEffectiveFrom(),
-                authorization.getUpdatedAt()
+                authorization.getUpdatedAt(),
+                authorization.getExperienceYears(),
+                authorization.getMentoringApproach(),
+                authorization.getSessionsPerWeek()
         );
     }
 
@@ -856,7 +874,10 @@ public class TrainerAuthorizationService {
                 active,
                 Math.max(0, authorization.getMaxConcurrentTrainees() - active - pending),
                 averageRating == null ? 0 : averageRating,
-                skills(authorization, true)
+                skills(authorization, true),
+                authorization.getExperienceYears(),
+                authorization.getMentoringApproach(),
+                authorization.getSessionsPerWeek()
         );
     }
 

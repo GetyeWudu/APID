@@ -1,6 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
 import {
-  Award,
   ArrowDownRight,
   ArrowUpRight,
   Building2,
@@ -34,7 +33,6 @@ import { mentoringTrainerApi } from '../../mentoring/api/mentoringTrainerApi';
 import { HrMentorSelfService } from '../../mentoring/components/HrMentorSelfService';
 import { MentoringRequestsPanel } from '../../mentoring/components/MentoringRequestsPanel';
 import { SkillSupplyDemandCard } from '../../mentoring/components/SkillSupplyDemandCard';
-import { TrainerApplicationsTab } from '../../mentoring/components/TrainerApplicationsTab';
 import { workspaceLiveApi } from '../api/workspaceDashboardApi';
 
 function formatDate(value: string) {
@@ -219,13 +217,22 @@ export function WorkspaceDashboardPage() {
   const hasHrActivityAccess = hrActivityQueries.length > 0;
   const hrActivityLoading = hrActivityQueries.some((query) => query.isLoading);
   const hrActivityError = hrActivityQueries.some((query) => query.isError);
-  const activeHrMentorCount = canViewMentoringReports
-    ? hrOverviewQuery.data?.activeTrainers ?? 0
-    : (hrTrainersQuery.data ?? []).filter((trainer) => trainer.status === 'ACTIVE').length;
+  const activeHrMentorUserIds = new Set(
+    (hrTrainersQuery.data ?? [])
+      .filter((trainer) => trainer.status === 'ACTIVE' && trainer.acceptingNewPairings !== false)
+      .map((trainer) => trainer.userId)
+      .filter((userId): userId is number => userId !== null)
+  );
+  if (
+    canManageHrMentor &&
+    user?.id !== undefined &&
+    hrMentorProfileQuery.data?.acceptingNewPairings
+  ) {
+    activeHrMentorUserIds.add(user.id);
+  }
+  const activeHrMentorCount = activeHrMentorUserIds.size;
   const pendingHrApplications = (hrApplicationsQuery.data ?? [])
     .filter((application) => application.status === 'PENDING').length;
-  const approvedHrApplications = (hrApplicationsQuery.data ?? [])
-    .filter((application) => application.status === 'APPROVED').length;
   const openHrMatchRequests = (hrMatchRequestsQuery.data ?? [])
     .filter((request) => request.status === 'OPEN').length;
 
@@ -308,20 +315,12 @@ export function WorkspaceDashboardPage() {
             <div className="boa-stack">
               <div className="boa-kpi-grid" style={{ marginBottom: 0 }}>
                 {canReviewMentorApplications && (
-                  <>
-                    <StatCard
-                      label="Pending Applications"
-                      value={pendingHrApplications}
-                      subtext="Awaiting HR review"
-                      icon={<ClipboardCheck size={16} />}
-                    />
-                    <StatCard
-                      label="Approved Applications"
-                      value={approvedHrApplications}
-                      subtext="Approved mentor applications"
-                      icon={<Award size={16} />}
-                    />
-                  </>
+                  <StatCard
+                    label="Pending Applications"
+                    value={pendingHrApplications}
+                    subtext="Awaiting HR review"
+                    icon={<ClipboardCheck size={16} />}
+                  />
                 )}
                 {canManageMentoringMatches && (
                   <StatCard
@@ -333,9 +332,9 @@ export function WorkspaceDashboardPage() {
                 )}
                 {canViewMentorRoster && (
                   <StatCard
-                    label="Authorized Mentors"
+                    label="Approved Mentors"
                     value={activeHrMentorCount}
-                    subtext="Currently authorized mentors"
+                    subtext="Active mentors; includes HR admin when badge is on"
                     icon={<UserRound size={16} />}
                   />
                 )}
@@ -361,9 +360,6 @@ export function WorkspaceDashboardPage() {
                   liveSkillNames={hrOverviewQuery.data.skillSupplyDemand.map((row) => row.skillName)}
                   skillSupplyDemand={hrOverviewQuery.data.skillSupplyDemand}
                 />
-              )}
-              {canReviewMentorApplications && (
-                <TrainerApplicationsTab applications={hrApplicationsQuery.data ?? []} />
               )}
             </div>
           )}

@@ -197,9 +197,24 @@ export function MentorDirectory({
                   {mentor.remainingCapacity === undefined
                     ? 'Capacity not available'
                     : `${mentor.remainingCapacity} trainee slot${mentor.remainingCapacity === 1 ? '' : 's'} available`}
-                  {mentor.availabilityNotes ? ` · ${mentor.availabilityNotes}` : ''}
                 </div>
-                {mentor.bio && <p className="boa-muted" style={{ fontSize: '0.84rem' }}>{mentor.bio}</p>}
+                <div className="boa-stack" style={{ gap: '0.3rem', marginTop: '0.4rem' }}>
+                  <span className="boa-muted" style={{ fontSize: '0.84rem' }}>
+                    Experience: {mentor.experienceYears == null
+                      ? 'Not provided'
+                      : `${mentor.experienceYears} year${mentor.experienceYears === 1 ? '' : 's'}`}
+                  </span>
+                  <span className="boa-muted" style={{ fontSize: '0.84rem' }}>
+                    {mentor.sessionsPerWeek == null
+                      ? mentor.availabilityNotes
+                        ? `Previous availability note: ${mentor.availabilityNotes}`
+                        : 'Sessions per week: Not provided'
+                      : `Sessions per week: ${mentor.sessionsPerWeek}`}
+                  </span>
+                  <span className="boa-muted" style={{ fontSize: '0.84rem' }}>
+                    Mentoring approach: {mentor.mentoringApproach || mentor.bio || 'Not provided'}
+                  </span>
+                </div>
                 <div style={{ display: 'flex', gap: '0.3rem', flexWrap: 'wrap', marginTop: '0.45rem' }}>
                   {mentor.skills.length > 0 ? (
                     mentor.skills.map((skill) => (

@@ -132,12 +132,44 @@ public class MentorApplicationService {
             List<MultipartFile> supportingEvidence,
             ApidUserPrincipal actor
     ) {
+        return submit(
+                catalogSkillIds,
+                customSkill,
+                note,
+                expertiseSummary,
+                availabilityNotes,
+                null,
+                null,
+                null,
+                maxConcurrentTrainees,
+                supportingEvidence,
+                actor
+        );
+    }
+
+    @Transactional
+    public MentorApplicationSubmittedDto submit(
+            List<Long> catalogSkillIds,
+            String customSkill,
+            String note,
+            String expertiseSummary,
+            String availabilityNotes,
+            Integer experienceYears,
+            String mentoringApproach,
+            Integer sessionsPerWeek,
+            Integer maxConcurrentTrainees,
+            List<MultipartFile> supportingEvidence,
+            ApidUserPrincipal actor
+    ) {
         return submitApplication(
                 catalogSkillIds,
                 customSkill,
                 note,
                 expertiseSummary,
                 availabilityNotes,
+                experienceYears,
+                mentoringApproach,
+                sessionsPerWeek,
                 maxConcurrentTrainees,
                 supportingEvidence,
                 actor,
@@ -160,6 +192,9 @@ public class MentorApplicationService {
                 null,
                 null,
                 null,
+                null,
+                null,
+                null,
                 supportingEvidence,
                 actor,
                 MentorApplicationType.SKILL_ADDITION
@@ -172,6 +207,9 @@ public class MentorApplicationService {
             String note,
             String expertiseSummary,
             String availabilityNotes,
+            Integer experienceYears,
+            String mentoringApproach,
+            Integer sessionsPerWeek,
             Integer maxConcurrentTrainees,
             List<MultipartFile> supportingEvidence,
             ApidUserPrincipal actor,
@@ -180,6 +218,7 @@ public class MentorApplicationService {
         String normalizedCustomSkill = normalizeOptional(customSkill);
         String normalizedExpertise = normalizeOptional(expertiseSummary);
         String normalizedAvailability = normalizeOptional(availabilityNotes);
+        String normalizedApproach = normalizeOptional(mentoringApproach);
         List<Long> requestedSkillIds = catalogSkillIds == null ? List.of() : catalogSkillIds;
         Set<Long> uniqueSkillIds = new LinkedHashSet<>(requestedSkillIds);
         if (uniqueSkillIds.size() != requestedSkillIds.size()) {
@@ -210,6 +249,24 @@ public class MentorApplicationService {
             throw new BusinessException(
                     "MENTOR_APPLICATION_AVAILABILITY_TOO_LONG",
                     "Availability notes must be 1000 characters or fewer."
+            );
+        }
+        if (experienceYears != null && experienceYears < 0) {
+            throw new BusinessException(
+                    "INVALID_MENTOR_EXPERIENCE",
+                    "Years of experience cannot be negative."
+            );
+        }
+        if (normalizedApproach != null && normalizedApproach.length() > 2000) {
+            throw new BusinessException(
+                    "MENTOR_APPLICATION_APPROACH_TOO_LONG",
+                    "Mentoring approach must be 2000 characters or fewer."
+            );
+        }
+        if (sessionsPerWeek != null && sessionsPerWeek < 0) {
+            throw new BusinessException(
+                    "INVALID_MENTOR_WEEKLY_SESSIONS",
+                    "Sessions per week cannot be negative."
             );
         }
         if (maxConcurrentTrainees != null && (maxConcurrentTrainees < 1 || maxConcurrentTrainees > 100)) {
@@ -325,6 +382,9 @@ public class MentorApplicationService {
         application.setNote(normalizeOptional(note));
         application.setExpertiseSummary(normalizedExpertise);
         application.setAvailabilityNotes(normalizedAvailability);
+        application.setExperienceYears(experienceYears);
+        application.setMentoringApproach(normalizedApproach);
+        application.setSessionsPerWeek(sessionsPerWeek);
         application.setMaxConcurrentTrainees(maxConcurrentTrainees);
 
         MentorApplication saved = applicationRepository.save(application);

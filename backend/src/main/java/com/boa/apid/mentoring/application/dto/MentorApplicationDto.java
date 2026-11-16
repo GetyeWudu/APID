@@ -28,7 +28,10 @@ public record MentorApplicationDto(
         Instant submittedAt,
         String reviewedByUsername,
         Instant reviewedAt,
-        String reviewReason
+        String reviewReason,
+        Integer experienceYears,
+        String mentoringApproach,
+        Integer sessionsPerWeek
 ) {
 
     public static MentorApplicationDto from(MentorApplication application) {
@@ -78,7 +81,10 @@ public record MentorApplicationDto(
                 application.getSubmittedAt(),
                 application.getReviewedBy() == null ? null : application.getReviewedBy().getUsername(),
                 application.getReviewedAt(),
-                application.getReviewReason()
+                application.getReviewReason(),
+                application.getExperienceYears(),
+                application.getMentoringApproach(),
+                application.getSessionsPerWeek()
         );
     }
 

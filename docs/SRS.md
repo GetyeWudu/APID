@@ -444,9 +444,10 @@ $$\text{Triggers Mandatory Performance Coaching} \iff \text{RoundedOverallFinalR
 - **Application Fields:**
   - Applicant employee identity (from logged-in user)
   - Target `skillId`(s)
-  - Years of experience / expertise summary / proposed mentoring syllabus
+  - Years of experience as a non-negative whole number
+  - Mentoring approach as separate free-text information
+  - Sessions available per week as a non-negative whole number
   - Max concurrent Trainees willing to mentor (optional default from system config)
-  - Weekly availability description
   - Supporting evidence files (certificates, degrees, portfolios, recommendations) stored via `FileStorageService`
 - Initial applications and additional-skill requests use `PENDING`, `APPROVED`, and `DECLINED` review statuses. The applicant can review request history and pending decisions in the portal.
 
@@ -481,7 +482,7 @@ HR Admin manages ongoing authorization separately for each skill on a `TrainerAu
 ### 5.4 Hybrid Trainer Discovery & Matching (`FR-MENTOR-04`)
 APID supports **all three** discovery and matching paths concurrently:
 1. **Method 1 — Direct Trainer Browsing:**
-   - Employees search/filter `ACTIVE`, available Trainers by `skillId`, `department`, availability, and remaining Trainee capacity, inspect Trainer profiles/expertise, and send a mentoring request directly.
+   - Employees search/filter `ACTIVE`, available Trainers by `skillId`, `department`, years of experience, mentoring approach, sessions per week, and remaining Trainee capacity, inspect Trainer profiles, and send a mentoring request directly.
 2. **Method 2 — Automated Skill Recommendations:**
    - Employee chooses a desired `skillId`; APID ranks matching `ACTIVE` Trainers by:
      1. Exact skill match
@@ -611,10 +612,10 @@ APID uses **one PostgreSQL 16 database (`apid_db`)** divided into **3 isolated s
 - `coaching.coaching_resources` (`id`, `assignment_id`, `title`, `resource_type`, `file_id`, `external_url`, `uploaded_by`, `created_at`)
 
 ### 8.3 `mentoring` Schema (Developer 2 Ownership)
-- `mentoring.mentor_applications` (`id`, `applicant_user_id` FK->`core.users`, `application_type` (`INITIAL`|`SKILL_ADDITION`), `expertise_summary`, `availability_notes`, `max_concurrent_trainees`, `status`, `reviewed_by_user_id`, `review_reason`, `submitted_at`, `reviewed_at`)
+- `mentoring.mentor_applications` (`id`, `applicant_user_id` FK->`core.users`, `application_type` (`INITIAL`|`SKILL_ADDITION`), `experience_years`, `mentoring_approach`, `sessions_per_week`, legacy `expertise_summary` and `availability_notes`, `max_concurrent_trainees`, `status`, `reviewed_by_user_id`, `review_reason`, `submitted_at`, `reviewed_at`)
 - `mentoring.trainer_application_skills` (`application_id`, `skill_id` FK->`core.skills`)
 - `mentoring.trainer_qualifications` (`id`, `application_id`, `file_id` FK->`core.stored_files`, `document_type`, `description`)
-- `mentoring.trainer_authorizations` (`id`, `employee_id` FK->`core.employees`, `source_type` (`APPLICATION`|`DIRECT_APPOINTMENT`), `source_application_id`, `status` (`ACTIVE`|`SUSPENDED`|`REVOKED`), `max_concurrent_trainees`, `bio`, `appointment_reason`, `authorized_by_user_id`, `status_reason`, `effective_from`, `updated_at`)
+- `mentoring.trainer_authorizations` (`id`, `employee_id` FK->`core.employees`, `source_type` (`APPLICATION`|`DIRECT_APPOINTMENT`), `source_application_id`, `status` (`ACTIVE`|`SUSPENDED`|`REVOKED`), `max_concurrent_trainees`, `experience_years`, `mentoring_approach`, `sessions_per_week`, legacy `bio` and `availability_notes`, `appointment_reason`, `authorized_by_user_id`, `status_reason`, `effective_from`, `updated_at`)
 - `mentoring.trainer_skills` (`trainer_auth_id`, `skill_id` FK->`core.skills`)
 - `mentoring.trainer_authorization_skill_status` (`trainer_auth_id`, `skill_id`, `status`, `status_reason`, `updated_at`); lifecycle status is independent for each authorized skill.
 - `mentoring.trainer_status_history` (`id`, `trainer_auth_id`, optional `skill_id`, `previous_status`, `new_status`, `reason`, `changed_by_user_id`, `changed_at`)

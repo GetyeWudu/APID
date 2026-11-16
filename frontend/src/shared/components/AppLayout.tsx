@@ -296,16 +296,6 @@ export function AppLayout({ children }: { children: ReactNode }) {
           label: 'HR Administration',
           items: [
             {
-              to: '/mentoring/hr',
-              label: 'Mentoring Overview',
-              icon: <LayoutDashboard size={17} />,
-              requiredAnyPermissions: [
-                'MENTORING_REPORT_VIEW_ALL',
-                'TRAINER_APPLICATION_REVIEW',
-                'MENTORING_MATCH_MANAGE',
-              ],
-            },
-            {
               to: '/mentoring/hr?tab=applications',
               label: 'Trainer Applications',
               icon: <ClipboardCheck size={17} />,

@@ -2,6 +2,8 @@ import { useEffect, useState, type FormEvent } from 'react';
 import axios from 'axios';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Award, Save } from 'lucide-react';
+import { useAuth } from '../../../app/AuthContext';
+import { HR_MODULE_PERMISSIONS } from '../../../shared/auth/workspaceResolver';
 import type { ApiErrorPayload } from '../../../shared/api/apiClient';
 import type { SkillItem } from '../../admin/skills/types/skills.types';
 import { mentorApplicationApi } from '../api/mentorApplicationApi';
@@ -22,6 +24,8 @@ export function MentorProfileForm({
   activeSkills: SkillItem[];
   currentUserId: number;
 }) {
+  const { hasAnyPermission } = useAuth();
+  const isHrAdmin = hasAnyPermission(HR_MODULE_PERMISSIONS);
   const queryClient = useQueryClient();
   const { pushToast } = useToast();
   const profileQuery = useQuery({
@@ -31,9 +35,16 @@ export function MentorProfileForm({
   const applicationsQuery = useQuery({
     queryKey: ['mentoring', 'applications', 'mine', currentUserId],
     queryFn: mentorApplicationApi.listMine,
+    enabled: !isHrAdmin,
   });
-  const [bio, setBio] = useState('');
-  const [availabilityNotes, setAvailabilityNotes] = useState('');
+  const hrProfileQuery = useQuery({
+    queryKey: ['mentoring', 'hr', 'my-mentor-profile'],
+    queryFn: mentoringTrainerApi.getHrMentorProfile,
+    enabled: isHrAdmin,
+  });
+  const [experienceYears, setExperienceYears] = useState('');
+  const [mentoringApproach, setMentoringApproach] = useState('');
+  const [sessionsPerWeek, setSessionsPerWeek] = useState('');
   const [maxConcurrentTrainees, setMaxConcurrentTrainees] = useState(3);
   const [skillIds, setSkillIds] = useState<string[]>([]);
   const [customSkill, setCustomSkill] = useState('');
@@ -42,8 +53,9 @@ export function MentorProfileForm({
 
   useEffect(() => {
     if (!profileQuery.data) return;
-    setBio(profileQuery.data.bio ?? '');
-    setAvailabilityNotes(profileQuery.data.availabilityNotes ?? '');
+    setExperienceYears(profileQuery.data.experienceYears?.toString() ?? '');
+    setMentoringApproach(profileQuery.data.mentoringApproach ?? profileQuery.data.bio ?? '');
+    setSessionsPerWeek(profileQuery.data.sessionsPerWeek?.toString() ?? '');
     setMaxConcurrentTrainees(profileQuery.data.maxConcurrentTrainees);
   }, [profileQuery.data]);
 
@@ -86,17 +98,69 @@ export function MentorProfileForm({
       tone: 'err',
     }),
   });
+  const hrSkillMutation = useMutation({
+    mutationFn: async (selectedSkillIds: number[]) => {
+      const hrProfile = hrProfileQuery.data ?? await mentoringTrainerApi.getHrMentorProfile();
+      return mentoringTrainerApi.updateHrMentorProfile({
+        acceptingNewPairings: hrProfile.acceptingNewPairings,
+        skillIds: selectedSkillIds,
+      });
+    },
+    onSuccess: async (hrProfile) => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['mentoring', 'trainer-profile'] }),
+        queryClient.invalidateQueries({ queryKey: ['mentoring', 'hr', 'my-mentor-profile'] }),
+        queryClient.invalidateQueries({ queryKey: ['mentoring', 'trainers'] }),
+        queryClient.invalidateQueries({ queryKey: ['mentoring', 'directory'] }),
+      ]);
+      if (hrProfile.profile?.userId) {
+        queryClient.setQueryData(
+          ['mentoring', 'trainer', 'profile', hrProfile.profile.userId],
+          hrProfile.profile
+        );
+      }
+      setSkillIds([]);
+      pushToast({
+        title: 'Mentor skills updated',
+        message: 'Your selected skills are active immediately; no approval is required.',
+        tone: 'ok',
+      });
+    },
+    onError: (error: unknown) => pushToast({
+      title: 'Unable to update mentor skills',
+      message: errorMessage(error),
+      tone: 'err',
+    }),
+  });
 
   const submit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    updateMutation.mutate({ bio: bio.trim(), availabilityNotes: availabilityNotes.trim(), maxConcurrentTrainees });
+    updateMutation.mutate({
+      bio: mentoringApproach.trim(),
+      experienceYears: experienceYears === '' ? null : Number(experienceYears),
+      mentoringApproach: mentoringApproach.trim(),
+      sessionsPerWeek: sessionsPerWeek === '' ? null : Number(sessionsPerWeek),
+      maxConcurrentTrainees,
+    });
   };
 
-  if (profileQuery.isLoading || applicationsQuery.isLoading) return <LoadingSkeleton rows={3} height={28} />;
+  if (profileQuery.isLoading
+    || (!isHrAdmin && applicationsQuery.isLoading)
+    || (isHrAdmin && hrProfileQuery.isLoading)) {
+    return <LoadingSkeleton rows={3} height={28} />;
+  }
   if (profileQuery.isError || !profileQuery.data) {
     return <ErrorState message={errorMessage(profileQuery.error)} onRetry={() => void profileQuery.refetch()} />;
   }
-  if (applicationsQuery.isError || !applicationsQuery.data) {
+  if (isHrAdmin && (hrProfileQuery.isError || !hrProfileQuery.data)) {
+    return (
+      <ErrorState
+        message={errorMessage(hrProfileQuery.error)}
+        onRetry={() => void hrProfileQuery.refetch()}
+      />
+    );
+  }
+  if (!isHrAdmin && (applicationsQuery.isError || !applicationsQuery.data)) {
     return (
       <ErrorState
         message="Unable to load your skill request history."
@@ -109,7 +173,7 @@ export function MentorProfileForm({
   const capacityLimit = Math.max(1, maxConcurrentTrainees);
   const capacityPercent = Math.min(100, Math.round((committedTrainees / capacityLimit) * 100));
   const remainingCapacity = Math.max(0, capacityLimit - committedTrainees);
-  const skillAdditionRequests = applicationsQuery.data.filter(
+  const skillAdditionRequests = (applicationsQuery.data ?? []).filter(
     (application) => application.applicationType === 'SKILL_ADDITION'
   );
   const pendingSkillIds = new Set(
@@ -160,6 +224,18 @@ export function MentorProfileForm({
       supportingEvidence: skillEvidence,
       note: skillRequestNote.trim() || undefined,
     });
+  };
+  const submitHrSkillUpdate = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (skillIds.length === 0) {
+      pushToast({
+        title: 'Select a skill',
+        message: 'Choose one or more active catalog skills to add to your profile.',
+        tone: 'info',
+      });
+      return;
+    }
+    hrSkillMutation.mutate(skillIds.map(Number));
   };
 
   return (
@@ -214,30 +290,48 @@ export function MentorProfileForm({
 
         <div className="boa-grid-2" style={{ marginBottom: 0 }}>
           <label className="apid-field">
-            Expertise and mentoring approach
-            <textarea
+            Years of experience
+            <input
               className="apid-input"
-              rows={5}
-              maxLength={2000}
-              value={bio}
-              onChange={(event) => setBio(event.target.value)}
-              placeholder="Describe your experience, strengths, and how you support mentees."
+              type="number"
+              min={0}
+              step={1}
+              value={experienceYears}
+              onChange={(event) => setExperienceYears(event.target.value)}
               disabled={updateMutation.isPending}
             />
-            <span className="boa-muted" style={{ fontSize: '0.76rem' }}>{bio.length} / 2000 characters</span>
           </label>
           <label className="apid-field">
-            Weekly availability
+            Mentoring approach
             <textarea
               className="apid-input"
-              rows={5}
-              maxLength={1000}
-              value={availabilityNotes}
-              onChange={(event) => setAvailabilityNotes(event.target.value)}
-              placeholder="For example: Tuesday and Thursday afternoons."
+              rows={4}
+              maxLength={2000}
+              value={mentoringApproach}
+              onChange={(event) => setMentoringApproach(event.target.value)}
+              placeholder="Describe how you guide, teach, and support your mentees."
               disabled={updateMutation.isPending}
             />
-            <span className="boa-muted" style={{ fontSize: '0.76rem' }}>{availabilityNotes.length} / 1000 characters</span>
+            <span className="boa-muted" style={{ fontSize: '0.76rem' }}>
+              {mentoringApproach.length} / 2000 characters
+            </span>
+          </label>
+          <label className="apid-field">
+            Sessions per week
+            <input
+              className="apid-input"
+              type="number"
+              min={0}
+              step={1}
+              value={sessionsPerWeek}
+              onChange={(event) => setSessionsPerWeek(event.target.value)}
+              disabled={updateMutation.isPending}
+            />
+            {profileQuery.data.availabilityNotes && profileQuery.data.sessionsPerWeek == null && (
+              <span className="boa-muted" style={{ fontSize: '0.76rem' }}>
+                Previous availability note: {profileQuery.data.availabilityNotes}
+              </span>
+            )}
           </label>
         </div>
 
@@ -269,9 +363,13 @@ export function MentorProfileForm({
 
       <section className="apid-card boa-stack" style={{ marginBottom: 0 }}>
         <div>
-          <h3 className="boa-card-title">Request additional mentoring skills</h3>
+          <h3 className="boa-card-title">
+            {isHrAdmin ? 'Add mentoring skills' : 'Request additional mentoring skills'}
+          </h3>
           <p className="boa-card-subtitle">
-            Select new skills and submit supporting evidence. HR approval is required before you can mentor them.
+            {isHrAdmin
+              ? 'Add active catalog skills directly to your profile. No approval is required.'
+              : 'Select new skills and submit supporting evidence. HR approval is required before you can mentor them.'}
           </p>
         </div>
         <div className="boa-stack">
@@ -284,7 +382,7 @@ export function MentorProfileForm({
               : <span className="boa-muted">No active mentor skills.</span>}
           </div>
         </div>
-        {skillAdditionRequests.length > 0 && (
+        {!isHrAdmin && skillAdditionRequests.length > 0 && (
           <div className="boa-stack" aria-label="Skill request history">
             <strong>Skill request history</strong>
             {skillAdditionRequests.map((application) => (
@@ -305,9 +403,43 @@ export function MentorProfileForm({
         {availableSkills.length === 0 && !customSkill.trim() ? (
           <EmptyState
             title="No additional catalog skills available"
-            description="Your current and pending skills are already listed. You can still request a custom skill below."
+            description={isHrAdmin
+              ? 'All active catalog skills are already listed.'
+              : 'Your current and pending skills are already listed. You can still request a custom skill below.'}
           />
         ) : null}
+        {isHrAdmin ? (
+          <form className="apid-form" onSubmit={submitHrSkillUpdate}>
+            <div className="apid-field">
+              <label htmlFor="mentor-skill-addition">Catalog skills</label>
+              <select
+                id="mentor-skill-addition"
+                className="apid-input"
+                multiple
+                size={Math.min(6, Math.max(3, availableSkills.length))}
+                value={skillIds}
+                onChange={(event) => setSkillIds(
+                  Array.from(event.target.selectedOptions, (option) => option.value)
+                )}
+                disabled={hrSkillMutation.isPending || availableSkills.length === 0}
+              >
+                {availableSkills.map((skill) => (
+                  <option key={skill.id} value={skill.id}>{skill.name}</option>
+                ))}
+              </select>
+              <span className="boa-muted" style={{ fontSize: '0.76rem' }}>
+                Hold Ctrl or Command to select multiple skills.
+              </span>
+            </div>
+            <button
+              type="submit"
+              className="apid-btn apid-btn-primary"
+              disabled={hrSkillMutation.isPending || skillIds.length === 0}
+            >
+              {hrSkillMutation.isPending ? 'Adding skills…' : 'Add skills now'}
+            </button>
+          </form>
+        ) : (
         <form className="apid-form" onSubmit={submitSkillRequest}>
           <div className="apid-field">
             <label htmlFor="mentor-skill-addition">Catalog skills</label>
@@ -373,6 +505,7 @@ export function MentorProfileForm({
             {skillRequestMutation.isPending ? 'Sending request…' : 'Request skill approval'}
           </button>
         </form>
+        )}
       </section>
     </div>
   );

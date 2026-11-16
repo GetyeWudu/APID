@@ -22,6 +22,9 @@ export function MentoringRecommendations({
   requests: MentoringPairing[];
 }) {
   const [skillId, setSkillId] = useState(() => String(skills[0]?.id ?? ''));
+  const [minimumExperienceYears, setMinimumExperienceYears] = useState('');
+  const [approachFilter, setApproachFilter] = useState('');
+  const [minimumSessionsPerWeek, setMinimumSessionsPerWeek] = useState('');
   const queryClient = useQueryClient();
   const { pushToast } = useToast();
   const selectedSkillId = Number(skillId);
@@ -52,32 +55,80 @@ export function MentoringRecommendations({
     },
   });
 
-  const recommendations = (recommendationsQuery.data ?? [])
-    .filter((mentor) => mentor.userId !== currentUserId && mentor.remainingCapacity > 0);
+  const recommendations = (recommendationsQuery.data ?? []).filter((mentor) => {
+    const approach = mentor.mentoringApproach ?? mentor.bio ?? '';
+    return mentor.userId !== currentUserId &&
+      mentor.remainingCapacity > 0 &&
+      (minimumExperienceYears === '' ||
+        (mentor.experienceYears != null && mentor.experienceYears >= Number(minimumExperienceYears))) &&
+      (!approachFilter.trim() ||
+        approach.toLowerCase().includes(approachFilter.trim().toLowerCase())) &&
+      (minimumSessionsPerWeek === '' ||
+        (mentor.sessionsPerWeek != null && mentor.sessionsPerWeek >= Number(minimumSessionsPerWeek)));
+  });
+  const hasFilters = Boolean(
+    minimumExperienceYears || approachFilter.trim() || minimumSessionsPerWeek
+  );
 
   return (
     <section className="apid-card boa-stack">
       <div>
         <h2 className="boa-card-title">Recommended Mentors</h2>
         <p className="boa-card-subtitle">
-          Active mentors with capacity for your selected skill, ranked by capacity, workload, and trainee feedback.
+          Compare experience, mentoring approach, weekly sessions, and feedback for mentors with your selected skill.
         </p>
       </div>
       {skills.length === 0 ? (
         <EmptyState title="No skills available" description="There are no active skills to recommend mentors for." />
       ) : (
-        <label>
-          Skill you want to learn
-          <select
-            className="apid-input"
-            value={skillId}
-            onChange={(event) => setSkillId(event.target.value)}
-          >
-            {skills.map((skill) => (
-              <option key={skill.id} value={skill.id}>{skill.name}</option>
-            ))}
-          </select>
-        </label>
+        <div className="boa-stack">
+          <label>
+            Skill you want to learn
+            <select
+              className="apid-input"
+              value={skillId}
+              onChange={(event) => setSkillId(event.target.value)}
+            >
+              {skills.map((skill) => (
+                <option key={skill.id} value={skill.id}>{skill.name}</option>
+              ))}
+            </select>
+          </label>
+          <div className="boa-grid-2" style={{ marginBottom: 0 }}>
+            <label className="apid-field">
+              Minimum experience (years)
+              <input
+                className="apid-input"
+                type="number"
+                min={0}
+                step={1}
+                value={minimumExperienceYears}
+                onChange={(event) => setMinimumExperienceYears(event.target.value)}
+              />
+            </label>
+            <label className="apid-field">
+              Mentoring approach
+              <input
+                className="apid-input"
+                type="text"
+                value={approachFilter}
+                onChange={(event) => setApproachFilter(event.target.value)}
+                placeholder="Search approach"
+              />
+            </label>
+            <label className="apid-field">
+              Minimum sessions per week
+              <input
+                className="apid-input"
+                type="number"
+                min={0}
+                step={1}
+                value={minimumSessionsPerWeek}
+                onChange={(event) => setMinimumSessionsPerWeek(event.target.value)}
+              />
+            </label>
+          </div>
+        </div>
       )}
       {skills.length > 0 && recommendationsQuery.isLoading && <LoadingSkeleton rows={3} height={28} />}
       {skills.length > 0 && recommendationsQuery.isError && (
@@ -88,7 +139,12 @@ export function MentoringRecommendations({
       )}
       {skills.length > 0 && !recommendationsQuery.isLoading && !recommendationsQuery.isError && (
         recommendations.length === 0 ? (
-          <EmptyState title="No matching mentors" description="No available mentors currently offer this skill." />
+          <EmptyState
+            title="No matching mentors"
+            description={hasFilters
+              ? 'Try adjusting your experience, mentoring approach, or weekly session filters.'
+              : 'No available mentors currently offer this skill.'}
+          />
         ) : (
           <div className="boa-stack">
             {recommendations.map((mentor) => {
@@ -105,7 +161,7 @@ export function MentoringRecommendations({
                     <div>
                       <strong>{mentor.fullName}</strong>
                       <div className="boa-muted" style={{ fontSize: '0.8rem' }}>
-                        {[mentor.departmentName, mentor.availabilityNotes].filter(Boolean).join(' · ')}
+                        {mentor.departmentName}
                       </div>
                     </div>
                     <StatusPill
@@ -113,7 +169,23 @@ export function MentoringRecommendations({
                       tone="info"
                     />
                   </div>
-                  {mentor.bio && <p className="boa-muted" style={{ margin: '0.4rem 0' }}>{mentor.bio}</p>}
+                  <div className="boa-stack" style={{ gap: '0.3rem', margin: '0.4rem 0' }}>
+                    <span className="boa-muted">
+                      Experience: {mentor.experienceYears == null
+                        ? 'Not provided'
+                        : `${mentor.experienceYears} year${mentor.experienceYears === 1 ? '' : 's'}`}
+                    </span>
+                    <span className="boa-muted">
+                      {mentor.sessionsPerWeek == null
+                        ? mentor.availabilityNotes
+                          ? `Previous availability note: ${mentor.availabilityNotes}`
+                          : 'Sessions per week: Not provided'
+                        : `Sessions per week: ${mentor.sessionsPerWeek}`}
+                    </span>
+                    <span className="boa-muted">
+                      Mentoring approach: {mentor.mentoringApproach || mentor.bio || 'Not provided'}
+                    </span>
+                  </div>
                   <div style={{ display: 'flex', gap: '0.35rem', alignItems: 'center', flexWrap: 'wrap' }}>
                     <StatusPill label={`${mentor.activeTrainees} active trainee${mentor.activeTrainees === 1 ? '' : 's'}`} tone="neutral" />
                     {mentor.averageRating > 0 && (

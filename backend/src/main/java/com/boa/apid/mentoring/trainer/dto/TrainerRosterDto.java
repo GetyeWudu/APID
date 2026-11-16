@@ -24,6 +24,9 @@ public record TrainerRosterDto(
         String availabilityNotes,
         List<TrainerSkillDto> skills,
         Instant effectiveFrom,
-        Instant updatedAt
+        Instant updatedAt,
+        Integer experienceYears,
+        String mentoringApproach,
+        Integer sessionsPerWeek
 ) {
 }

@@ -7,6 +7,9 @@ export interface SubmitMentorApplicationPayload {
   catalogSkillIds?: number[];
   customSkill?: string;
   note?: string;
+  experienceYears?: number;
+  mentoringApproach?: string;
+  sessionsPerWeek?: number;
   expertiseSummary?: string;
   availabilityNotes?: string;
   maxConcurrentTrainees?: number;
@@ -37,6 +40,9 @@ export interface MentorApplication {
   note: string | null;
   expertiseSummary: string | null;
   availabilityNotes: string | null;
+  experienceYears?: number | null;
+  mentoringApproach?: string | null;
+  sessionsPerWeek?: number | null;
   maxConcurrentTrainees: number | null;
   submittedAt: string;
   reviewedByUsername: string | null;
@@ -63,6 +69,15 @@ function buildApplicationFormData(payload: SubmitMentorApplicationPayload) {
   }
   if (payload.note) {
     formData.append('note', payload.note);
+  }
+  if (payload.experienceYears !== undefined) {
+    formData.append('experienceYears', String(payload.experienceYears));
+  }
+  if (payload.mentoringApproach) {
+    formData.append('mentoringApproach', payload.mentoringApproach);
+  }
+  if (payload.sessionsPerWeek !== undefined) {
+    formData.append('sessionsPerWeek', String(payload.sessionsPerWeek));
   }
   if (payload.expertiseSummary) {
     formData.append('expertiseSummary', payload.expertiseSummary);

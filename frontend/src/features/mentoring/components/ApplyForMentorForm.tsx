@@ -22,8 +22,9 @@ export function ApplyForMentorForm({
   const [skillIds, setSkillIds] = useState<string[]>([]);
   const [customSkill, setCustomSkill] = useState('');
   const [note, setNote] = useState('');
-  const [expertiseSummary, setExpertiseSummary] = useState('');
-  const [availabilityNotes, setAvailabilityNotes] = useState('');
+  const [experienceYears, setExperienceYears] = useState('');
+  const [mentoringApproach, setMentoringApproach] = useState('');
+  const [sessionsPerWeek, setSessionsPerWeek] = useState('');
   const [maxConcurrentTrainees, setMaxConcurrentTrainees] = useState('3');
   const [supportingEvidence, setSupportingEvidence] = useState<File[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -56,8 +57,9 @@ export function ApplyForMentorForm({
         catalogSkillIds: skillIds.map(Number),
         customSkill: customSkill.trim() || undefined,
         note: note.trim() || undefined,
-        expertiseSummary: expertiseSummary.trim() || undefined,
-        availabilityNotes: availabilityNotes.trim() || undefined,
+        experienceYears: experienceYears === '' ? undefined : Number(experienceYears),
+        mentoringApproach: mentoringApproach.trim() || undefined,
+        sessionsPerWeek: sessionsPerWeek === '' ? undefined : Number(sessionsPerWeek),
         maxConcurrentTrainees: maxConcurrentTrainees ? Number(maxConcurrentTrainees) : undefined,
       });
       await applicationsQuery.refetch();
@@ -69,8 +71,9 @@ export function ApplyForMentorForm({
       setSkillIds([]);
       setCustomSkill('');
       setNote('');
-      setExpertiseSummary('');
-      setAvailabilityNotes('');
+      setExperienceYears('');
+      setMentoringApproach('');
+      setSessionsPerWeek('');
       setMaxConcurrentTrainees('3');
       setSupportingEvidence([]);
       form.reset();
@@ -174,29 +177,45 @@ export function ApplyForMentorForm({
         </div>
 
         <div className="apid-field">
-          <label htmlFor="mentor-application-expertise">Experience and mentoring approach</label>
-          <textarea
-            id="mentor-application-expertise"
+          <label htmlFor="mentor-application-experience">Years of experience</label>
+          <input
+            id="mentor-application-experience"
             className="apid-input"
-            rows={4}
-            maxLength={2000}
-            value={expertiseSummary}
-            onChange={(event) => setExpertiseSummary(event.target.value)}
-            placeholder="Describe your experience, expertise, and how you would teach this skill."
+            type="number"
+            min={0}
+            step={1}
+            value={experienceYears}
+            onChange={(event) => setExperienceYears(event.target.value)}
+            placeholder="Years"
             disabled={isSubmitting}
           />
         </div>
 
         <div className="apid-field">
-          <label htmlFor="mentor-application-availability">Weekly availability</label>
+          <label htmlFor="mentor-application-approach">Mentoring approach</label>
           <textarea
-            id="mentor-application-availability"
+            id="mentor-application-approach"
             className="apid-input"
-            rows={2}
-            maxLength={1000}
-            value={availabilityNotes}
-            onChange={(event) => setAvailabilityNotes(event.target.value)}
-            placeholder="For example: Tuesday and Thursday afternoons."
+            rows={4}
+            maxLength={2000}
+            value={mentoringApproach}
+            onChange={(event) => setMentoringApproach(event.target.value)}
+            placeholder="Describe how you guide, teach, and support your mentees."
+            disabled={isSubmitting}
+          />
+        </div>
+
+        <div className="apid-field">
+          <label htmlFor="mentor-application-sessions">Sessions per week</label>
+          <input
+            id="mentor-application-sessions"
+            className="apid-input"
+            type="number"
+            min={0}
+            step={1}
+            value={sessionsPerWeek}
+            onChange={(event) => setSessionsPerWeek(event.target.value)}
+            placeholder="Sessions per week"
             disabled={isSubmitting}
           />
         </div>

@@ -2,6 +2,7 @@ import { useState } from 'react';
 import axios from 'axios';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Award } from 'lucide-react';
+import { Link } from 'react-router-dom';
 import { useAuth } from '../../../app/AuthContext';
 import type { ApiErrorPayload } from '../../../shared/api/apiClient';
 import { EmptyState, ErrorState, LoadingSkeleton, StatusPill, useToast } from '../../../shared/components/ui';
@@ -97,8 +98,6 @@ export function HrMentorSelfService() {
       maxConcurrentTrainees: 3,
     });
   };
-  const currentSkillIds = new Set((profile.profile?.skills ?? []).map((skill) => skill.id));
-  const addableSkills = profile.activeSkills.filter((skill) => !currentSkillIds.has(skill.id));
 
   return (
     <section className="apid-card boa-stack">
@@ -126,48 +125,16 @@ export function HrMentorSelfService() {
 
       {hasProfile ? (
         <div className="boa-stack">
-          <div>
-            <strong>Mentor skills</strong>
-            <p className="boa-muted" style={{ margin: '0.3rem 0 0' }}>
-              {profile.profile?.skills.map((skill) => skill.name).join(' · ') || 'No skills listed'}
-            </p>
-          </div>
           <div className="boa-stack">
-            <strong>Add skills to your profile</strong>
-            {addableSkills.length === 0 ? (
-              <p className="boa-muted" style={{ margin: 0 }}>All active catalog skills are already listed.</p>
-            ) : (
-              <>
-                <div className="boa-stack" role="group" aria-label="Select mentor skills to add">
-                  {addableSkills.map((skill) => (
-                    <label key={skill.id} style={{ display: 'flex', alignItems: 'center', gap: '0.55rem' }}>
-                      <input
-                        type="checkbox"
-                        checked={selectedSkillIds.includes(skill.id)}
-                        onChange={() => toggleSkill(skill.id, Number.POSITIVE_INFINITY)}
-                        disabled={updateMutation.isPending || profile.profile?.status !== 'ACTIVE'}
-                      />
-                      <span>{skill.name}</span>
-                      {skill.category && <span className="boa-muted">· {skill.category}</span>}
-                    </label>
-                  ))}
-                </div>
-                <button
-                  type="button"
-                  className="apid-btn apid-btn-primary apid-btn-sm"
-                  disabled={selectedSkillIds.length === 0 || updateMutation.isPending || profile.profile?.status !== 'ACTIVE'}
-                  onClick={() => updateMutation.mutate({
-                    acceptingNewPairings: profile.acceptingNewPairings,
-                    skillIds: selectedSkillIds,
-                  })}
-                >
-                  {updateMutation.isPending ? 'Saving...' : 'Add skills now'}
-                </button>
-                <p className="boa-muted" style={{ margin: 0, fontSize: '0.82rem' }}>
-                  Your selected skills become active immediately. No application or HR approval is required.
-                </p>
-              </>
-            )}
+            <div>
+              <strong>Your mentor profile is set up</strong>
+              <p className="boa-muted" style={{ margin: '0.3rem 0 0' }}>
+                Manage your profile details and skills from the dedicated Mentor Profile page.
+              </p>
+            </div>
+            <Link to="/mentoring?view=trainer-profile" className="apid-btn apid-btn-primary apid-btn-sm">
+              Open mentor profile
+            </Link>
           </div>
           <button
             type="button"

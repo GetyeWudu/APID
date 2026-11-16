@@ -13,6 +13,9 @@ public record TrainerDirectoryDto(
         int activeTrainees,
         int remainingCapacity,
         double averageRating,
-        List<TrainerSkillDto> skills
+        List<TrainerSkillDto> skills,
+        Integer experienceYears,
+        String mentoringApproach,
+        Integer sessionsPerWeek
 ) {
 }

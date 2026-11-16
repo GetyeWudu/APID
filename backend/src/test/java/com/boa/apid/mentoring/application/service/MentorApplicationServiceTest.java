@@ -247,7 +247,10 @@ class MentorApplicationServiceTest {
                 null,
                 List.of(),
                 Instant.now(),
-                Instant.now()
+                Instant.now(),
+                null,
+                null,
+                null
         ));
         when(applicationRepository.findAllByApplicant_IdAndApplicationTypeAndStatus(
                 actor.getUserId(),

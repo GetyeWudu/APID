@@ -30,6 +30,9 @@ export interface TrainerRosterItem {
   maxConcurrentTrainees: number;
   bio: string | null;
   availabilityNotes: string | null;
+  experienceYears?: number | null;
+  mentoringApproach?: string | null;
+  sessionsPerWeek?: number | null;
   skills: TrainerSkill[];
   effectiveFrom: string;
   updatedAt: string;
@@ -43,6 +46,9 @@ export interface TrainerDirectoryItem {
   departmentName: string | null;
   bio: string | null;
   availabilityNotes: string | null;
+  experienceYears?: number | null;
+  mentoringApproach?: string | null;
+  sessionsPerWeek?: number | null;
   activeTrainees: number;
   remainingCapacity: number;
   averageRating: number;
@@ -149,7 +155,10 @@ export const mentoringTrainerApi = {
 
   async updateProfile(input: {
     bio: string;
-    availabilityNotes: string;
+    availabilityNotes?: string;
+    experienceYears: number | null;
+    mentoringApproach: string;
+    sessionsPerWeek: number | null;
     maxConcurrentTrainees?: number;
   }): Promise<TrainerRosterItem> {
     const response = await apiClient.patch<ApiResponse<TrainerRosterItem>>('/mentoring/trainer-profile', input);

@@ -1,7 +1,7 @@
-import { useState, type FormEvent } from 'react';
+import { useEffect, useState, type FormEvent } from 'react';
 import axios from 'axios';
 import { useQueryClient } from '@tanstack/react-query';
-import { Check, Download, FileText, XCircle } from 'lucide-react';
+import { Check, Download, Eye, FileText, X, XCircle } from 'lucide-react';
 import { DataSourceBadge, EmptyState, StatusPill, useToast } from '../../../shared/components/ui';
 import type { MentorApplication } from '../api/mentorApplicationApi';
 import { mentorApplicationApi } from '../api/mentorApplicationApi';
@@ -13,11 +13,21 @@ export function TrainerApplicationsTab({
 }) {
   const queryClient = useQueryClient();
   const { pushToast } = useToast();
+  const [previewTarget, setPreviewTarget] = useState<{
+    fileName: string;
+    objectUrl: string;
+    contentType: string;
+  } | null>(null);
   const [decisionTarget, setDecisionTarget] = useState<MentorApplication | null>(null);
   const [reason, setReason] = useState('');
   const [reasonError, setReasonError] = useState('');
   const [busyId, setBusyId] = useState<number | null>(null);
   const [downloadingId, setDownloadingId] = useState<number | null>(null);
+  const [viewingId, setViewingId] = useState<number | null>(null);
+
+  useEffect(() => () => {
+    if (previewTarget) URL.revokeObjectURL(previewTarget.objectUrl);
+  }, [previewTarget]);
 
   const handleDownloadEvidence = async (fileId: number, fileName: string) => {
     setDownloadingId(fileId);
@@ -39,6 +49,28 @@ export function TrainerApplicationsTab({
       });
     } finally {
       setDownloadingId(null);
+    }
+  };
+
+  const handleViewEvidence = async (fileId: number, fileName: string) => {
+    setViewingId(fileId);
+    try {
+      const blob = await mentorApplicationApi.downloadProofDocument(fileId);
+      setPreviewTarget({
+        fileName,
+        objectUrl: URL.createObjectURL(blob),
+        contentType: blob.type,
+      });
+    } catch (error) {
+      pushToast({
+        title: 'Unable to view certificate',
+        message: axios.isAxiosError(error)
+          ? error.response?.data?.message || 'Please try again.'
+          : error instanceof Error ? error.message : 'Please try again.',
+        tone: 'err',
+      });
+    } finally {
+      setViewingId(null);
     }
   };
 
@@ -151,7 +183,7 @@ export function TrainerApplicationsTab({
                 <th>Certificate Evidence</th>
                 <th>Status</th>
                 <th>Submitted</th>
-                <th>Experience &amp; availability</th>
+                <th>Mentor details</th>
                 <th>Applicant Note</th>
                 <th>Actions</th>
               </tr>
@@ -183,16 +215,26 @@ export function TrainerApplicationsTab({
                           <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem', fontSize: '0.82rem' }}>
                             <FileText size={14} /> {evidence.fileName}
                           </span>
-                          <button
-                            type="button"
-                            className="apid-btn apid-btn-outline apid-btn-sm"
-                            style={{ marginTop: '0.35rem' }}
-                            disabled={downloadingId !== null}
-                            onClick={() => void handleDownloadEvidence(evidence.fileId, evidence.fileName)}
-                          >
-                            <Download size={13} />
-                            {downloadingId === evidence.fileId ? 'Downloading…' : 'Download evidence'}
-                          </button>
+                          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.35rem', marginTop: '0.35rem' }}>
+                            <button
+                              type="button"
+                              className="apid-btn apid-btn-outline apid-btn-sm"
+                              disabled={viewingId !== null}
+                              onClick={() => void handleViewEvidence(evidence.fileId, evidence.fileName)}
+                            >
+                              <Eye size={13} />
+                              {viewingId === evidence.fileId ? 'Opening…' : 'View'}
+                            </button>
+                            <button
+                              type="button"
+                              className="apid-btn apid-btn-outline apid-btn-sm"
+                              disabled={downloadingId !== null}
+                              onClick={() => void handleDownloadEvidence(evidence.fileId, evidence.fileName)}
+                            >
+                              <Download size={13} />
+                              {downloadingId === evidence.fileId ? 'Downloading…' : 'Download evidence'}
+                            </button>
+                          </div>
                         </div>
                       ))}
                     </div>
@@ -207,12 +249,23 @@ export function TrainerApplicationsTab({
                   </td>
                   <td>{new Date(app.submittedAt).toLocaleString()}</td>
                   <td>
-                    <div>{app.expertiseSummary || '—'}</div>
-                    {app.availabilityNotes && (
+                    <div>
+                      Experience: {app.experienceYears == null
+                        ? 'Not provided'
+                        : `${app.experienceYears} year${app.experienceYears === 1 ? '' : 's'}`}
+                    </div>
+                    <div className="boa-muted" style={{ fontSize: '0.78rem', marginTop: '0.25rem' }}>
+                      Mentoring approach: {app.mentoringApproach || app.expertiseSummary || 'Not provided'}
+                    </div>
+                    {app.sessionsPerWeek != null ? (
                       <div className="boa-muted" style={{ fontSize: '0.78rem', marginTop: '0.25rem' }}>
-                        Weekly availability: {app.availabilityNotes}
+                        Sessions per week: {app.sessionsPerWeek}
                       </div>
-                    )}
+                    ) : app.availabilityNotes ? (
+                      <div className="boa-muted" style={{ fontSize: '0.78rem', marginTop: '0.25rem' }}>
+                        Previous availability note: {app.availabilityNotes}
+                      </div>
+                    ) : null}
                     {app.maxConcurrentTrainees !== null && (
                       <div className="boa-muted" style={{ fontSize: '0.78rem' }}>
                         Requested capacity: {app.maxConcurrentTrainees}
@@ -254,6 +307,73 @@ export function TrainerApplicationsTab({
               ))}
             </tbody>
           </table>
+        </div>
+      )}
+
+      {previewTarget && (
+        <div className="apid-modal-backdrop">
+          <div
+            className="apid-card apid-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="mentor-evidence-preview-title"
+            style={{ maxWidth: 900 }}
+          >
+            <div className="boa-card-header">
+              <div>
+                <h3 id="mentor-evidence-preview-title" className="boa-card-title">
+                  Certificate evidence
+                </h3>
+                <p className="boa-card-subtitle">{previewTarget.fileName}</p>
+              </div>
+              <button
+                type="button"
+                className="apid-btn apid-btn-outline apid-btn-sm"
+                aria-label="Close certificate preview"
+                onClick={() => setPreviewTarget(null)}
+              >
+                <X size={15} />
+              </button>
+            </div>
+            {previewTarget.contentType === 'application/pdf' ? (
+              <iframe
+                title={previewTarget.fileName}
+                src={previewTarget.objectUrl}
+                style={{ width: '100%', height: '70vh', border: 0 }}
+              />
+            ) : previewTarget.contentType.startsWith('image/') ? (
+              <img
+                src={previewTarget.objectUrl}
+                alt={previewTarget.fileName}
+                style={{ display: 'block', maxWidth: '100%', maxHeight: '70vh', margin: '0 auto' }}
+              />
+            ) : (
+              <p className="boa-muted">
+                This file type cannot be previewed in the browser. Download the evidence to view it.
+              </p>
+            )}
+            <div className="apid-modal-actions">
+              <button
+                type="button"
+                className="apid-btn apid-btn-outline"
+                onClick={() => {
+                  const link = document.createElement('a');
+                  link.href = previewTarget.objectUrl;
+                  link.download = previewTarget.fileName;
+                  link.click();
+                }}
+              >
+                <Download size={14} /> Download
+              </button>
+              <button
+                type="button"
+                className="apid-btn apid-btn-outline"
+                onClick={() => setPreviewTarget(null)}
+              >
+                Close
+              </button>
+            </div>
+          </div>
         </div>
       )}
 
