@@ -391,6 +391,13 @@ export function AppLayout({ children }: { children: ReactNode }) {
               matchSearch: '?tab=trainers',
             },
             {
+              to: '/mentoring/hr?tab=badge-removal-requests',
+              label: 'Mentor Badge Management',
+              icon: <ShieldCheck size={17} />,
+              requiredAnyPermissions: ['TRAINER_STATUS_MANAGE'],
+              matchSearch: '?tab=badge-removal-requests',
+            },
+            {
               to: '/mentoring/hr?tab=direct-matching',
               label: 'Match Mentor & Trainee',
               icon: <HeartHandshake size={17} />,
