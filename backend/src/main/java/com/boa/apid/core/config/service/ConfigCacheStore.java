@@ -65,7 +65,8 @@ public class ConfigCacheStore {
                 Boolean.parseBoolean(pub.getOrDefault("coaching.allow_saturday_scheduling", "true")),
                 pub.getOrDefault("coaching.reschedule_scope", "SAME_WEEK"),
                 Boolean.parseBoolean(pub.getOrDefault("coaching.allow_joint_pms_group", "true")),
-                parseIntOrDefault(pub.get("coaching.max_joint_group_size"), 4)
+                parseIntOrDefault(pub.get("coaching.max_joint_group_size"), 4),
+                parseIntOrDefault(pub.get("coaching.video_post_buffer_minutes"), 30)
         );
     }
 

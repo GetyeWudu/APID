@@ -10,5 +10,11 @@ public interface SkillCoachingRequestTargetRepository extends JpaRepository<Skil
     List<SkillCoachingRequestTarget> findAllByRequestId(Long requestId);
 
     List<SkillCoachingRequestTarget> findAllByEmployeeId(Long employeeId);
+
+    java.util.Optional<SkillCoachingRequestTarget> findByRequestIdAndEmployeeId(Long requestId, Long employeeId);
+
+    boolean existsByRequestIdAndEmployeeId(Long requestId, Long employeeId);
+
+    long countByRequestId(Long requestId);
 }
 

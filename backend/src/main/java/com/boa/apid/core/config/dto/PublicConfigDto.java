@@ -20,6 +20,7 @@ public class PublicConfigDto {
     private String coachingRescheduleScope;
     private Boolean coachingAllowJointPmsGroup;
     private Integer coachingMaxJointGroupSize;
+    private Integer coachingVideoPostBufferMinutes;
 
     public PublicConfigDto() {
     }
@@ -38,7 +39,8 @@ public class PublicConfigDto {
             Boolean coachingAllowSaturdayScheduling,
             String coachingRescheduleScope,
             Boolean coachingAllowJointPmsGroup,
-            Integer coachingMaxJointGroupSize
+            Integer coachingMaxJointGroupSize,
+            Integer coachingVideoPostBufferMinutes
     ) {
         this.mandatoryCutoffRounded = mandatoryCutoffRounded;
         this.missedSessionAlertThreshold = missedSessionAlertThreshold;
@@ -54,6 +56,7 @@ public class PublicConfigDto {
         this.coachingRescheduleScope = coachingRescheduleScope;
         this.coachingAllowJointPmsGroup = coachingAllowJointPmsGroup;
         this.coachingMaxJointGroupSize = coachingMaxJointGroupSize;
+        this.coachingVideoPostBufferMinutes = coachingVideoPostBufferMinutes;
     }
 
     public Integer getMandatoryCutoffRounded() { return mandatoryCutoffRounded; }
@@ -86,4 +89,6 @@ public class PublicConfigDto {
     public void setCoachingAllowJointPmsGroup(Boolean coachingAllowJointPmsGroup) { this.coachingAllowJointPmsGroup = coachingAllowJointPmsGroup; }
     public Integer getCoachingMaxJointGroupSize() { return coachingMaxJointGroupSize; }
     public void setCoachingMaxJointGroupSize(Integer coachingMaxJointGroupSize) { this.coachingMaxJointGroupSize = coachingMaxJointGroupSize; }
+    public Integer getCoachingVideoPostBufferMinutes() { return coachingVideoPostBufferMinutes; }
+    public void setCoachingVideoPostBufferMinutes(Integer coachingVideoPostBufferMinutes) { this.coachingVideoPostBufferMinutes = coachingVideoPostBufferMinutes; }
 }

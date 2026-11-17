@@ -18,6 +18,7 @@ import { CoachingSessionsTab } from '../CoachingSessionsTab';
 import { CoachingChatHub } from '../chat/CoachingChatHub';
 import { SkillCoachingRequestsList } from '../SkillCoachingRequestsList';
 import { RequestSkillCoachingModal } from '../RequestSkillCoachingModal';
+import { ManageCohortMembersModal } from './ManageCohortMembersModal';
 
 interface SkillCohortHubTabProps {
   currentEmployee: any;
@@ -39,6 +40,7 @@ export const SkillCohortHubTab: React.FC<SkillCohortHubTabProps> = ({
   const [searchParams, setSearchParams] = useSearchParams();
   const subTab = (searchParams.get('sub') as SkillSubTab) || 'cohorts';
   const [isRequestModalOpen, setIsRequestModalOpen] = React.useState(false);
+  const [managingCohortTarget, setManagingCohortTarget] = React.useState<SkillCoachingRequestItem | null>(null);
 
   // Fetch approved skill coaching requests (cohorts)
   const approvedCohortsQuery = useQuery<SkillCoachingRequestItem[]>({
@@ -305,8 +307,27 @@ export const SkillCohortHubTab: React.FC<SkillCohortHubTabProps> = ({
                       {/* Enrolled participants */}
                       {cohort.targets && cohort.targets.length > 0 && (
                         <div>
-                          <div style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--muted)', textTransform: 'uppercase', marginBottom: '0.35rem' }}>
-                            Enrolled Members ({cohort.targets.length}):
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.35rem' }}>
+                            <span style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--muted)', textTransform: 'uppercase' }}>
+                              Enrolled Members ({cohort.targets.length}):
+                            </span>
+                            <button
+                              type="button"
+                              className="apid-btn apid-btn-ghost"
+                              style={{
+                                padding: '0.15rem 0.45rem',
+                                fontSize: '0.72rem',
+                                color: '#0284c7',
+                                fontWeight: 600,
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '0.25rem',
+                              }}
+                              onClick={() => setManagingCohortTarget(cohort)}
+                            >
+                              <UserPlus size={12} />
+                              Manage
+                            </button>
                           </div>
                           <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.35rem' }}>
                             {cohort.targets.map((t) => (
@@ -328,12 +349,12 @@ export const SkillCohortHubTab: React.FC<SkillCohortHubTabProps> = ({
                         </div>
                       )}
 
-                      {/* Quick links to workshop or chat */}
-                      <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.5rem', borderTop: '1px solid var(--border, #f1f5f9)', paddingTop: '0.75rem' }}>
+                      {/* Quick links to workshop, chat, or members */}
+                      <div style={{ display: 'flex', gap: '0.45rem', marginTop: '0.5rem', borderTop: '1px solid var(--border, #f1f5f9)', paddingTop: '0.75rem' }}>
                         <button
                           type="button"
                           className="apid-btn apid-btn-outline"
-                          style={{ flex: 1, padding: '0.35rem 0.6rem', fontSize: '0.78rem' }}
+                          style={{ flex: 1, padding: '0.35rem 0.5rem', fontSize: '0.78rem' }}
                           onClick={() => handleSubTabChange('workshops')}
                         >
                           <Calendar size={13} style={{ marginRight: '0.35rem' }} />
@@ -342,11 +363,21 @@ export const SkillCohortHubTab: React.FC<SkillCohortHubTabProps> = ({
                         <button
                           type="button"
                           className="apid-btn apid-btn-primary"
-                          style={{ flex: 1, padding: '0.35rem 0.6rem', fontSize: '0.78rem' }}
+                          style={{ flex: 1, padding: '0.35rem 0.5rem', fontSize: '0.78rem' }}
                           onClick={() => handleSubTabChange('discussions')}
                         >
                           <Users size={13} style={{ marginRight: '0.35rem' }} />
                           Discussion
+                        </button>
+                        <button
+                          type="button"
+                          className="apid-btn apid-btn-outline"
+                          style={{ padding: '0.35rem 0.65rem', fontSize: '0.78rem', color: '#0284c7', borderColor: 'rgba(2, 132, 199, 0.3)' }}
+                          onClick={() => setManagingCohortTarget(cohort)}
+                          title="Manage cohort members (add or remove)"
+                        >
+                          <UserPlus size={13} style={{ marginRight: '0.35rem' }} />
+                          Members
                         </button>
                       </div>
                     </div>
@@ -549,6 +580,16 @@ export const SkillCohortHubTab: React.FC<SkillCohortHubTabProps> = ({
           currentEmployee={currentEmployee}
           activeQuarterId={activeQuarterId}
           activeQuarterLabel={activeQuarterLabel || 'FY 2026/27 · Q2'}
+        />
+      )}
+
+      {/* Manage Cohort Members Modal */}
+      {managingCohortTarget && (
+        <ManageCohortMembersModal
+          isOpen={!!managingCohortTarget}
+          onClose={() => setManagingCohortTarget(null)}
+          cohort={cohorts.find((c) => c.id === managingCohortTarget.id) || managingCohortTarget}
+          currentEmployee={currentEmployee}
         />
       )}
     </div>

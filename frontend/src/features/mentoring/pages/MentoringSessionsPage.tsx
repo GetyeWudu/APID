@@ -1,5 +1,4 @@
 import { useState, type FormEvent } from 'react';
-import axios from 'axios';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   CalendarDays,
@@ -15,7 +14,7 @@ import {
 } from 'lucide-react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../../../app/AuthContext';
-import { extractApiErrorMessage, type ApiErrorPayload } from '../../../shared/api/apiClient';
+import { extractApiErrorMessage } from '../../../shared/api/apiClient';
 import {
   EmptyState,
   ErrorState,

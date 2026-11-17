@@ -19,6 +19,7 @@ import {
   Award,
   Sliders,
   PlusCircle,
+  AlertCircle,
 } from 'lucide-react';
 import { useAuth } from '../../../app/AuthContext';
 import { coreConfigApi } from '../../admin/config/api/coreConfigApi';
@@ -38,6 +39,7 @@ import { SessionFeedbackModal } from './SessionFeedbackModal';
 import { DailyVideoModal } from './DailyVideoModal';
 import { DeclineInvitationModal } from './DeclineInvitationModal';
 import { TalentProgressModal } from './TalentProgressModal';
+import { ViewMinutesModal } from './ViewMinutesModal';
 import { toEthiopianTime } from '../utils/ethiopianTimeUtils';
 
 interface CoachingSessionsTabProps {
@@ -81,6 +83,7 @@ export const CoachingSessionsTab: React.FC<CoachingSessionsTabProps> = ({
   const [selectedForReschedule, setSelectedForReschedule] = useState<CoachingSessionItem | null>(null);
   const [selectedForFeedback, setSelectedForFeedback] = useState<CoachingSessionItem | null>(null);
   const [selectedForVideo, setSelectedForVideo] = useState<CoachingSessionItem | null>(null);
+  const [selectedForViewMinutes, setSelectedForViewMinutes] = useState<CoachingSessionItem | null>(null);
   const [selectedForDecline, setSelectedForDecline] = useState<CoachingSessionItem | null>(null);
   const [selectedForTalentProgress, setSelectedForTalentProgress] = useState<{
     session: CoachingSessionItem;
@@ -108,6 +111,7 @@ export const CoachingSessionsTab: React.FC<CoachingSessionsTabProps> = ({
     staleTime: 60_000,
   });
   const earlyJoinMinutes = activeConfig?.publicConfig?.coachingEarlyJoinWindowMinutes ?? 15;
+  const postBufferMinutes = activeConfig?.publicConfig?.coachingVideoPostBufferMinutes ?? 30;
 
   // Fetch coaching sessions
   const { data: sessions = [], isLoading, refetch } = useQuery({
@@ -247,12 +251,15 @@ export const CoachingSessionsTab: React.FC<CoachingSessionsTabProps> = ({
       ? new Date(session.scheduledEndTime).getTime()
       : startMs + durationMs;
     const earlyJoinMs = earlyJoinMinutes * 60 * 1000;
+    const postBufferMs = postBufferMinutes * 60 * 1000;
     const callOpensAt = startMs - earlyJoinMs;
-    const callClosesAt = endMs + 30 * 60 * 1000;
+    const callClosesAt = endMs + postBufferMs;
 
     const isTooEarlyForCall = nowMs < callOpensAt;
     const isCallActive = nowMs >= callOpensAt && nowMs <= callClosesAt;
     const isMeetingStarted = nowMs >= startMs;
+    const isMeetingEnded = nowMs > endMs;
+    const isPastUncompleted = isMeetingEnded && session.status !== 'COMPLETED' && session.status !== 'CANCELLED';
 
     // Pathway theme colors
     const themeColor = isPms ? 'var(--brand-gold, #ca8a04)' : '#2563eb';
@@ -308,12 +315,19 @@ export const CoachingSessionsTab: React.FC<CoachingSessionsTabProps> = ({
       },
     };
 
-    const currentBadge = statusBadges[session.status] || {
-      label: session.status,
-      bg: '#f1f5f9',
-      color: '#475569',
-      border: '#cbd5e1',
-    };
+    const currentBadge = isPastUncompleted
+      ? {
+          label: 'Ended (Pending Minutes)',
+          bg: 'rgba(234, 88, 12, 0.12)',
+          color: '#c2410c',
+          border: 'rgba(234, 88, 12, 0.3)',
+        }
+      : statusBadges[session.status] || {
+          label: session.status,
+          bg: '#f1f5f9',
+          color: '#475569',
+          border: '#cbd5e1',
+        };
 
     return (
       <div
@@ -988,8 +1002,8 @@ export const CoachingSessionsTab: React.FC<CoachingSessionsTabProps> = ({
 
               {/* Right Side: Primary and Utility Actions */}
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
-                {/* Reschedule Button */}
-                {(session.status === 'CONFIRMED' || session.status === 'PROPOSED') && (
+                {/* Reschedule Button: Only permitted prior to meeting start time */}
+                {(session.status === 'CONFIRMED' || session.status === 'PROPOSED') && !isMeetingStarted && (
                   <button
                     type="button"
                     className="apid-btn apid-btn-outline"
@@ -1040,12 +1054,17 @@ export const CoachingSessionsTab: React.FC<CoachingSessionsTabProps> = ({
                         display: 'inline-flex',
                         alignItems: 'center',
                         gap: '0.35rem',
-                        borderColor: 'var(--brand-gold, #ca8a04)',
-                        color: 'var(--brand-gold, #ca8a04)',
+                        borderColor: isPastUncompleted ? '#ea580c' : 'var(--brand-gold, #ca8a04)',
+                        color: isPastUncompleted ? '#c2410c' : 'var(--brand-gold, #ca8a04)',
+                        background: isPastUncompleted ? 'rgba(234, 88, 12, 0.08)' : 'transparent',
                       }}
                     >
                       <CheckCircle2 size={15} />
-                      {session.status === 'COMPLETED' ? 'Edit Minutes' : 'Log Minutes & Attendance'}
+                      {session.status === 'COMPLETED'
+                        ? 'Edit Minutes'
+                        : isPastUncompleted
+                        ? 'Log Minutes (Ended)'
+                        : 'Log Minutes & Attendance'}
                     </button>
                   )
                 )}
@@ -1380,10 +1399,31 @@ export const CoachingSessionsTab: React.FC<CoachingSessionsTabProps> = ({
     const progressPercent = Math.round((completedCount / totalCount) * 100);
     const isAllCompleted = completedCount === totalCount;
 
-    // Next upcoming/active session in sequence
+    const nowMs = Date.now();
+
+    // 1. Next upcoming or currently active session in sequence
+    const upcomingOrActive = sorted.find((s) => {
+      const endMs = s.scheduledEndTime
+        ? new Date(s.scheduledEndTime).getTime()
+        : new Date(s.scheduledStartTime).getTime() + (s.durationMinutes || 45) * 60 * 1000;
+      return endMs >= nowMs && s.status !== 'COMPLETED' && s.status !== 'CANCELLED';
+    });
+
+    // 2. Fallback to any past non-completed session or the final occurrence
     const nextSession =
+      upcomingOrActive ||
       sorted.find((s) => s.status !== 'COMPLETED' && s.status !== 'CANCELLED') ||
       sorted[sorted.length - 1];
+
+    const isCoach = currentEmployeeId ? nextSession.coachEmployeeId === currentEmployeeId : true;
+
+    // Identify past sessions that ended without official discussion minutes logged
+    const pastPendingSessions = sorted.filter((s) => {
+      const endMs = s.scheduledEndTime
+        ? new Date(s.scheduledEndTime).getTime()
+        : new Date(s.scheduledStartTime).getTime() + (s.durationMinutes || 45) * 60 * 1000;
+      return endMs < nowMs && s.status !== 'COMPLETED' && s.status !== 'CANCELLED';
+    });
 
     const cleanTitle = sorted[0].title.replace(/\s*—\s*Session\s*\d+$/i, '');
     const isPms = sorted[0].pathway === 'MANDATORY_PMS';
@@ -1559,6 +1599,68 @@ export const CoachingSessionsTab: React.FC<CoachingSessionsTabProps> = ({
           </div>
         ) : (
           <div style={{ padding: '1.25rem 1.75rem', background: '#ffffff' }}>
+            {/* Attention banner if past sessions have ended without minutes */}
+            {pastPendingSessions.length > 0 && pastPendingSessions.some((p) => p.id !== nextSession.id) && (
+              <div
+                style={{
+                  marginBottom: '1rem',
+                  padding: '0.85rem 1.1rem',
+                  borderRadius: '8px',
+                  background: 'rgba(234, 88, 12, 0.08)',
+                  border: '1px solid rgba(234, 88, 12, 0.25)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  flexWrap: 'wrap',
+                  gap: '0.75rem',
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'flex-start', gap: '0.55rem' }}>
+                  <AlertCircle size={18} style={{ color: '#ea580c', marginTop: '2px', flexShrink: 0 }} />
+                  <div>
+                    <div style={{ fontSize: '0.86rem', fontWeight: 700, color: '#9a3412' }}>
+                      {pastPendingSessions.filter((p) => p.id !== nextSession.id).length === 1
+                        ? `Session #${pastPendingSessions.find((p) => p.id !== nextSession.id)!.sequenceNumber} has ended and requires discussion minutes.`
+                        : `${pastPendingSessions.filter((p) => p.id !== nextSession.id).length} past sessions have ended and require discussion minutes.`}
+                    </div>
+                    <div style={{ fontSize: '0.78rem', color: '#7c2d12', marginTop: '0.15rem' }}>
+                      {pastPendingSessions
+                        .filter((p) => p.id !== nextSession.id)
+                        .map((p) => {
+                          const { month, day } = parseDateParts(p.scheduledStartTime);
+                          return `Session #${p.sequenceNumber} (${month} ${day})`;
+                        })
+                        .join(', ')}{' '}
+                      — Log attendance and official notes to mark complete.
+                    </div>
+                  </div>
+                </div>
+
+                {isCoach && (
+                  <button
+                    type="button"
+                    className="apid-btn apid-btn-sm"
+                    onClick={() => setSelectedForComplete(pastPendingSessions.find((p) => p.id !== nextSession.id)!)}
+                    style={{
+                      background: '#ea580c',
+                      color: '#ffffff',
+                      border: 'none',
+                      fontWeight: 700,
+                      fontSize: '0.8rem',
+                      padding: '0.4rem 0.9rem',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '0.35rem',
+                      cursor: 'pointer',
+                    }}
+                  >
+                    <CheckCircle2 size={14} />
+                    Log Minutes for Session #{pastPendingSessions.find((p) => p.id !== nextSession.id)!.sequenceNumber}
+                  </button>
+                )}
+              </div>
+            )}
+
             <div
               style={{
                 fontSize: '0.74rem',
@@ -1572,7 +1674,9 @@ export const CoachingSessionsTab: React.FC<CoachingSessionsTabProps> = ({
               }}
             >
               <Sparkles size={14} />
-              NEXT FOCUS SESSION — OCCURRENCE #{nextSession.sequenceNumber} OF {totalCount}
+              {upcomingOrActive
+                ? `NEXT FOCUS SESSION — OCCURRENCE #${nextSession.sequenceNumber} OF ${totalCount}`
+                : `LATEST FOCUS SESSION — OCCURRENCE #${nextSession.sequenceNumber} OF ${totalCount}`}
             </div>
 
             {/* Spotlight Card: Individual Interactive Meeting Card */}
@@ -1665,6 +1769,10 @@ export const CoachingSessionsTab: React.FC<CoachingSessionsTabProps> = ({
                   {sorted.map((occ) => {
                     const isCoach = currentEmployeeId ? occ.coachEmployeeId === currentEmployeeId : true;
                     const occParts = parseDateParts(occ.scheduledStartTime);
+                    const occEndMs = occ.scheduledEndTime
+                      ? new Date(occ.scheduledEndTime).getTime()
+                      : new Date(occ.scheduledStartTime).getTime() + (occ.durationMinutes || 45) * 60 * 1000;
+                    const isPast = occEndMs < nowMs;
                     const isNext = occ.id === nextSession.id;
                     const isCompleted = occ.status === 'COMPLETED';
 
@@ -1755,6 +1863,20 @@ export const CoachingSessionsTab: React.FC<CoachingSessionsTabProps> = ({
                                 Current Focus
                               </span>
                             )}
+                            {isPast && !isCompleted && !isNext && (
+                              <span
+                                style={{
+                                  fontSize: '0.68rem',
+                                  fontWeight: 700,
+                                  padding: '0.1rem 0.35rem',
+                                  borderRadius: '4px',
+                                  background: 'rgba(234, 88, 12, 0.1)',
+                                  color: '#ea580c',
+                                }}
+                              >
+                                Past Occurrence
+                              </span>
+                            )}
                           </div>
                         </td>
 
@@ -1766,16 +1888,35 @@ export const CoachingSessionsTab: React.FC<CoachingSessionsTabProps> = ({
                               padding: '0.15rem 0.45rem',
                               borderRadius: '4px',
                               background:
-                                occ.status === 'COMPLETED' ? '#dcfce7' :
-                                occ.status === 'CONFIRMED' ? 'rgba(22, 163, 74, 0.1)' :
-                                occ.status === 'RESCHEDULE_PENDING' ? 'rgba(234, 88, 12, 0.1)' : '#f1f5f9',
+                                occ.status === 'COMPLETED'
+                                  ? '#dcfce7'
+                                  : isPast
+                                  ? 'rgba(234, 88, 12, 0.12)'
+                                  : occ.status === 'CONFIRMED'
+                                  ? 'rgba(22, 163, 74, 0.1)'
+                                  : occ.status === 'RESCHEDULE_PENDING'
+                                  ? 'rgba(234, 88, 12, 0.1)'
+                                  : '#f1f5f9',
                               color:
-                                occ.status === 'COMPLETED' ? '#15803d' :
-                                occ.status === 'CONFIRMED' ? '#16a34a' :
-                                occ.status === 'RESCHEDULE_PENDING' ? '#ea580c' : '#64748b',
+                                occ.status === 'COMPLETED'
+                                  ? '#15803d'
+                                  : isPast
+                                  ? '#c2410c'
+                                  : occ.status === 'CONFIRMED'
+                                  ? '#16a34a'
+                                  : occ.status === 'RESCHEDULE_PENDING'
+                                  ? '#ea580c'
+                                  : '#64748b',
+                              border: isPast && occ.status !== 'COMPLETED' ? '1px solid rgba(234, 88, 12, 0.25)' : undefined,
                             }}
                           >
-                            {occ.status === 'RESCHEDULE_PENDING' ? 'Reschedule Pending' : occ.status}
+                            {occ.status === 'COMPLETED'
+                              ? 'COMPLETED'
+                              : isPast
+                              ? 'ENDED (AWAITING MINUTES)'
+                              : occ.status === 'RESCHEDULE_PENDING'
+                              ? 'Reschedule Pending'
+                              : occ.status}
                           </span>
                         </td>
 
@@ -1785,15 +1926,25 @@ export const CoachingSessionsTab: React.FC<CoachingSessionsTabProps> = ({
                               <button
                                 type="button"
                                 className="apid-btn apid-btn-outline"
-                                onClick={() => toggleExpand(occ.id)}
-                                style={{ padding: '0.2rem 0.5rem', fontSize: '0.74rem' }}
-                                title="View Discussion Minutes"
+                                onClick={() => setSelectedForViewMinutes(occ)}
+                                style={{
+                                  padding: '0.2rem 0.55rem',
+                                  fontSize: '0.74rem',
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: '0.25rem',
+                                  borderColor: '#0284c7',
+                                  color: '#0369a1',
+                                  background: 'rgba(2, 132, 199, 0.05)',
+                                }}
+                                title="View Discussion Minutes & Attendance"
                               >
                                 <FileText size={12} /> Minutes
                               </button>
                             )}
 
-                            {(occ.status === 'CONFIRMED' || occ.status === 'PROPOSED') && (
+                            {/* Only allow reschedule before the session start time */}
+                            {!isPast && (occ.status === 'CONFIRMED' || occ.status === 'PROPOSED') && (
                               <button
                                 type="button"
                                 className="apid-btn apid-btn-outline"
@@ -1802,6 +1953,27 @@ export const CoachingSessionsTab: React.FC<CoachingSessionsTabProps> = ({
                                 title={isCoach ? 'Edit or Reschedule this session' : 'Propose a new time for this session'}
                               >
                                 {isCoach ? 'Edit / Reschedule' : 'Propose Reschedule'}
+                              </button>
+                            )}
+
+                            {/* If session ended without completion, allow coach to log past minutes */}
+                            {isPast && !isCompleted && isCoach && (
+                              <button
+                                type="button"
+                                className="apid-btn apid-btn-outline"
+                                onClick={() => setSelectedForComplete(occ)}
+                                style={{
+                                  padding: '0.2rem 0.55rem',
+                                  fontSize: '0.74rem',
+                                  borderColor: 'var(--brand-gold, #ca8a04)',
+                                  color: 'var(--brand-gold, #ca8a04)',
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: '0.25rem',
+                                }}
+                                title="Log discussion minutes & attendance for this ended session"
+                              >
+                                <CheckCircle2 size={12} /> Log Minutes
                               </button>
                             )}
                           </div>
@@ -2656,6 +2828,21 @@ export const CoachingSessionsTab: React.FC<CoachingSessionsTabProps> = ({
             queryClient.invalidateQueries({ queryKey: ['coaching-sessions'] });
             refetch();
           }
+        }}
+      />
+
+      {/* View Discussion Minutes & Attendance Modal */}
+      <ViewMinutesModal
+        session={selectedForViewMinutes}
+        isOpen={selectedForViewMinutes !== null}
+        onClose={() => setSelectedForViewMinutes(null)}
+        isCoach={
+          currentEmployeeId
+            ? selectedForViewMinutes?.coachEmployeeId === currentEmployeeId
+            : true
+        }
+        onEditMinutes={(sess) => {
+          setSelectedForComplete(sess);
         }}
       />
     </div>
