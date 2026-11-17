@@ -59,11 +59,19 @@ export function MentoringRequestsPanel({
     (item) =>
       !item.incoming &&
       item.status !== 'ACCEPTED' &&
+      item.status !== 'DECLINED' &&
       (item.initiatedByMentor ? isRelevantAsMentor(item) : isRelevantAsTrainee(item))
   );
   const active = requests.filter(
     (item) =>
       item.status === 'ACCEPTED' &&
+      (view === 'all' ||
+        (view === 'mentor' && item.mentorUserId === currentUserId) ||
+        (view === 'trainee' && item.traineeUserId === currentUserId))
+  );
+  const declined = requests.filter(
+    (item) =>
+      item.status === 'DECLINED' &&
       (view === 'all' ||
         (view === 'mentor' && item.mentorUserId === currentUserId) ||
         (view === 'trainee' && item.traineeUserId === currentUserId))
@@ -103,7 +111,7 @@ export function MentoringRequestsPanel({
             disabled={responseMutation.isPending}
             onClick={() => responseMutation.mutate({ id: item.id, decision: 'ACCEPTED' })}
           >
-            Approve
+            Accept
           </button>
           <button
             type="button"
@@ -123,8 +131,10 @@ export function MentoringRequestsPanel({
       <section className="apid-card">
         <div className="boa-card-header">
           <div>
-            <h3 className="boa-card-title">Incoming Requests</h3>
-            <p className="boa-card-subtitle">Approve or decline each invitation or mentorship request.</p>
+            <h3 className="boa-card-title">{view === 'mentor' ? 'Trainee Requests' : 'Incoming Requests'}</h3>
+            <p className="boa-card-subtitle">
+              Accept or decline each invitation or mentorship request.
+            </p>
           </div>
         </div>
         {incoming.length === 0 ? (
@@ -172,6 +182,22 @@ export function MentoringRequestsPanel({
           )}
         </section>
       )}
+
+      <section className="apid-card">
+        <div className="boa-card-header">
+          <div>
+            <h3 className="boa-card-title">Declined Requests</h3>
+            <p className="boa-card-subtitle">Requests you sent or received that were declined.</p>
+          </div>
+        </div>
+        {declined.length === 0 ? (
+          <EmptyState title="No Declined Requests" description="Declined mentoring requests will appear here." />
+        ) : (
+          <div className="boa-grid-2" style={{ marginBottom: 0 }}>
+            {declined.map((item) => requestCard(item, false))}
+          </div>
+        )}
+      </section>
     </div>
   );
 }

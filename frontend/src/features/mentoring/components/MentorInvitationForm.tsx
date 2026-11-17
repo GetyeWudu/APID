@@ -1,13 +1,28 @@
 import { useState, type FormEvent } from 'react';
 import axios from 'axios';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import type { ApiErrorPayload } from '../../../shared/api/apiClient';
 import { EmptyState, ErrorState, LoadingSkeleton, useToast } from '../../../shared/components/ui';
 import {
   mentoringPairingApi,
   type MentoringRequestType,
 } from '../api/mentoringPairingApi';
 import { mentoringTrainerApi } from '../api/mentoringTrainerApi';
+
+function getInvitationErrorMessage(error: unknown) {
+  if (axios.isAxiosError<{ error?: { code?: string; message?: string } }>(error)) {
+    const apiError = error.response?.data?.error;
+    if (apiError?.code === 'MENTOR_CAPACITY_REACHED') {
+      return "There isn't enough mentoring capacity for everyone selected. Select fewer trainees or adjust your available capacity.";
+    }
+    if (apiError?.message) {
+      return apiError.message;
+    }
+    return error.response
+      ? 'We could not send the invitation. Please review the selected trainees and try again.'
+      : 'Unable to connect. Check your connection and try sending the invitation again.';
+  }
+  return error instanceof Error ? error.message : 'Unable to send the mentoring invitation.';
+}
 
 export function MentorInvitationForm({ currentUserId }: { currentUserId: number }) {
   const queryClient = useQueryClient();
@@ -48,12 +63,11 @@ export function MentorInvitationForm({ currentUserId }: { currentUserId: number 
       });
     },
     onError: (error: unknown) => {
-      const errorMessage = axios.isAxiosError<ApiErrorPayload>(error)
-        ? error.response?.data?.message ?? error.message
-        : error instanceof Error
-          ? error.message
-          : 'Unable to send the mentoring invitation.';
-      pushToast({ title: 'Invitation failed', message: errorMessage, tone: 'err' });
+      pushToast({
+        title: 'Invitation failed',
+        message: getInvitationErrorMessage(error),
+        tone: 'err',
+      });
     },
   });
 

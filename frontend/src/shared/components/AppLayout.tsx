@@ -305,11 +305,11 @@ export function AppLayout({ children }: { children: ReactNode }) {
           label: 'As a Trainee',
           items: [
             {
-              to: '/mentoring?view=trainee-sessions',
-              label: 'My Sessions',
-              icon: <MessageSquare size={17} />,
+              to: '/mentoring?view=trainee',
+              label: 'My Mentors',
+              icon: <HeartHandshake size={17} />,
               requiredAnyPermissions: EMPLOYEE_WORKSPACE_PERMISSIONS,
-              matchSearch: '?view=trainee-sessions',
+              matchSearch: '?view=trainee',
             },
             {
               to: '/mentoring?view=directory',
@@ -317,6 +317,13 @@ export function AppLayout({ children }: { children: ReactNode }) {
               icon: <BookOpen size={17} />,
               requiredAnyPermissions: EMPLOYEE_WORKSPACE_PERMISSIONS,
               matchSearch: '?view=directory',
+            },
+            {
+              to: '/mentoring?view=trainee-sessions',
+              label: 'My Sessions',
+              icon: <MessageSquare size={17} />,
+              requiredAnyPermissions: EMPLOYEE_WORKSPACE_PERMISSIONS,
+              matchSearch: '?view=trainee-sessions',
             },
             {
               to: '/mentoring?view=apply',
@@ -339,6 +346,13 @@ export function AppLayout({ children }: { children: ReactNode }) {
                     icon: <Users size={17} />,
                     requiredAnyPermissions: EMPLOYEE_WORKSPACE_PERMISSIONS,
                     matchSearch: '?view=trainer',
+                  },
+                  {
+                    to: '/mentoring?view=find-trainee',
+                    label: 'Find Trainee',
+                    icon: <UserPlus size={17} />,
+                    requiredAnyPermissions: EMPLOYEE_WORKSPACE_PERMISSIONS,
+                    matchSearch: '?view=find-trainee',
                   },
                   {
                     to: '/mentoring?view=trainer-profile',
