@@ -122,6 +122,17 @@ describe('Mentoring collaboration pages', () => {
     vi.spyOn(mentoringPairingApi, 'markConversationRead').mockResolvedValue();
     vi.spyOn(mentoringPairingApi, 'getMyMentoringConversations').mockResolvedValue(mockConvs as any);
     vi.spyOn(mentoringPairingApi, 'listMentoringConversations').mockResolvedValue(mockConvs as any);
+    vi.spyOn(mentoringPairingApi, 'getRelationshipDetail').mockResolvedValue({
+      id: 42,
+      mentorName: 'Mentor One',
+      status: 'ACTIVE',
+      trainees: [{ userId: 8, name: 'Trainee One', status: 'ACTIVE' }],
+      currentUserRole: 'MENTOR',
+    } as any);
+    vi.spyOn(mentoringPairingApi, 'getRelationshipConversation').mockResolvedValue({
+      id: 99,
+      relationshipId: 42,
+    } as any);
 
     const getMessagesSpy = vi.spyOn(mentoringPairingApi, 'getConversationMessages').mockResolvedValue([
       {
@@ -142,10 +153,10 @@ describe('Mentoring collaboration pages', () => {
 
     renderPage('/mentoring/chat?relationshipId=42', <MentoringChatPage />);
 
-    expect(await screen.findByText('Mentoring Chat')).toBeInTheDocument();
+    expect(await screen.findByText('Pair Chat')).toBeInTheDocument();
     expect(await screen.findByText('Ready to start?')).toBeInTheDocument();
     await waitFor(() => {
-      expect(getMessagesSpy).toHaveBeenCalledWith(99, undefined, undefined, 60);
+      expect(getMessagesSpy).toHaveBeenCalledWith(99);
     });
   });
 

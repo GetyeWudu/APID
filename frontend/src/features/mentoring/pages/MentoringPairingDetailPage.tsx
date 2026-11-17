@@ -232,16 +232,6 @@ export function MentoringPairingDetailPage() {
                   <Video size={14} /> Join Daily.co Video
                 </button>
             )}
-
-            {activeTab === 'progress' && (
-              <section className="apid-card boa-stack">
-                <div>
-                  <h2 className="boa-card-title">Progress and milestones</h2>
-                  <p className="boa-card-subtitle">Record and review learning milestones, observations, and next steps.</p>
-                </div>
-                <MentoringProgressPanel relationshipId={relationshipId} canAdd={detail.status === 'ACTIVE'} />
-              </section>
-            )}
           </div>
           <MentoringSessionDetails session={session} />
           <MentoringSessionReport
@@ -531,6 +521,23 @@ export function MentoringPairingDetailPage() {
               {renderSessionCards(pairingSessions)}
             </section>
           )}
+        </div>
+      )}
+
+      {activeTab === 'progress' && (
+        <div className="boa-stack">
+          <div style={{ display: 'flex', justifyContent: 'space-between', gap: '0.5rem', flexWrap: 'wrap' }}>
+            <Link to={`/mentoring/pairing/${relationshipId}`} className="apid-btn apid-btn-outline apid-btn-sm">
+              <ArrowLeft size={15} /> Back to overview
+            </Link>
+          </div>
+          <section className="apid-card boa-stack">
+            <div>
+              <h2 className="boa-card-title">Progress and milestones</h2>
+              <p className="boa-card-subtitle">Record and review learning milestones, observations, and next steps.</p>
+            </div>
+            <MentoringProgressPanel relationshipId={relationshipId} canAdd={detail.status === 'ACTIVE'} />
+          </section>
         </div>
       )}
 

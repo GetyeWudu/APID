@@ -85,11 +85,6 @@ export function MentoringSessionsPage({ view }: { view: SessionView }) {
   const [selectedRelationshipId, setSelectedRelationshipId] = useState(
     searchParams.get('relationshipId') ?? ''
   );
-  const selectedRelationshipNumber = Number(selectedRelationshipId);
-  const pairingOverviewPath =
-    Number.isSafeInteger(selectedRelationshipNumber) && selectedRelationshipNumber > 0
-      ? `/mentoring/pairing/${selectedRelationshipNumber}`
-      : null;
   const [isCreateFormOpen, setCreateFormOpen] = useState(Boolean(searchParams.get('relationshipId')));
 
   // Create Form State

@@ -531,7 +531,7 @@ describe('Mentor directory self-exclusion', () => {
       />
     );
 
-    fireEvent.click(screen.getByRole('button', { name: 'Approve' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Accept' }));
 
     await waitFor(() =>
       expect(request).toHaveBeenCalledWith('/mentoring/pairing/requests/20/decision', {

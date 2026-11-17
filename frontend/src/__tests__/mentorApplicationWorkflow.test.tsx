@@ -44,6 +44,7 @@ function renderWithProviders(children: ReactNode) {
 describe('mentor application workflow', () => {
   beforeEach(() => {
     vi.restoreAllMocks();
+    vi.spyOn(mentoringTrainerApi, 'getMyBadgeRemovalRequest').mockResolvedValue(null);
     vi.spyOn(AuthContextModule, 'useAuth').mockReturnValue({
       user: {
         id: 7,
