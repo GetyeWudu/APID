@@ -36,9 +36,30 @@ public class MentoringSession {
     @Column(name = "meeting_url", length = 1000)
     private String meetingUrl;
 
+    @Column(length = 255)
+    private String location;
+
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 20)
     private MentoringSessionStatus status = MentoringSessionStatus.SCHEDULED;
+
+    @Column(name = "decline_reason", columnDefinition = "TEXT")
+    private String declineReason;
+
+    @Column(name = "reschedule_reason", columnDefinition = "TEXT")
+    private String rescheduleReason;
+
+    @Column(name = "proposed_start")
+    private Instant proposedStart;
+
+    @Column(name = "proposed_end")
+    private Instant proposedEnd;
+
+    @Column(name = "responded_at")
+    private Instant respondedAt;
+
+    @Column(name = "cancellation_reason", columnDefinition = "TEXT")
+    private String cancellationReason;
 
     @Column(length = 4000)
     private String notes;
@@ -82,8 +103,24 @@ public class MentoringSession {
     public void setDeliveryMode(MentoringDeliveryMode deliveryMode) { this.deliveryMode = deliveryMode; }
     public String getMeetingUrl() { return meetingUrl; }
     public void setMeetingUrl(String meetingUrl) { this.meetingUrl = meetingUrl; }
+    public String getLocation() { return location; }
+    public void setLocation(String location) { this.location = location; }
     public MentoringSessionStatus getStatus() { return status; }
+    public void setStatus(MentoringSessionStatus status) { this.status = status; }
+    public String getDeclineReason() { return declineReason; }
+    public void setDeclineReason(String declineReason) { this.declineReason = declineReason; }
+    public String getRescheduleReason() { return rescheduleReason; }
+    public void setRescheduleReason(String rescheduleReason) { this.rescheduleReason = rescheduleReason; }
+    public Instant getProposedStart() { return proposedStart; }
+    public void setProposedStart(Instant proposedStart) { this.proposedStart = proposedStart; }
+    public Instant getProposedEnd() { return proposedEnd; }
+    public void setProposedEnd(Instant proposedEnd) { this.proposedEnd = proposedEnd; }
+    public Instant getRespondedAt() { return respondedAt; }
+    public void setRespondedAt(Instant respondedAt) { this.respondedAt = respondedAt; }
+    public String getCancellationReason() { return cancellationReason; }
+    public void setCancellationReason(String cancellationReason) { this.cancellationReason = cancellationReason; }
     public String getNotes() { return notes; }
+    public void setNotes(String notes) { this.notes = notes; }
     public User getCreatedByUser() { return createdByUser; }
     public void setCreatedByUser(User createdByUser) { this.createdByUser = createdByUser; }
     public Instant getCreatedAt() { return createdAt; }

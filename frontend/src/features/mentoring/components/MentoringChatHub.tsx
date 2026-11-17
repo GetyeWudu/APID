@@ -47,7 +47,7 @@ export const MentoringChatHub: React.FC<MentoringChatHubProps> = ({
   // 1. Fetch conversations list
   const conversationsQuery = useQuery({
     queryKey: ['mentoring', 'conversations'],
-    queryFn: mentoringPairingApi.getMyMentoringConversations,
+    queryFn: () => mentoringPairingApi.getMyMentoringConversations(),
     refetchInterval: 6000,
   });
 

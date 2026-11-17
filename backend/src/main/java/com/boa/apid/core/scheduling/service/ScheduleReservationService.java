@@ -85,6 +85,28 @@ public class ScheduleReservationService {
         return AvailabilityCheckResponse.conflict(descriptors);
     }
 
+    private String formatConflictMessage(String prefix, ConflictDescriptor conflict) {
+        java.time.ZonedDateTime startZoned = SchedulingTimezones.toLocalZoned(conflict.startAt());
+        java.time.ZonedDateTime endZoned = SchedulingTimezones.toLocalZoned(conflict.endAt());
+        String dateStr = startZoned.toLocalDate().toString();
+        String timeStr = String.format("%02d:%02d - %02d:%02d EAT",
+                startZoned.getHour(), startZoned.getMinute(),
+                endZoned.getHour(), endZoned.getMinute()
+        );
+        String sessionTitle = conflict.sessionTitle() != null && !conflict.sessionTitle().isBlank()
+                ? String.format(" ('%s')", conflict.sessionTitle().trim())
+                : "";
+        return String.format("%s: %s is already booked for [%s%s] as %s on %s at %s.",
+                prefix,
+                conflict.employeeName(),
+                conflict.conflictingModule(),
+                sessionTitle,
+                conflict.conflictingRole(),
+                dateStr,
+                timeStr
+        );
+    }
+
     /**
      * Authoritative reservation: validates availability and creates immutable reservations.
      * Protected by PostgreSQL btree_gist exclusion constraint against race conditions.
@@ -107,14 +129,7 @@ public class ScheduleReservationService {
 
         if (!check.available()) {
             ConflictDescriptor first = check.conflicts().get(0);
-            String msg = String.format("Scheduling conflict: %s is already booked for [%s] as %s (%s - %s)",
-                    first.employeeName(),
-                    first.conflictingModule(),
-                    first.conflictingRole(),
-                    SchedulingTimezones.toLocalZoned(first.startAt()).toLocalTime(),
-                    SchedulingTimezones.toLocalZoned(first.endAt()).toLocalTime()
-            );
-            throw new BusinessException("SCHEDULE_CONFLICT", msg, HttpStatus.CONFLICT);
+            throw new BusinessException("SCHEDULE_CONFLICT", formatConflictMessage("Scheduling conflict", first), HttpStatus.CONFLICT);
         }
 
         // 2. Persist Event
@@ -171,12 +186,7 @@ public class ScheduleReservationService {
 
         if (!check.available()) {
             ConflictDescriptor first = check.conflicts().get(0);
-            String msg = String.format("Reschedule conflict: %s is already booked (%s - %s)",
-                    first.employeeName(),
-                    SchedulingTimezones.toLocalZoned(first.startAt()).toLocalTime(),
-                    SchedulingTimezones.toLocalZoned(first.endAt()).toLocalTime()
-            );
-            throw new BusinessException("SCHEDULE_CONFLICT", msg, HttpStatus.CONFLICT);
+            throw new BusinessException("SCHEDULE_CONFLICT", formatConflictMessage("Reschedule conflict", first), HttpStatus.CONFLICT);
         }
 
         event.setStartAt(newStart);

@@ -2,6 +2,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import * as AuthContextModule from '../app/AuthContext';
 import { mentorApplicationApi } from '../features/mentoring/api/mentorApplicationApi';
 import { mentoringTrainerApi } from '../features/mentoring/api/mentoringTrainerApi';
 import { ApplyForMentorForm } from '../features/mentoring/components/ApplyForMentorForm';
@@ -43,6 +44,23 @@ function renderWithProviders(children: ReactNode) {
 describe('mentor application workflow', () => {
   beforeEach(() => {
     vi.restoreAllMocks();
+    vi.spyOn(AuthContextModule, 'useAuth').mockReturnValue({
+      user: {
+        id: 7,
+        username: 'mentor',
+        mustChangePassword: false,
+        roles: ['Mentor'],
+        permissions: ['EMPLOYEE_PORTAL_ACCESS'],
+      },
+      loading: false,
+      isAuthenticated: true,
+      login: vi.fn(),
+      logout: vi.fn().mockResolvedValue(undefined),
+      changePassword: vi.fn(),
+      refreshProfile: vi.fn().mockResolvedValue(undefined),
+      hasPermission: () => false,
+      hasAnyPermission: () => false,
+    });
   });
 
   it('shows the existing initial application instead of allowing a second one', async () => {

@@ -14,9 +14,17 @@ public record MentoringSessionDto(
         Instant scheduledEnd,
         MentoringDeliveryMode deliveryMode,
         String meetingUrl,
+        String location,
         MentoringSessionStatus status,
         Long createdByUserId,
         String createdByName,
+        String declineReason,
+        String rescheduleReason,
+        Instant proposedStart,
+        Instant proposedEnd,
+        Instant respondedAt,
+        String cancellationReason,
+        String notes,
         Instant createdAt
 ) {
 }

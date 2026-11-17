@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import axios from 'axios';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { ArrowLeft, CalendarDays, MessageCircle, Video } from 'lucide-react';
@@ -11,6 +12,7 @@ import {
   StatusPill,
 } from '../../../shared/components/ui';
 import { mentoringPairingApi, type MentoringSession } from '../api/mentoringPairingApi';
+import { MentoringDailyVideoModal } from '../components/MentoringDailyVideoModal';
 import {
   MentoringFeedbackForm,
   MentoringProgressPanel,
@@ -49,6 +51,7 @@ export function MentoringPairingDetailPage() {
   const activeTab: DetailTab =
     requestedTab === 'sessions' || requestedTab === 'progress' ? requestedTab : 'overview';
   const queryClient = useQueryClient();
+  const [selectedForVideo, setSelectedForVideo] = useState<MentoringSession | null>(null);
   const setActiveTab = (tab: DetailTab) => {
     const nextParams = new URLSearchParams(searchParams);
     if (tab === 'overview') {
@@ -135,15 +138,27 @@ export function MentoringPairingDetailPage() {
           </div>
           <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', marginTop: '0.7rem', flexWrap: 'wrap' }}>
             <StatusPill label={session.deliveryMode.replace('_', ' ')} tone="neutral" />
-            {session.meetingUrl && (
-              <a
-                href={session.meetingUrl}
-                target="_blank"
-                rel="noreferrer"
-                className="apid-btn apid-btn-outline apid-btn-sm"
-              >
-                <Video size={15} /> Join meeting
-              </a>
+            {(session.deliveryMode === 'ONLINE' || session.deliveryMode === 'HYBRID') &&
+              session.status !== 'CANCELLED' &&
+              session.status !== 'DECLINED' && (
+                <button
+                  type="button"
+                  onClick={() => setSelectedForVideo(session)}
+                  className="apid-btn apid-btn-sm"
+                  style={{
+                    background: 'linear-gradient(135deg, #0284c7, #0369a1)',
+                    color: '#ffffff',
+                    border: 'none',
+                    fontWeight: 600,
+                    boxShadow: '0 2px 4px rgba(2, 132, 199, 0.25)',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '0.35rem',
+                    cursor: 'pointer',
+                  }}
+                >
+                  <Video size={14} /> Join Daily.co Video
+                </button>
             )}
 
             {activeTab === 'progress' && (
@@ -380,6 +395,17 @@ export function MentoringPairingDetailPage() {
             </section>
           )}
         </div>
+      )}
+
+      {selectedForVideo && (
+        <MentoringDailyVideoModal
+          session={selectedForVideo}
+          isOpen={Boolean(selectedForVideo)}
+          onClose={() => setSelectedForVideo(null)}
+          relationshipId={relationshipId}
+          mentorName={detail.mentorName}
+          traineeName={detail.trainees[0]?.name}
+        />
       )}
     </div>
   );

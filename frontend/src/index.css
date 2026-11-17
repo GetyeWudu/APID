@@ -381,6 +381,12 @@ textarea:focus-visible {
   margin-bottom: 1.25rem;
 }
 
+.boa-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
 .boa-stat-card {
   background: var(--surface);
   border: 1px solid var(--border);
@@ -989,6 +995,18 @@ textarea:focus-visible {
   width: 100%;
   max-width: 490px;
   max-height: 92vh;
+  overflow-y: auto;
+}
+
+.apid-modal-content {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 1.5rem;
+  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.3), 0 10px 10px -5px rgba(0, 0, 0, 0.2);
+  width: 100%;
+  max-width: 520px;
+  max-height: 90vh;
   overflow-y: auto;
 }
 
