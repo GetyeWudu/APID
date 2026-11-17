@@ -120,8 +120,8 @@ describe('Mentoring collaboration pages', () => {
     ];
 
     vi.spyOn(mentoringPairingApi, 'markConversationRead').mockResolvedValue();
-    vi.spyOn(mentoringPairingApi, 'getMyMentoringConversations').mockResolvedValue(mockConvs);
-    vi.spyOn(mentoringPairingApi, 'listMentoringConversations').mockResolvedValue(mockConvs);
+    vi.spyOn(mentoringPairingApi, 'getMyMentoringConversations').mockResolvedValue(mockConvs as any);
+    vi.spyOn(mentoringPairingApi, 'listMentoringConversations').mockResolvedValue(mockConvs as any);
 
     const getMessagesSpy = vi.spyOn(mentoringPairingApi, 'getConversationMessages').mockResolvedValue([
       {

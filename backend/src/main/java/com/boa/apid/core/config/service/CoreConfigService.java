@@ -83,13 +83,34 @@ public class CoreConfigService {
                 .orElse(3);
     }
 
-    @Transactional(readOnly = true)
+    @Transactional
     public AdminConfigViewDto getAdminConfigView() {
+        initDefaultSystemConfigs();
         List<SystemConfigItemDto> configs = systemConfigRepository.findAllByOrderByConfigKeyAsc().stream()
                 .map(SystemConfigItemDto::from)
                 .toList();
         List<FiscalQuarterDto> quarters = listAllQuarters();
         return new AdminConfigViewDto(configs, quarters);
+    }
+
+    @Transactional
+    public void initDefaultSystemConfigs() {
+        ensureDefaultConfig("coaching.early_join_window_minutes", "15", ConfigValueType.INTEGER,
+                "Minutes before scheduled start time that the Daily.co video room join button unlocks for participants", true);
+        ensureDefaultConfig("coaching.video_post_buffer_minutes", "30", ConfigValueType.INTEGER,
+                "Minutes after scheduled end time that the Daily.co video room remains accessible before closing", true);
+    }
+
+    private void ensureDefaultConfig(String key, String defaultValue, ConfigValueType type, String description, boolean isPublic) {
+        if (!systemConfigRepository.existsById(key)) {
+            SystemConfig cfg = new SystemConfig();
+            cfg.setConfigKey(key);
+            cfg.setConfigValue(defaultValue);
+            cfg.setValueType(type);
+            cfg.setDescription(description);
+            cfg.setPublicVisible(isPublic);
+            systemConfigRepository.save(cfg);
+        }
     }
 
     @Transactional(readOnly = true)
@@ -120,7 +141,14 @@ public class CoreConfigService {
         for (UpdateSystemConfigsRequest.ConfigUpdateEntry entry : request.updates()) {
             String key = entry.configKey().trim();
             SystemConfig entity = systemConfigRepository.findById(key)
-                    .orElseThrow(() -> new ResourceNotFoundException("Configuration key not found: " + key));
+                    .orElseGet(() -> {
+                        SystemConfig newCfg = new SystemConfig();
+                        newCfg.setConfigKey(key);
+                        newCfg.setValueType(ConfigValueType.INTEGER);
+                        newCfg.setPublicVisible(true);
+                        newCfg.setDescription("Configured via Admin Dashboard");
+                        return newCfg;
+                    });
 
             String normalizedNew = validateAndNormalizeConfigValue(entity.getConfigKey(), entity.getValueType(), entry.configValue());
             String previous = entity.getConfigValue();
@@ -450,6 +478,22 @@ public class CoreConfigService {
             if (val < 1 || val > 30) {
                 throw new BusinessException("INVALID_CONFIG_VALUE",
                         "Missed session alert threshold must be between 1 and 30",
+                        HttpStatus.BAD_REQUEST);
+            }
+            return;
+        }
+        if ("coaching.early_join_window_minutes".equals(key)) {
+            if (val < 0 || val > 120) {
+                throw new BusinessException("INVALID_CONFIG_VALUE",
+                        "Early video join window must be between 0 and 120 minutes",
+                        HttpStatus.BAD_REQUEST);
+            }
+            return;
+        }
+        if ("coaching.video_post_buffer_minutes".equals(key)) {
+            if (val < 0 || val > 180) {
+                throw new BusinessException("INVALID_CONFIG_VALUE",
+                        "Video room post-meeting grace period must be between 0 and 180 minutes",
                         HttpStatus.BAD_REQUEST);
             }
             return;

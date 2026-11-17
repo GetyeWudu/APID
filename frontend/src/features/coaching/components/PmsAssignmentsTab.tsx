@@ -470,132 +470,140 @@ export function PmsAssignmentsTab() {
         {detailQuery.isLoading ? (
           <LoadingSkeleton rows={5} height={28} />
         ) : detailQuery.data ? (
-          <div className="boa-stack">
-            {/* Status overview */}
-            <div
-              style={{
-                background: 'var(--surface-subtle)',
-                padding: '0.85rem',
-                borderRadius: 8,
-                border: '1px solid var(--border)',
-              }}
-            >
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <span style={{ fontWeight: 600 }}>Lifecycle Status</span>
-                {renderStatusPill(detailQuery.data.assignment.status)}
-              </div>
-              {detailQuery.data.assignment.closureReason && (
-                <div style={{ marginTop: '0.4rem', fontSize: '0.82rem' }}>
-                  <strong>Closure Reason:</strong>{' '}
-                  {detailQuery.data.assignment.closureReason.replace(/_/g, ' ')}
-                </div>
-              )}
-              {detailQuery.data.assignment.atRisk && (
-                <div style={{ marginTop: '0.4rem', color: 'var(--err)', fontWeight: 600, fontSize: '0.82rem' }}>
-                  <AlertTriangle size={13} style={{ display: 'inline', marginRight: 4 }} /> Flagged as At Risk
-                </div>
-              )}
-            </div>
+          (() => {
+            const replacementHistory = detailQuery.data.replacementHistory ?? [];
+            const participants = detailQuery.data.participants ?? [];
+            const triggeringGoals = detailQuery.data.triggeringGoals ?? detailQuery.data.goalLines ?? [];
 
-            {/* Replacement History Trail */}
-            <div>
-              <h4 style={{ margin: '0.75rem 0 0.4rem 0' }}>Coach Replacement Audit Log</h4>
-              {detailQuery.data.replacementHistory.length === 0 ? (
-                <div className="boa-muted" style={{ fontSize: '0.84rem' }}>
-                  No coach replacements recorded.
-                </div>
-              ) : (
-                <div className="boa-stack">
-                  {detailQuery.data.replacementHistory.map((h) => (
-                    <div
-                      key={h.id}
-                      style={{
-                        border: '1px solid var(--border)',
-                        borderRadius: 8,
-                        padding: '0.75rem',
-                        background: 'var(--surface-subtle)',
-                      }}
-                    >
-                      <div style={{ fontSize: '0.78rem', fontWeight: 700, color: 'var(--muted)' }}>
-                        {new Date(h.changedAt).toLocaleString()} · Actor: {h.changedByUsername ?? 'Admin'}
-                      </div>
-                      <div style={{ marginTop: '0.25rem', fontSize: '0.86rem' }}>
-                        <strong>{h.fromCoachFullName || 'Unassigned'}</strong> →{' '}
-                        <strong>{h.toCoachFullName}</strong>
-                      </div>
-                      <div className="boa-muted" style={{ fontSize: '0.82rem', marginTop: '0.2rem' }}>
-                        Reason: {h.reason}
-                      </div>
+            return (
+              <div className="boa-stack">
+                {/* Status overview */}
+                <div
+                  style={{
+                    background: 'var(--surface-subtle)',
+                    padding: '0.85rem',
+                    borderRadius: 8,
+                    border: '1px solid var(--border)',
+                  }}
+                >
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <span style={{ fontWeight: 600 }}>Lifecycle Status</span>
+                    {renderStatusPill(detailQuery.data.assignment.status)}
+                  </div>
+                  {detailQuery.data.assignment.closureReason && (
+                    <div style={{ marginTop: '0.4rem', fontSize: '0.82rem' }}>
+                      <strong>Closure Reason:</strong>{' '}
+                      {detailQuery.data.assignment.closureReason.replace(/_/g, ' ')}
                     </div>
-                  ))}
+                  )}
+                  {detailQuery.data.assignment.atRisk && (
+                    <div style={{ marginTop: '0.4rem', color: 'var(--err)', fontWeight: 600, fontSize: '0.82rem' }}>
+                      <AlertTriangle size={13} style={{ display: 'inline', marginRight: 4 }} /> Flagged as At Risk
+                    </div>
+                  )}
                 </div>
-              )}
-            </div>
 
-            {/* Participants */}
-            <div>
-              <h4 style={{ margin: '0.75rem 0 0.4rem 0' }}>Coaching Participants</h4>
-              <div className="apid-table-wrap">
-                <table className="apid-table">
-                  <thead>
-                    <tr>
-                      <th>Participant</th>
-                      <th>Role</th>
-                      <th>Status</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {detailQuery.data.participants.map((p) => (
-                      <tr key={p.id}>
-                        <td>
-                          <div style={{ fontWeight: 600 }}>{p.employeeFullName}</div>
-                          <div className="boa-muted" style={{ fontSize: '0.75rem' }}>
-                            {p.employeeNumber}
+                {/* Replacement History Trail */}
+                <div>
+                  <h4 style={{ margin: '0.75rem 0 0.4rem 0' }}>Coach Replacement Audit Log</h4>
+                  {replacementHistory.length === 0 ? (
+                    <div className="boa-muted" style={{ fontSize: '0.84rem' }}>
+                      No coach replacements recorded.
+                    </div>
+                  ) : (
+                    <div className="boa-stack">
+                      {replacementHistory.map((h) => (
+                        <div
+                          key={h.id}
+                          style={{
+                            border: '1px solid var(--border)',
+                            borderRadius: 8,
+                            padding: '0.75rem',
+                            background: 'var(--surface-subtle)',
+                          }}
+                        >
+                          <div style={{ fontSize: '0.78rem', fontWeight: 700, color: 'var(--muted)' }}>
+                            {new Date(h.changedAt).toLocaleString()} · Actor: {h.changedByUsername ?? 'Admin'}
                           </div>
-                        </td>
-                        <td>{p.role}</td>
-                        <td>
-                          <StatusPill
-                            label={p.active ? 'ACTIVE' : 'INACTIVE'}
-                            tone={p.active ? 'ok' : 'neutral'}
-                          />
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-
-            {/* Triggering Goals Breakdown */}
-            {detailQuery.data.triggeringGoals.length > 0 && (
-              <div>
-                <h4 style={{ margin: '0.75rem 0 0.4rem 0' }}>Triggering PMS Goal Breakdown</h4>
-                <div className="apid-table-wrap">
-                  <table className="apid-table">
-                    <thead>
-                      <tr>
-                        <th>#</th>
-                        <th>Goal</th>
-                        <th>Score</th>
-                        <th>Weight</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {detailQuery.data.triggeringGoals.map((g) => (
-                        <tr key={g.sourceRowNumber}>
-                          <td className="tabular-nums">{g.sourceRowNumber}</td>
-                          <td>{g.goalName}</td>
-                          <td className="tabular-nums">{g.goalScore?.toFixed(4) ?? '—'}</td>
-                          <td className="tabular-nums">{g.weight != null ? `${g.weight}%` : '—'}</td>
-                        </tr>
+                          <div style={{ marginTop: '0.25rem', fontSize: '0.86rem' }}>
+                            <strong>{h.fromCoachFullName || 'Unassigned'}</strong> →{' '}
+                            <strong>{h.toCoachFullName}</strong>
+                          </div>
+                          <div className="boa-muted" style={{ fontSize: '0.82rem', marginTop: '0.2rem' }}>
+                            Reason: {h.reason}
+                          </div>
+                        </div>
                       ))}
-                    </tbody>
-                  </table>
+                    </div>
+                  )}
                 </div>
+
+                {/* Participants */}
+                <div>
+                  <h4 style={{ margin: '0.75rem 0 0.4rem 0' }}>Coaching Participants</h4>
+                  <div className="apid-table-wrap">
+                    <table className="apid-table">
+                      <thead>
+                        <tr>
+                          <th>Participant</th>
+                          <th>Role</th>
+                          <th>Status</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {participants.map((p) => (
+                          <tr key={p.id}>
+                            <td>
+                              <div style={{ fontWeight: 600 }}>{p.employeeFullName}</div>
+                              <div className="boa-muted" style={{ fontSize: '0.75rem' }}>
+                                {p.employeeNumber}
+                              </div>
+                            </td>
+                            <td>{p.role}</td>
+                            <td>
+                              <StatusPill
+                                label={p.active ? 'ACTIVE' : 'INACTIVE'}
+                                tone={p.active ? 'ok' : 'neutral'}
+                              />
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+
+                {/* Triggering Goals Breakdown */}
+                {triggeringGoals.length > 0 && (
+                  <div>
+                    <h4 style={{ margin: '0.75rem 0 0.4rem 0' }}>Triggering PMS Goal Breakdown</h4>
+                    <div className="apid-table-wrap">
+                      <table className="apid-table">
+                        <thead>
+                          <tr>
+                            <th>#</th>
+                            <th>Goal</th>
+                            <th>Score</th>
+                            <th>Weight</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {triggeringGoals.map((g) => (
+                            <tr key={g.sourceRowNumber}>
+                              <td className="tabular-nums">{g.sourceRowNumber}</td>
+                              <td>{g.goalName}</td>
+                              <td className="tabular-nums">{g.goalScore?.toFixed(4) ?? '—'}</td>
+                              <td className="tabular-nums">{g.weight != null ? `${g.weight}%` : '—'}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
               </div>
-            )}
-          </div>
+            );
+          })()
         ) : null}
       </SlideOverDrawer>
 

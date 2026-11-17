@@ -31,6 +31,14 @@ const CONFIG_FRIENDLY_LABELS: Record<string, { label: string; helper?: string }>
     label: 'Coaching Inactivity Reminder (Days)',
     helper: 'Days without coaching activity before sending a reminder notification (1–365).',
   },
+  'coaching.early_join_window_minutes': {
+    label: 'Coaching Video Early Join Window (Minutes)',
+    helper: 'Minutes before scheduled start time that the Daily.co video room join button unlocks (0–120 minutes; default 15).',
+  },
+  'coaching.video_post_buffer_minutes': {
+    label: 'Coaching Video Post-Meeting Grace Buffer (Minutes)',
+    helper: 'Minutes after scheduled end time that the Daily.co video room remains open before closing (0–180 minutes; default 30).',
+  },
   'mentoring.default_max_trainees_per_trainer': {
     label: 'Default Max Trainees per Trainer',
     helper: 'Internal mentoring baseline trainee capacity per certified trainer (1–50).',

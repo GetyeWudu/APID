@@ -77,7 +77,8 @@ export interface CoachingAssignmentDetail {
   assignment: CoachingAssignmentItem;
   participants: CoachingParticipantItem[];
   replacementHistory: CoachReplacementHistoryItem[];
-  triggeringGoals: PmsGoalLineItem[];
+  triggeringGoals?: PmsGoalLineItem[];
+  goalLines?: PmsGoalLineItem[];
 }
 
 export interface AssignCoachPayload {

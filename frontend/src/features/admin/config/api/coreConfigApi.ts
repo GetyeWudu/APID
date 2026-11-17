@@ -24,6 +24,7 @@ export interface PublicConfigSettings {
   coachingRescheduleScope?: 'SAME_DAY_ONLY' | 'SAME_WEEK' | 'QUARTER_FLEXIBLE';
   coachingAllowJointPmsGroup?: boolean;
   coachingMaxJointGroupSize?: number;
+  coachingVideoPostBufferMinutes?: number;
 }
 
 export interface ActiveConfigSnapshot {

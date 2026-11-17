@@ -29,8 +29,9 @@ export function extractApiErrorMessage(error: unknown, fallback = 'An unexpected
     if (data?.message) {
       return data.message;
     }
-    if (typeof data === 'string' && data.trim()) {
-      return data;
+    const rawData = error.response?.data as unknown;
+    if (typeof rawData === 'string' && rawData.trim()) {
+      return rawData;
     }
     return error.message || fallback;
   }

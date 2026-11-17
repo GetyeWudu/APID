@@ -4,6 +4,7 @@ import com.boa.apid.coaching.skillrequest.dto.*;
 import com.boa.apid.coaching.skillrequest.service.SkillCoachingRequestService;
 import com.boa.apid.common.response.ApiResponse;
 import com.boa.apid.core.auth.security.ApidUserPrincipal;
+import com.boa.apid.core.organization.dto.EmployeeDto;
 import jakarta.validation.Valid;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -103,6 +104,44 @@ public class SkillCoachingRequestController {
             @AuthenticationPrincipal ApidUserPrincipal actor
     ) {
         return ApiResponse.ok("Skill coaching request rejected", requestService.rejectRequest(id, payload, actor));
+    }
+
+    /**
+     * Coach or nominating manager adds an additional employee directly to an approved skill cohort.
+     */
+    @PostMapping("/{id}/members")
+    @PreAuthorize("hasAuthority('COACHING_REQUEST_SUBMIT') or hasAuthority('COACHING_SESSION_SCHEDULE')")
+    public ApiResponse<SkillCoachingRequestDto> addCohortMember(
+            @PathVariable Long id,
+            @Valid @RequestBody AddCohortMemberPayload payload,
+            @AuthenticationPrincipal ApidUserPrincipal actor
+    ) {
+        return ApiResponse.ok("Employee added to cohort", requestService.addCohortMember(id, payload.employeeId(), actor));
+    }
+
+    /**
+     * Retrieves eligible direct reports under this cohort's coach available to be added.
+     */
+    @GetMapping("/{id}/eligible-members")
+    @PreAuthorize("hasAuthority('COACHING_REQUEST_SUBMIT') or hasAuthority('COACHING_SESSION_SCHEDULE')")
+    public ApiResponse<List<EmployeeDto>> getEligibleCohortMembers(
+            @PathVariable Long id,
+            @AuthenticationPrincipal ApidUserPrincipal actor
+    ) {
+        return ApiResponse.ok(requestService.getEligibleCohortMembers(id, actor));
+    }
+
+    /**
+     * Coach or nominating manager removes an employee from an approved skill cohort.
+     */
+    @DeleteMapping("/{id}/members/{employeeId}")
+    @PreAuthorize("hasAuthority('COACHING_REQUEST_SUBMIT') or hasAuthority('COACHING_SESSION_SCHEDULE')")
+    public ApiResponse<SkillCoachingRequestDto> removeCohortMember(
+            @PathVariable Long id,
+            @PathVariable Long employeeId,
+            @AuthenticationPrincipal ApidUserPrincipal actor
+    ) {
+        return ApiResponse.ok("Employee removed from cohort", requestService.removeCohortMember(id, employeeId, actor));
     }
 }
 

@@ -7,6 +7,11 @@ import com.boa.apid.coaching.assignment.entity.CoachingParticipant;
 import com.boa.apid.coaching.assignment.entity.ParticipantRole;
 import com.boa.apid.coaching.assignment.repository.CoachingAssignmentRepository;
 import com.boa.apid.coaching.assignment.repository.CoachingParticipantRepository;
+import com.boa.apid.coaching.session.entity.CoachingSession;
+import com.boa.apid.coaching.session.entity.SessionParticipant;
+import com.boa.apid.coaching.session.entity.SessionStatus;
+import com.boa.apid.coaching.session.repository.CoachingSessionRepository;
+import com.boa.apid.coaching.session.repository.SessionParticipantRepository;
 import com.boa.apid.coaching.skillrequest.dto.*;
 import com.boa.apid.coaching.skillrequest.entity.SkillCoachingRequest;
 import com.boa.apid.coaching.skillrequest.entity.SkillCoachingRequestStatus;
@@ -50,6 +55,8 @@ public class SkillCoachingRequestService {
     private final NotificationService notificationService;
     private final AuditService auditService;
     private final com.boa.apid.coaching.communication.service.CoachingCommunicationService coachingCommunicationService;
+    private final CoachingSessionRepository sessionRepository;
+    private final SessionParticipantRepository sessionParticipantRepository;
 
     public SkillCoachingRequestService(
             SkillCoachingRequestRepository requestRepository,
@@ -62,7 +69,9 @@ public class SkillCoachingRequestService {
             UserRepository userRepository,
             NotificationService notificationService,
             AuditService auditService,
-            com.boa.apid.coaching.communication.service.CoachingCommunicationService coachingCommunicationService
+            com.boa.apid.coaching.communication.service.CoachingCommunicationService coachingCommunicationService,
+            CoachingSessionRepository sessionRepository,
+            SessionParticipantRepository sessionParticipantRepository
     ) {
         this.requestRepository = requestRepository;
         this.targetRepository = targetRepository;
@@ -75,6 +84,8 @@ public class SkillCoachingRequestService {
         this.notificationService = notificationService;
         this.auditService = auditService;
         this.coachingCommunicationService = coachingCommunicationService;
+        this.sessionRepository = sessionRepository;
+        this.sessionParticipantRepository = sessionParticipantRepository;
     }
 
     /**
@@ -418,6 +429,230 @@ public class SkillCoachingRequestService {
         ));
 
         return toDto(savedReq);
+    }
+
+    @Transactional
+    public SkillCoachingRequestDto addCohortMember(Long requestId, Long employeeId, ApidUserPrincipal actor) {
+        SkillCoachingRequest req = requestRepository.findById(requestId)
+                .orElseThrow(() -> new ResourceNotFoundException("Skill coaching request not found"));
+
+        if (req.getStatus() != SkillCoachingRequestStatus.APPROVED) {
+            throw new BusinessException("COHORT_NOT_APPROVED", "Members can only be added to approved active cohorts", HttpStatus.BAD_REQUEST);
+        }
+
+        Employee currentCaller = employeeRepository.findByUserId(actor.getUserId()).orElse(null);
+        boolean isCoach = currentCaller != null && currentCaller.getId().equals(req.getProposedCoachEmployeeId());
+        boolean isRequester = currentCaller != null && currentCaller.getId().equals(req.getRequesterEmployeeId());
+        boolean isAdmin = actor.getAuthorities().stream().anyMatch(a ->
+                a.getAuthority().equals("COACHING_REQUEST_APPROVE") || a.getAuthority().equals("COACHING_ASSIGNMENT_MANAGE"));
+
+        if (!isCoach && !isRequester && !isAdmin) {
+            throw new BusinessException("NOT_AUTHORIZED", "Only the designated coach or nominating manager can add cohort members", HttpStatus.FORBIDDEN);
+        }
+
+        Employee newMember = employeeRepository.findById(employeeId)
+                .orElseThrow(() -> new ResourceNotFoundException("Employee not found with id: " + employeeId));
+
+        if (newMember.getEmploymentStatus() != EmploymentStatus.ACTIVE) {
+            throw new BusinessException("EMPLOYEE_NOT_ACTIVE", "Cannot add an inactive employee", HttpStatus.BAD_REQUEST);
+        }
+
+        if (req.getProposedCoachEmployeeId() != null && req.getProposedCoachEmployeeId().equals(employeeId)) {
+            throw new BusinessException("CANNOT_COACH_SELF", "The coach cannot be added as a coachee member", HttpStatus.BAD_REQUEST);
+        }
+
+        // Enforce that only direct reports under this coach can be added
+        Long coachEmployeeId = req.getProposedCoachEmployeeId();
+        if (coachEmployeeId != null && !isAdmin) {
+            boolean isDirectReport = employeeQueryService.isDirectManager(coachEmployeeId, employeeId);
+            if (!isDirectReport) {
+                throw new BusinessException("NOT_DIRECT_REPORT",
+                        "Only direct employees reporting to the coach can be added to this cohort. Employees from other departments or managers are not permitted.",
+                        HttpStatus.BAD_REQUEST);
+            }
+        }
+
+        if (targetRepository.existsByRequestIdAndEmployeeId(requestId, employeeId)) {
+            throw new BusinessException("ALREADY_ENROLLED", "This employee is already enrolled in this cohort", HttpStatus.CONFLICT);
+        }
+
+        long currentCount = targetRepository.countByRequestId(requestId);
+        if (currentCount >= 10) {
+            throw new BusinessException("COHORT_CAPACITY_EXCEEDED", "Cohort capacity reached (maximum 10 participants per group cohort)", HttpStatus.BAD_REQUEST);
+        }
+
+        // 1. Create active assignment for new member
+        CoachingAssignment assignment = new CoachingAssignment();
+        assignment.setPathway(AssignmentPathway.SELF_DEVELOPMENT);
+        assignment.setCoacheeEmployeeId(employeeId);
+        assignment.setCoachEmployeeId(req.getProposedCoachEmployeeId());
+        assignment.setPerformanceFiscalQuarterId(req.getCoachingFiscalQuarterId());
+        assignment.setCoachingFiscalQuarterId(req.getCoachingFiscalQuarterId());
+        assignment.setStatus(AssignmentStatus.ACTIVE);
+        assignment.setAtRisk(false);
+        CoachingAssignment savedAssignment = assignmentRepository.save(assignment);
+
+        // 2. Save Target
+        SkillCoachingRequestTarget target = new SkillCoachingRequestTarget();
+        target.setRequest(req);
+        target.setEmployeeId(employeeId);
+        target.setCreatedAssignmentId(savedAssignment.getId());
+        targetRepository.save(target);
+
+        // 3. Save coaching participants
+        CoachingParticipant coacheePart = new CoachingParticipant();
+        coacheePart.setAssignmentId(savedAssignment.getId());
+        coacheePart.setEmployeeId(employeeId);
+        coacheePart.setRole(ParticipantRole.COACHEE);
+        coacheePart.setActive(true);
+        participantRepository.save(coacheePart);
+
+        if (req.getProposedCoachEmployeeId() != null) {
+            CoachingParticipant coachPart = new CoachingParticipant();
+            coachPart.setAssignmentId(savedAssignment.getId());
+            coachPart.setEmployeeId(req.getProposedCoachEmployeeId());
+            coachPart.setRole(ParticipantRole.COACH);
+            coachPart.setActive(true);
+            participantRepository.save(coachPart);
+        }
+
+        // 4. Sync upcoming sessions: add new member to scheduled sessions
+        List<CoachingSession> upcomingSessions = sessionRepository.findAllBySkillRequestId(requestId).stream()
+                .filter(s -> s.getStatus() != SessionStatus.CANCELLED && s.getStatus() != SessionStatus.COMPLETED && s.getStatus() != SessionStatus.EXPIRED)
+                .toList();
+
+        for (CoachingSession session : upcomingSessions) {
+            if (!sessionParticipantRepository.existsBySessionIdAndEmployeeId(session.getId(), employeeId)) {
+                SessionParticipant sp = new SessionParticipant();
+                sp.setSessionId(session.getId());
+                sp.setEmployeeId(employeeId);
+                sp.setRole(com.boa.apid.coaching.session.entity.ParticipantRole.COACHEE);
+                sp.setInvitationStatus(com.boa.apid.coaching.session.entity.InvitationStatus.ACCEPTED);
+                sp.setAttendanceStatus(com.boa.apid.coaching.session.entity.AttendanceStatus.PENDING);
+                sessionParticipantRepository.save(sp);
+            }
+        }
+
+        // 5. Notify the employee
+        if (newMember.getUserId() != null) {
+            notificationService.notify(
+                    newMember.getUserId(),
+                    NotificationModule.COACHING,
+                    "COHORT_MEMBER_ENROLLED",
+                    "Enrolled in Skill Cohort",
+                    "You have been enrolled into the '" + req.getSkillTitle() + "' skill cohort.",
+                    "/coaching?view=skills&sub=cohorts"
+            );
+        }
+
+        auditService.record(new AuditService.AuditCommand(
+                null,
+                actor.getUserId(),
+                actor.getUsername(),
+                null,
+                "COACHING",
+                "COHORT_MEMBER_ADDED",
+                "SUCCESS",
+                null,
+                "SkillCoachingRequest",
+                requestId.toString(),
+                Map.of("addedEmployeeId", employeeId, "addedEmployeeName", newMember.getFullName()),
+                null, null
+        ));
+
+        return toDto(req);
+    }
+
+    @Transactional
+    public SkillCoachingRequestDto removeCohortMember(Long requestId, Long employeeId, ApidUserPrincipal actor) {
+        SkillCoachingRequest req = requestRepository.findById(requestId)
+                .orElseThrow(() -> new ResourceNotFoundException("Skill coaching request not found"));
+
+        Employee currentCaller = employeeRepository.findByUserId(actor.getUserId()).orElse(null);
+        boolean isCoach = currentCaller != null && currentCaller.getId().equals(req.getProposedCoachEmployeeId());
+        boolean isRequester = currentCaller != null && currentCaller.getId().equals(req.getRequesterEmployeeId());
+        boolean isAdmin = actor.getAuthorities().stream().anyMatch(a ->
+                a.getAuthority().equals("COACHING_REQUEST_APPROVE") || a.getAuthority().equals("COACHING_ASSIGNMENT_MANAGE"));
+
+        if (!isCoach && !isRequester && !isAdmin) {
+            throw new BusinessException("NOT_AUTHORIZED", "Only the designated coach or nominating manager can manage cohort members", HttpStatus.FORBIDDEN);
+        }
+
+        SkillCoachingRequestTarget target = targetRepository.findByRequestIdAndEmployeeId(requestId, employeeId)
+                .orElseThrow(() -> new ResourceNotFoundException("Employee is not enrolled in this cohort"));
+
+        // Check if member already has COMPLETED sessions in this cohort
+        List<CoachingSession> cohortSessions = sessionRepository.findAllBySkillRequestId(requestId);
+        boolean hasAttendedOrCompleted = cohortSessions.stream().anyMatch(s -> {
+            if (s.getStatus() == SessionStatus.COMPLETED) {
+                return sessionParticipantRepository.findBySessionIdAndEmployeeId(s.getId(), employeeId)
+                        .map(p -> p.getAttendanceStatus() == com.boa.apid.coaching.session.entity.AttendanceStatus.ATTENDED)
+                        .orElse(false);
+            }
+            return false;
+        });
+
+        if (hasAttendedOrCompleted) {
+            throw new BusinessException("CANNOT_REMOVE_ATTENDED_MEMBER",
+                    "Cannot remove an employee who has already attended completed sessions in this cohort. You can mark their assignment inactive instead.",
+                    HttpStatus.CONFLICT);
+        }
+
+        // Remove from future sessions
+        for (CoachingSession s : cohortSessions) {
+            if (s.getStatus() != SessionStatus.COMPLETED) {
+                sessionParticipantRepository.findBySessionIdAndEmployeeId(s.getId(), employeeId)
+                        .ifPresent(sessionParticipantRepository::delete);
+            }
+        }
+
+        // Close assignment
+        if (target.getCreatedAssignmentId() != null) {
+            assignmentRepository.findById(target.getCreatedAssignmentId()).ifPresent(a -> {
+                a.setStatus(AssignmentStatus.CLOSED);
+                assignmentRepository.save(a);
+            });
+        }
+
+        targetRepository.delete(target);
+
+        auditService.record(new AuditService.AuditCommand(
+                null,
+                actor.getUserId(),
+                actor.getUsername(),
+                null,
+                "COACHING",
+                "COHORT_MEMBER_REMOVED",
+                "SUCCESS",
+                null,
+                "SkillCoachingRequest",
+                requestId.toString(),
+                Map.of("removedEmployeeId", employeeId),
+                null, null
+        ));
+
+        return toDto(req);
+    }
+
+    @Transactional(readOnly = true)
+    public List<EmployeeDto> getEligibleCohortMembers(Long requestId, ApidUserPrincipal actor) {
+        SkillCoachingRequest req = requestRepository.findById(requestId)
+                .orElseThrow(() -> new ResourceNotFoundException("Skill coaching request not found with id: " + requestId));
+
+        Long coachId = req.getProposedCoachEmployeeId();
+        if (coachId == null) {
+            return List.of();
+        }
+
+        // Retrieve active direct reports under the coach
+        List<EmployeeDto> directReports = employeeQueryService.getDirectReports(coachId);
+
+        // Filter out the coach themselves and already enrolled coachees
+        return directReports.stream()
+                .filter(dr -> dr.employmentStatus() == EmploymentStatus.ACTIVE)
+                .filter(dr -> !dr.id().equals(coachId))
+                .filter(dr -> !targetRepository.existsByRequestIdAndEmployeeId(requestId, dr.id()))
+                .toList();
     }
 
     private SkillCoachingRequestDto toDto(SkillCoachingRequest req) {

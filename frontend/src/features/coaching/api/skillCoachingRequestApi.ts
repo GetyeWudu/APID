@@ -1,4 +1,5 @@
 import { apiClient, ApiResponse } from '../../../shared/api/apiClient';
+import type { EmployeeItem } from '../../admin/organization/types/organization.types';
 
 export type SkillRequestStatus = 'PENDING_PMS_APPROVAL' | 'APPROVED' | 'REJECTED' | 'CANCELLED';
 
@@ -108,6 +109,28 @@ export const skillCoachingRequestApi = {
     const res = await apiClient.post<ApiResponse<SkillCoachingRequestItem>>(
       `/coaching/skill-requests/${id}/reject`,
       payload
+    );
+    return res.data.data;
+  },
+
+  async getEligibleCohortMembers(requestId: number): Promise<EmployeeItem[]> {
+    const res = await apiClient.get<ApiResponse<EmployeeItem[]>>(
+      `/coaching/skill-requests/${requestId}/eligible-members`
+    );
+    return res.data.data;
+  },
+
+  async addCohortMember(requestId: number, employeeId: number): Promise<SkillCoachingRequestItem> {
+    const res = await apiClient.post<ApiResponse<SkillCoachingRequestItem>>(
+      `/coaching/skill-requests/${requestId}/members`,
+      { employeeId }
+    );
+    return res.data.data;
+  },
+
+  async removeCohortMember(requestId: number, employeeId: number): Promise<SkillCoachingRequestItem> {
+    const res = await apiClient.delete<ApiResponse<SkillCoachingRequestItem>>(
+      `/coaching/skill-requests/${requestId}/members/${employeeId}`
     );
     return res.data.data;
   },

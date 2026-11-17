@@ -165,6 +165,14 @@ export interface MentoringFeedback {
   ratedAt: string;
 }
 
+export interface SessionJoinToken {
+  roomName: string;
+  token: string;
+  roomUrlWithToken: string;
+  expiresAt: string;
+  isMock: boolean;
+}
+
 export const mentoringPairingApi = {
   async listMyRequests(): Promise<MentoringPairing[]> {
     const response = await apiClient.get<ApiResponse<MentoringPairing[]>>('/mentoring/pairing/requests');
