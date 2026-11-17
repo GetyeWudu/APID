@@ -1,6 +1,7 @@
 package com.boa.apid.mentoring.trainer.service;
 
 import com.boa.apid.core.audit.service.AuditService;
+import com.boa.apid.core.auth.security.ApidUserPrincipal;
 import com.boa.apid.core.authorization.entity.User;
 import com.boa.apid.core.authorization.repository.RoleRepository;
 import com.boa.apid.core.authorization.repository.UserRepository;
@@ -41,6 +42,8 @@ import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotSame;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -149,5 +152,28 @@ class TrainerAuthorizationServiceApplicationTest {
         verify(authorizationRepository, org.mockito.Mockito.times(2)).save(existingAuthorization);
         verify(skillStatusRepository).saveAll(any());
         verify(historyRepository).saveAll(any());
+    }
+
+    @Test
+    void mentorWorkspaceAccessIsAvailableForActiveAuthorization() {
+        when(authorizationRepository.findByUserIdAndStatus(8L, TrainerAuthorizationStatus.ACTIVE))
+                .thenReturn(List.of(new TrainerAuthorization()));
+
+        assertTrue(service.hasMentorWorkspaceAccess(mentorActor(8L)));
+    }
+
+    @Test
+    void mentorWorkspaceAccessRemainsWhileSuspendedButNotAfterRevocation() {
+        when(authorizationRepository.findByUserIdAndStatus(8L, TrainerAuthorizationStatus.ACTIVE))
+                .thenReturn(List.of());
+        when(authorizationRepository.findByUserIdAndStatus(8L, TrainerAuthorizationStatus.SUSPENDED))
+                .thenReturn(List.of(new TrainerAuthorization()), List.of());
+
+        assertTrue(service.hasMentorWorkspaceAccess(mentorActor(8L)));
+        assertFalse(service.hasMentorWorkspaceAccess(mentorActor(8L)));
+    }
+
+    private ApidUserPrincipal mentorActor(Long userId) {
+        return new ApidUserPrincipal(userId, "mentor", true, false, 0, Set.of("Mentor"), Set.of());
     }
 }

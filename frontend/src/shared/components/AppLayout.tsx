@@ -48,7 +48,7 @@ import {
 } from '../auth/workspaceResolver';
 import { coreConfigApi } from '../../features/admin/config/api/coreConfigApi';
 import { workspaceLiveApi } from '../../features/workspace/api/workspaceDashboardApi';
-import { mentoringPairingApi } from '../../features/mentoring/api/mentoringPairingApi';
+import { mentoringTrainerApi } from '../../features/mentoring/api/mentoringTrainerApi';
 import { AvatarBadge, NotificationBellPopover, useToast } from './ui';
 
 interface NavEntry {
@@ -142,19 +142,18 @@ export function AppLayout({ children }: { children: ReactNode }) {
     staleTime: 60_000,
   });
 
-  const relationshipsQuery = useQuery({
-    queryKey: ['mentoring', 'pairing', 'relationships', user?.id],
-    queryFn: mentoringPairingApi.listMyRelationships,
+  const mentorWorkspaceAccessQuery = useQuery({
+    queryKey: ['mentoring', 'mentor-workspace-access', user?.id],
+    queryFn: mentoringTrainerApi.hasMentorWorkspaceAccess,
     enabled: hasEmployeeAccess,
-    staleTime: 60_000,
+    staleTime: 30_000,
+    refetchOnMount: 'always',
   });
 
   const canCoachDirectReports =
     (identityQuery.data?.directReports.length ?? 0) > 0 ||
     Boolean(user?.permissions.includes('COACHING_REQUEST_SUBMIT'));
-  const isMentor =
-    (user?.roles.some((role) => role.trim().toLowerCase() === 'mentor') ?? false) ||
-    Boolean(relationshipsQuery.data?.some((pair) => pair.currentUserRole === 'MENTOR'));
+  const isMentor = mentorWorkspaceAccessQuery.data === true;
 
   const moduleNavGroups = useMemo<Record<PortalModuleKey, NavGroup[]>>(
     () => ({

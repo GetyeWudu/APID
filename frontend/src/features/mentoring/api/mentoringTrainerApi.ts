@@ -189,6 +189,13 @@ export const mentoringTrainerApi = {
     return response.data.data;
   },
 
+  async hasMentorWorkspaceAccess(): Promise<boolean> {
+    const response = await apiClient.get<ApiResponse<boolean>>(
+      '/mentoring/trainer-profile/workspace-access'
+    );
+    return response.data.data;
+  },
+
   async downloadReport(format: 'xlsx' | 'pdf'): Promise<Blob> {
     const response = await apiClient.get<Blob>('/mentoring/hr/reports/export', {
       params: { format },

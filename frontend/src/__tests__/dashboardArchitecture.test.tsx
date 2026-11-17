@@ -71,6 +71,7 @@ function renderWithProviders(ui: React.ReactNode, initialPath = '/') {
 beforeEach(() => {
   vi.restoreAllMocks();
   window.localStorage.clear();
+  vi.spyOn(mentoringTrainerApi, 'hasMentorWorkspaceAccess').mockResolvedValue(false);
 });
 
 describe('classifyRating boundary rules', () => {
@@ -238,7 +239,8 @@ describe('Portal Home module cards & scoped sidebar isolation', () => {
     expect(screen.queryByText('System Administration')).not.toBeInTheDocument();
   });
 
-  it('shows mentoring Chat and Resources alongside pairings without a My Mentor entry', () => {
+  it('shows mentoring Chat and Resources alongside pairings without a My Mentor entry', async () => {
+    vi.mocked(mentoringTrainerApi.hasMentorWorkspaceAccess).mockResolvedValue(true);
     vi.spyOn(AuthContextModule, 'useAuth').mockReturnValue(
       buildAuthMock({
         id: 12,
@@ -273,10 +275,33 @@ describe('Portal Home module cards & scoped sidebar isolation', () => {
     expect(screen.queryByText('My Mentor')).not.toBeInTheDocument();
     expect(screen.getByText('My Sessions')).toBeInTheDocument();
     expect(screen.getByText('Find a Mentor')).toBeInTheDocument();
-    expect(screen.getByText('As a Mentor')).toBeInTheDocument();
+    expect(await screen.findByText('As a Mentor')).toBeInTheDocument();
     expect(screen.getByText('My Trainees')).toBeInTheDocument();
     expect(screen.getByText('Mentor Profile')).toBeInTheDocument();
     expect(screen.getByText('Mentor Sessions')).toBeInTheDocument();
+  });
+
+  it('hides mentor navigation after authorization is revoked even if the user still has the Mentor role', async () => {
+    vi.spyOn(AuthContextModule, 'useAuth').mockReturnValue(
+      buildAuthMock({
+        id: 12,
+        username: 'mentor.trainee',
+        mustChangePassword: false,
+        roles: ['Employee', 'Mentor'],
+        permissions: ['EMPLOYEE_PORTAL_ACCESS'],
+      })
+    );
+
+    renderWithProviders(
+      <AppLayout>
+        <div>Mentoring Content</div>
+      </AppLayout>,
+      '/mentoring'
+    );
+
+    expect(await screen.findByText('As a Trainee')).toBeInTheDocument();
+    expect(screen.queryByText('As a Mentor')).not.toBeInTheDocument();
+    expect(screen.getByText('Find a Mentor')).toBeInTheDocument();
   });
 
   it('shows the employee Dashboard, Chat, and Resources in the workspace sidebar', () => {

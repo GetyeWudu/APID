@@ -127,6 +127,14 @@ public class TrainerAuthorizationController {
         return ApiResponse.ok(authorizationService.getOwnProfile(actor));
     }
 
+    @GetMapping("/trainer-profile/workspace-access")
+    @PreAuthorize("isAuthenticated() and !principal.mustChangePassword and hasAuthority('EMPLOYEE_PORTAL_ACCESS')")
+    public ApiResponse<Boolean> hasMentorWorkspaceAccess(
+            @AuthenticationPrincipal ApidUserPrincipal actor
+    ) {
+        return ApiResponse.ok(authorizationService.hasMentorWorkspaceAccess(actor));
+    }
+
     @GetMapping("/trainer-profile/badge-removal-request")
     @PreAuthorize("isAuthenticated() and !principal.mustChangePassword and hasAuthority('EMPLOYEE_PORTAL_ACCESS')")
     public ApiResponse<MentorBadgeRemovalRequestDto> getMyBadgeRemovalRequest(

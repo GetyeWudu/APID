@@ -409,6 +409,15 @@ public class TrainerAuthorizationService {
     }
 
     @Transactional(readOnly = true)
+    public boolean hasMentorWorkspaceAccess(ApidUserPrincipal actor) {
+        return !authorizationRepository.findByUserIdAndStatus(
+                actor.getUserId(), TrainerAuthorizationStatus.ACTIVE
+        ).isEmpty() || !authorizationRepository.findByUserIdAndStatus(
+                actor.getUserId(), TrainerAuthorizationStatus.SUSPENDED
+        ).isEmpty();
+    }
+
+    @Transactional(readOnly = true)
     public MentorBadgeRemovalRequestDto getMyBadgeRemovalRequest(ApidUserPrincipal actor) {
         TrainerAuthorization authorization = authorizationRepository
                 .findByUserIdAndStatus(actor.getUserId(), TrainerAuthorizationStatus.ACTIVE)
