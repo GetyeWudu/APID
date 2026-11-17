@@ -6,6 +6,7 @@ import com.boa.apid.core.authorization.entity.User;
 import com.boa.apid.core.authorization.entity.UserStatus;
 import com.boa.apid.core.authorization.repository.UserRepository;
 import com.boa.apid.core.authorization.repository.UserRoleRepository;
+import com.boa.apid.core.organization.entity.Employee;
 import com.boa.apid.core.organization.entity.EmploymentStatus;
 import com.boa.apid.core.organization.repository.EmployeeRepository;
 import com.boa.apid.core.skills.entity.Skill;
@@ -62,6 +63,8 @@ class MentoringCollaborationServiceTest {
     @Mock private UserRoleRepository userRoleRepository;
     @Mock private TrainerAuthorizationRepository trainerAuthorizationRepository;
     @Mock private TrainerAuthorizationSkillStatusRepository skillStatusRepository;
+    @Mock private com.boa.apid.core.scheduling.service.ScheduleReservationService reservationService;
+    @Mock private com.boa.apid.coaching.session.video.VideoMeetingProvider videoMeetingProvider;
 
     @InjectMocks
     private MentoringCollaborationService service;
@@ -102,6 +105,9 @@ class MentoringCollaborationServiceTest {
         when(relationshipRepository.findDetailedById(7L)).thenReturn(Optional.of(relationship));
         when(userRoleRepository.existsActiveMentorRoleByUserId(1L)).thenReturn(true);
         when(employeeRepository.existsByUserIdAndEmploymentStatus(1L, EmploymentStatus.ACTIVE)).thenReturn(true);
+        Employee mentorEmp = new Employee();
+        org.springframework.test.util.ReflectionTestUtils.setField(mentorEmp, "id", 50L);
+        when(employeeRepository.findByUserId(1L)).thenReturn(Optional.of(mentorEmp));
         when(sessionRepository.save(any(MentoringSession.class)))
                 .thenAnswer(invocation -> invocation.getArgument(0));
         when(employeeRepository.findDetailedByUserIdIn(any())).thenReturn(List.of());

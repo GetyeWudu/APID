@@ -1,13 +1,17 @@
 package com.boa.apid.mentoring.pairing.controller;
 
+import com.boa.apid.coaching.session.dto.SessionJoinTokenDto;
 import com.boa.apid.common.response.ApiResponse;
 import com.boa.apid.core.auth.security.ApidUserPrincipal;
+import com.boa.apid.mentoring.pairing.dto.CancelMentoringSessionRequest;
 import com.boa.apid.mentoring.pairing.dto.MentoringChatHistoryDto;
 import com.boa.apid.mentoring.pairing.dto.MentoringChatMessageDto;
 import com.boa.apid.mentoring.pairing.dto.MentoringChatMessageRequest;
 import com.boa.apid.mentoring.pairing.dto.MentoringPairingDetailDto;
 import com.boa.apid.mentoring.pairing.dto.MentoringSessionDto;
 import com.boa.apid.mentoring.pairing.dto.MentoringSessionRequest;
+import com.boa.apid.mentoring.pairing.dto.ProposeMentoringRescheduleRequest;
+import com.boa.apid.mentoring.pairing.dto.RespondMentoringSessionRequest;
 import com.boa.apid.mentoring.pairing.service.MentoringCollaborationService;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -51,6 +55,67 @@ public class MentoringCollaborationController {
         return ApiResponse.ok(
                 "Mentoring session scheduled",
                 collaborationService.createSession(relationshipId, request, actor)
+        );
+    }
+
+    @PostMapping("/sessions/{sessionId}/respond")
+    public ApiResponse<MentoringSessionDto> respondSession(
+            @PathVariable Long relationshipId,
+            @PathVariable Long sessionId,
+            @RequestBody RespondMentoringSessionRequest request,
+            @AuthenticationPrincipal ApidUserPrincipal actor
+    ) {
+        return ApiResponse.ok(
+                request.accept() ? "Mentoring session confirmed" : "Mentoring session declined",
+                collaborationService.respondSession(relationshipId, sessionId, request, actor)
+        );
+    }
+
+    @PostMapping("/sessions/{sessionId}/reschedule")
+    public ApiResponse<MentoringSessionDto> proposeReschedule(
+            @PathVariable Long relationshipId,
+            @PathVariable Long sessionId,
+            @RequestBody ProposeMentoringRescheduleRequest request,
+            @AuthenticationPrincipal ApidUserPrincipal actor
+    ) {
+        return ApiResponse.ok(
+                "Reschedule proposal submitted",
+                collaborationService.proposeReschedule(relationshipId, sessionId, request, actor)
+        );
+    }
+
+    @PostMapping("/sessions/{sessionId}/respond-reschedule")
+    public ApiResponse<MentoringSessionDto> respondReschedule(
+            @PathVariable Long relationshipId,
+            @PathVariable Long sessionId,
+            @RequestParam(defaultValue = "true") boolean accept,
+            @AuthenticationPrincipal ApidUserPrincipal actor
+    ) {
+        return ApiResponse.ok(
+                accept ? "Reschedule accepted and session updated" : "Reschedule proposal declined",
+                collaborationService.respondReschedule(relationshipId, sessionId, accept, actor)
+        );
+    }
+
+    @GetMapping("/sessions/{sessionId}/join-token")
+    public ApiResponse<SessionJoinTokenDto> getJoinToken(
+            @PathVariable Long relationshipId,
+            @PathVariable Long sessionId,
+            @AuthenticationPrincipal ApidUserPrincipal actor
+    ) {
+        return ApiResponse.ok(collaborationService.getJoinToken(relationshipId, sessionId, actor));
+    }
+
+    @PostMapping("/sessions/{sessionId}/cancel")
+    public ApiResponse<MentoringSessionDto> cancelSession(
+            @PathVariable Long relationshipId,
+            @PathVariable Long sessionId,
+            @RequestBody CancelMentoringSessionRequest request,
+            @AuthenticationPrincipal ApidUserPrincipal actor
+    ) {
+        return ApiResponse.ok(
+                "Mentoring session cancelled",
+                collaborationService.cancelSession(relationshipId, sessionId, request, actor)
         );
     }
 

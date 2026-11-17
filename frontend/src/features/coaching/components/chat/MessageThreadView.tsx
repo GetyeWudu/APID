@@ -49,7 +49,7 @@ export const MessageThreadView: React.FC<MessageThreadViewProps> = ({
 
   // Auto-scroll to bottom when messages update
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+    bottomRef.current?.scrollIntoView?.({ behavior: 'smooth' });
   }, [messages]);
 
   const formatFileSize = (bytes: number): string => {

@@ -8,11 +8,36 @@ export interface ApiResponse<T> {
 }
 
 export interface ApiErrorPayload {
-  success: false;
-  errorCode: string;
-  message: string;
+  success?: boolean;
+  errorCode?: string;
+  message?: string;
+  error?: {
+    code?: string;
+    message?: string;
+    fieldErrors?: Record<string, string>;
+  };
   fieldErrors?: Record<string, string>;
-  timestamp: string;
+  timestamp?: string;
+}
+
+export function extractApiErrorMessage(error: unknown, fallback = 'An unexpected error occurred'): string {
+  if (axios.isAxiosError<ApiErrorPayload>(error)) {
+    const data = error.response?.data;
+    if (data?.error?.message) {
+      return data.error.message;
+    }
+    if (data?.message) {
+      return data.message;
+    }
+    if (typeof data === 'string' && data.trim()) {
+      return data;
+    }
+    return error.message || fallback;
+  }
+  if (error instanceof Error) {
+    return error.message;
+  }
+  return fallback;
 }
 
 // Access token kept strictly in memory (never localStorage) to mitigate XSS token theft

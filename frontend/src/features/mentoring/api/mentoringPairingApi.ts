@@ -89,7 +89,15 @@ export interface MentoringPairingDetail {
 }
 
 export type MentoringDeliveryMode = 'ONLINE' | 'IN_PERSON' | 'HYBRID';
-export type MentoringSessionStatus = 'SCHEDULED' | 'COMPLETED' | 'MISSED' | 'CANCELLED' | 'RESCHEDULED';
+export type MentoringSessionStatus =
+  | 'SCHEDULED'
+  | 'CONFIRMED'
+  | 'DECLINED'
+  | 'RESCHEDULE_PROPOSED'
+  | 'COMPLETED'
+  | 'MISSED'
+  | 'CANCELLED'
+  | 'RESCHEDULED';
 
 export interface MentoringSession {
   id: number;
@@ -100,7 +108,14 @@ export interface MentoringSession {
   scheduledEnd: string;
   deliveryMode: MentoringDeliveryMode;
   meetingUrl: string | null;
+  location?: string | null;
   status: MentoringSessionStatus;
+  declineReason?: string | null;
+  rescheduleReason?: string | null;
+  proposedStart?: string | null;
+  proposedEnd?: string | null;
+  respondedAt?: string | null;
+  cancellationReason?: string | null;
   createdByUserId: number;
   createdByName: string;
   createdAt: string;
@@ -191,12 +206,84 @@ export const mentoringPairingApi = {
       scheduledEnd: string;
       deliveryMode: MentoringDeliveryMode;
       meetingUrl?: string;
+      location?: string;
     }
   ): Promise<MentoringSession> {
     const response = await apiClient.post<ApiResponse<MentoringSession>>(
       `/mentoring/pairing/relationships/${relationshipId}/sessions`,
       input
     );
+    return response.data.data;
+  },
+
+  async respondSession(
+    relationshipId: number,
+    sessionId: number,
+    input: { accept: boolean; declineReason?: string }
+  ): Promise<MentoringSession> {
+    const response = await apiClient.post<ApiResponse<MentoringSession>>(
+      `/mentoring/pairing/relationships/${relationshipId}/sessions/${sessionId}/respond`,
+      input
+    );
+    return response.data.data;
+  },
+
+  async proposeReschedule(
+    relationshipId: number,
+    sessionId: number,
+    input: { proposedStart: string; proposedEnd: string; reason: string }
+  ): Promise<MentoringSession> {
+    const response = await apiClient.post<ApiResponse<MentoringSession>>(
+      `/mentoring/pairing/relationships/${relationshipId}/sessions/${sessionId}/reschedule`,
+      input
+    );
+    return response.data.data;
+  },
+
+  async respondReschedule(
+    relationshipId: number,
+    sessionId: number,
+    accept: boolean
+  ): Promise<MentoringSession> {
+    const response = await apiClient.post<ApiResponse<MentoringSession>>(
+      `/mentoring/pairing/relationships/${relationshipId}/sessions/${sessionId}/respond-reschedule`,
+      null,
+      { params: { accept } }
+    );
+    return response.data.data;
+  },
+
+  async cancelSession(
+    relationshipId: number,
+    sessionId: number,
+    reason: string
+  ): Promise<MentoringSession> {
+    const response = await apiClient.post<ApiResponse<MentoringSession>>(
+      `/mentoring/pairing/relationships/${relationshipId}/sessions/${sessionId}/cancel`,
+      { reason }
+    );
+    return response.data.data;
+  },
+
+  async getJoinToken(
+    relationshipId: number,
+    sessionId: number
+  ): Promise<{
+    roomName: string;
+    token: string;
+    roomUrlWithToken: string;
+    expiresAt: string;
+    isMock: boolean;
+  }> {
+    const response = await apiClient.get<
+      ApiResponse<{
+        roomName: string;
+        token: string;
+        roomUrlWithToken: string;
+        expiresAt: string;
+        isMock: boolean;
+      }>
+    >(`/mentoring/pairing/relationships/${relationshipId}/sessions/${sessionId}/join-token`);
     return response.data.data;
   },
 

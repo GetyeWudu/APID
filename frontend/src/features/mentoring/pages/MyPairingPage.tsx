@@ -251,13 +251,22 @@ export function MyPairingPage() {
                       {item.message}
                     </p>
                   )}
-                  <Link
-                    to={`/mentoring/pairing/${item.relationshipId}`}
-                    className="apid-btn apid-btn-outline apid-btn-sm"
-                    style={{ marginTop: '0.9rem' }}
-                  >
-                    View details <ArrowRight size={15} />
-                  </Link>
+                  <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.9rem', alignItems: 'center', flexWrap: 'wrap' }}>
+                    <Link
+                      to={`/mentoring/pairing/${item.relationshipId}`}
+                      className="apid-btn apid-btn-outline apid-btn-sm"
+                    >
+                      View details <ArrowRight size={15} />
+                    </Link>
+                    {item.currentUserRole === 'MENTOR' && item.relationshipStatus === 'ACTIVE' && (
+                      <Link
+                        to={`/mentoring?view=trainer-sessions&relationshipId=${item.relationshipId}`}
+                        className="apid-btn apid-btn-primary apid-btn-sm"
+                      >
+                        <CalendarDays size={14} /> Schedule Session
+                      </Link>
+                    )}
+                  </div>
                 </article>
               );
             })}

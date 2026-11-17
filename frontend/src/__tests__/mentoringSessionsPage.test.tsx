@@ -1,10 +1,10 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import * as AuthContextModule from '../app/AuthContext';
 import type { UserProfile } from '../features/auth/types/auth.types';
-import { mentoringPairingApi } from '../features/mentoring/api/mentoringPairingApi';
+import { mentoringPairingApi, type MentoringSession } from '../features/mentoring/api/mentoringPairingApi';
 import { MentoringSessionsPage } from '../features/mentoring/pages/MentoringSessionsPage';
 import { ToastProvider } from '../shared/components/ui';
 
@@ -23,6 +23,45 @@ function buildAuthMock(user: UserProfile | null) {
   };
 }
 
+const mockRelationships = [
+  {
+    memberId: 1,
+    relationshipId: 77,
+    requestId: 201,
+    requestType: 'INDIVIDUAL' as const,
+    relationshipStatus: 'ACTIVE' as const,
+    memberStatus: 'ACTIVE' as const,
+    currentUserRole: 'MENTOR' as const,
+    mentorUserId: 7,
+    mentorName: 'Mentor One',
+    traineeUserId: 8,
+    traineeName: 'Trainee One',
+    skillId: null,
+    skillName: 'Leadership',
+    message: null,
+    startedAt: '2026-04-20T08:00:00Z',
+    joinedAt: '2026-04-20T08:00:00Z',
+    endedAt: null,
+    memberEndedAt: null,
+  },
+];
+
+const mockScheduledSession: MentoringSession = {
+  id: 101,
+  relationshipId: 77,
+  title: 'Core Banking Fundamentals',
+  agenda: 'Review branch ledger flows and posting controls',
+  scheduledStart: '2026-11-20T06:00:00Z',
+  scheduledEnd: '2026-11-20T06:45:00Z',
+  deliveryMode: 'ONLINE',
+  meetingUrl: 'https://daily.co/boa-mentoring-101',
+  location: null,
+  status: 'SCHEDULED',
+  createdByUserId: 7,
+  createdByName: 'Mentor One',
+  createdAt: '2026-11-17T08:00:00Z',
+};
+
 describe('MentoringSessionsPage', () => {
   beforeEach(() => {
     vi.restoreAllMocks();
@@ -35,33 +74,11 @@ describe('MentoringSessionsPage', () => {
         permissions: ['EMPLOYEE_PORTAL_ACCESS'],
       })
     );
-    vi.spyOn(mentoringPairingApi, 'listMyRelationships').mockResolvedValue([
-      {
-        memberId: 1,
-        relationshipId: 77,
-        requestId: 201,
-        requestType: 'INDIVIDUAL',
-        relationshipStatus: 'ACTIVE',
-        memberStatus: 'ACTIVE',
-        currentUserRole: 'MENTOR',
-        mentorUserId: 7,
-        mentorName: 'Mentor One',
-        traineeUserId: 8,
-        traineeName: 'Trainee One',
-        skillId: null,
-        skillName: 'Leadership',
-        message: null,
-        startedAt: '2026-04-20T08:00:00Z',
-        joinedAt: '2026-04-20T08:00:00Z',
-        endedAt: null,
-        memberEndedAt: null,
-      },
-    ]);
-    vi.spyOn(mentoringPairingApi, 'listMySessions').mockResolvedValue([]);
+    vi.spyOn(mentoringPairingApi, 'listMyRelationships').mockResolvedValue(mockRelationships);
+    vi.spyOn(mentoringPairingApi, 'listMySessions').mockResolvedValue([mockScheduledSession]);
   });
 
-  it('creates a local session plan without calling the session API', async () => {
-    const createSession = vi.spyOn(mentoringPairingApi, 'createSession');
+  it('renders scheduled mentoring sessions with Ethiopian sunrise clock details', async () => {
     const queryClient = new QueryClient({
       defaultOptions: { queries: { retry: false } },
     });
@@ -69,39 +86,141 @@ describe('MentoringSessionsPage', () => {
     render(
       <QueryClientProvider client={queryClient}>
         <ToastProvider>
-          <MemoryRouter initialEntries={['/mentoring?relationshipId=77']}>
+          <MemoryRouter initialEntries={['/mentoring/sessions']}>
             <MentoringSessionsPage view="mentor" />
           </MemoryRouter>
         </ToastProvider>
       </QueryClientProvider>
     );
 
-    expect(await screen.findByRole('link', { name: 'Back to Pairing Overview' })).toHaveAttribute(
-      'href',
-      '/mentoring/pairing/77'
-    );
-    fireEvent.change(await screen.findByLabelText('Session title'), {
-      target: { value: 'Career goals' },
-    });
-    fireEvent.change(screen.getByLabelText('What will you work on?'), {
-      target: { value: 'Set career goals and identify next steps.' },
-    });
-    fireEvent.change(screen.getByLabelText('Starts'), {
-      target: { value: '2099-06-01T09:00' },
-    });
-    fireEvent.change(screen.getByLabelText('Ends'), {
-      target: { value: '2099-06-01T10:00' },
-    });
-    fireEvent.change(screen.getByLabelText('How will you meet?'), {
-      target: { value: 'PHONE_CALL' },
-    });
-    fireEvent.click(screen.getByRole('button', { name: 'Add session plan' }));
+    expect(await screen.findByText('Core Banking Fundamentals')).toBeInTheDocument();
+    expect(screen.getByText(/Trainee One/i)).toBeInTheDocument();
+    expect(screen.getByText('AWAITING TRAINEE RSVP')).toBeInTheDocument();
+  });
 
-    expect(await screen.findByTestId('local-session-plan')).toHaveTextContent('Career goals');
-    expect(screen.getByTestId('local-session-plan')).toHaveTextContent(
-      'Set career goals and identify next steps.'
+  it('lets trainees view sessions and provides RSVP actions (Accept, Propose New Time, Decline)', async () => {
+    vi.spyOn(AuthContextModule, 'useAuth').mockReturnValue(
+      buildAuthMock({
+        id: 8,
+        username: 'trainee',
+        mustChangePassword: false,
+        roles: ['Employee'],
+        permissions: ['EMPLOYEE_PORTAL_ACCESS'],
+      })
     );
-    expect(screen.getByTestId('local-session-plan')).toHaveTextContent('Phone call');
-    expect(createSession).not.toHaveBeenCalled();
+    vi.spyOn(mentoringPairingApi, 'listMyRelationships').mockResolvedValue([
+      {
+        ...mockRelationships[0],
+        currentUserRole: 'TRAINEE' as const,
+      },
+    ]);
+
+    const respondSpy = vi.spyOn(mentoringPairingApi, 'respondSession').mockResolvedValue({
+      ...mockScheduledSession,
+      status: 'CONFIRMED',
+    });
+
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <ToastProvider>
+          <MemoryRouter initialEntries={['/mentoring/sessions']}>
+            <MentoringSessionsPage view="trainee" />
+          </MemoryRouter>
+        </ToastProvider>
+      </QueryClientProvider>
+    );
+
+    expect(await screen.findByText('Core Banking Fundamentals')).toBeInTheDocument();
+    const acceptBtn = screen.getByRole('button', { name: /Accept Session/i });
+    expect(acceptBtn).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Propose New Time/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Decline/i })).toBeInTheDocument();
+
+    fireEvent.click(acceptBtn);
+    await waitFor(() => {
+      expect(respondSpy).toHaveBeenCalledWith(77, 101, { accept: true });
+    });
+  });
+
+  it('allows mentors to submit real session scheduling via API', async () => {
+    const createSessionSpy = vi.spyOn(mentoringPairingApi, 'createSession').mockResolvedValue({
+      ...mockScheduledSession,
+      id: 102,
+      title: 'Branch Risk Architecture',
+    });
+
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+
+    const { container } = render(
+      <QueryClientProvider client={queryClient}>
+        <ToastProvider>
+          <MemoryRouter initialEntries={['/mentoring/sessions?relationshipId=77']}>
+            <MentoringSessionsPage view="mentor" />
+          </MemoryRouter>
+        </ToastProvider>
+      </QueryClientProvider>
+    );
+
+    const titleInput = await screen.findByPlaceholderText('e.g. Core Banking System Orientation');
+    fireEvent.change(titleInput, { target: { value: 'Branch Risk Architecture' } });
+
+    const dateInput = container.querySelector('input[type="date"]');
+    expect(dateInput).toBeTruthy();
+    if (dateInput) {
+      fireEvent.change(dateInput, { target: { value: '2099-06-05' } });
+    }
+
+    const form = container.querySelector('form');
+    expect(form).toBeTruthy();
+    if (form) {
+      fireEvent.submit(form);
+    }
+
+    await waitFor(() => {
+      expect(createSessionSpy).toHaveBeenCalled();
+    });
+  });
+
+  it('renders "Join Daily.co Video" button and launches video room modal', async () => {
+    const getJoinTokenSpy = vi.spyOn(mentoringPairingApi, 'getJoinToken').mockResolvedValue({
+      roomUrlWithToken: 'https://amakari.daily.co/apid-mentoring-77-101?t=mock-token',
+      token: 'mock-token',
+      expiresAt: '2026-11-20T08:00:00Z',
+      isMock: true,
+      roomName: 'apid-mentoring-77-101',
+    });
+
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <ToastProvider>
+          <MemoryRouter initialEntries={['/mentoring/sessions']}>
+            <MentoringSessionsPage view="mentor" />
+          </MemoryRouter>
+        </ToastProvider>
+      </QueryClientProvider>
+    );
+
+    const joinBtn = await screen.findByRole('button', { name: /Join Daily\.co Video/i });
+    expect(joinBtn).toBeInTheDocument();
+
+    fireEvent.click(joinBtn);
+
+    await waitFor(() => {
+      expect(getJoinTokenSpy).toHaveBeenCalledWith(77, 101);
+    });
+
+    expect(await screen.findByText(/Daily\.co Mentoring Video Session Active/i)).toBeInTheDocument();
+    expect(screen.getByText('apid-mentoring-77-101')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Leave Meeting/i })).toBeInTheDocument();
   });
 });

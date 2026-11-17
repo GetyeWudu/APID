@@ -10,6 +10,17 @@ public record MentoringSessionRequest(
         Instant scheduledStart,
         Instant scheduledEnd,
         MentoringDeliveryMode deliveryMode,
-        String meetingUrl
+        String meetingUrl,
+        String location
 ) {
+    public MentoringSessionRequest(
+            String title,
+            String agenda,
+            Instant scheduledStart,
+            Instant scheduledEnd,
+            MentoringDeliveryMode deliveryMode,
+            String meetingUrl
+    ) {
+        this(title, agenda, scheduledStart, scheduledEnd, deliveryMode, meetingUrl, null);
+    }
 }

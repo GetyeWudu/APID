@@ -35,7 +35,16 @@ type MentoringViewKey =
 export function MentoringHomePage() {
   const { user, hasPermission, hasAnyPermission } = useAuth();
   const [searchParams] = useSearchParams();
-  const isMentor = user?.roles.some((role) => role.trim().toLowerCase() === 'mentor') ?? false;
+
+  const relationshipsQuery = useQuery({
+    queryKey: ['mentoring', 'pairing', 'relationships', user?.id],
+    queryFn: mentoringPairingApi.listMyRelationships,
+    enabled: hasAnyPermission(EMPLOYEE_WORKSPACE_PERMISSIONS),
+  });
+
+  const isMentor =
+    (user?.roles.some((role) => role.trim().toLowerCase() === 'mentor') ?? false) ||
+    Boolean(relationshipsQuery.data?.some((pair) => pair.currentUserRole === 'MENTOR'));
 
   const requestedView = searchParams.get('view') as MentoringViewKey | null;
   const activeView: MentoringViewKey =
