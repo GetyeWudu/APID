@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { BookOpen, MessageSquare, Search, Users } from 'lucide-react';
+import { ArrowLeft, BookOpen, MessageSquare, Search, Users } from 'lucide-react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../../../app/AuthContext';
 import { EMPLOYEE_WORKSPACE_PERMISSIONS } from '../../../shared/auth/workspaceResolver';
@@ -66,19 +66,40 @@ export function MentoringCollaborationPage({ mode }: { mode: CollaborationMode }
   const requestedRelationshipId = searchParams.get('relationshipId')
     ? Number(searchParams.get('relationshipId'))
     : null;
+  const selectedRelationshipId =
+    requestedRelationshipId !== null &&
+    Number.isSafeInteger(requestedRelationshipId) &&
+    requestedRelationshipId > 0
+      ? requestedRelationshipId
+      : null;
+  const pairingOverviewPath = selectedRelationshipId
+    ? `/mentoring/pairing/${selectedRelationshipId}`
+    : null;
 
   if (isChat) {
     return (
       <div className="boa-stack mentoring-hub mentoring-hub--chat">
         <PageHeader
-          title="Mentoring Chat"
-          subtitle="Collaborate with your mentors, cohort class groups, and fellow trainees."
+          title={selectedRelationshipId ? 'Pair Chat' : 'Mentoring Chat'}
+          subtitle={
+            selectedRelationshipId
+              ? 'Chat with this mentoring pair or class.'
+              : 'Collaborate with your mentors, cohort class groups, and fellow trainees.'
+          }
           source="live"
+          actions={
+            pairingOverviewPath ? (
+              <Link to={pairingOverviewPath} className="apid-btn apid-btn-outline apid-btn-sm">
+                <ArrowLeft size={15} /> Back to Pairing Overview
+              </Link>
+            ) : undefined
+          }
         />
-        <MentoringChatHub
-          currentUserId={user?.id}
-          initialRelationshipId={requestedRelationshipId}
-        />
+        {selectedRelationshipId ? (
+          <MentoringPairChatPanel relationshipId={selectedRelationshipId} showPairingLink={false} />
+        ) : (
+          <MentoringChatHub currentUserId={user?.id} />
+        )}
       </div>
     );
   }
@@ -131,7 +152,18 @@ export function MentoringCollaborationPage({ mode }: { mode: CollaborationMode }
 
   return (
     <div className={`boa-stack mentoring-hub mentoring-hub--${mode}`}>
-      <PageHeader title={pageTitle} subtitle={pageSubtitle} source="live" />
+      <PageHeader
+        title={pageTitle}
+        subtitle={pageSubtitle}
+        source="live"
+        actions={
+          pairingOverviewPath ? (
+            <Link to={pairingOverviewPath} className="apid-btn apid-btn-outline apid-btn-sm">
+              <ArrowLeft size={15} /> Back to Pairing Overview
+            </Link>
+          ) : undefined
+        }
+      />
 
       {pairings.length === 0 ? (
         <section className="apid-card">

@@ -76,6 +76,10 @@ describe('MentoringSessionsPage', () => {
       </QueryClientProvider>
     );
 
+    expect(await screen.findByRole('link', { name: 'Back to Pairing Overview' })).toHaveAttribute(
+      'href',
+      '/mentoring/pairing/77'
+    );
     fireEvent.change(await screen.findByLabelText('Session title'), {
       target: { value: 'Career goals' },
     });

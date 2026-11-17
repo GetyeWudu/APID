@@ -101,26 +101,45 @@ describe('Mentoring collaboration pages', () => {
         endedAt: null,
       }],
     });
-    const listMessages = vi.spyOn(mentoringPairingApi, 'listMessages').mockResolvedValue({
-      messages: [{
+    vi.spyOn(mentoringPairingApi, 'getRelationshipConversation').mockResolvedValue({
+      id: 82,
+      conversationType: 'DIRECT',
+      contextType: 'MENTORING_RELATIONSHIP_DIRECT',
+      mentoringRelationshipId: 42,
+      title: 'Chat with your pairing',
+      status: 'ACTIVE',
+      unreadCount: 0,
+      participants: [],
+      pinnedMessages: [],
+    });
+    vi.spyOn(mentoringPairingApi, 'markConversationRead').mockResolvedValue(undefined);
+    vi.spyOn(mentoringPairingApi, 'getMyMentoringConversations').mockResolvedValue([]);
+    const getConversationMessages = vi.spyOn(mentoringPairingApi, 'getConversationMessages').mockResolvedValue([
+      {
         id: 71,
-        relationshipId: 42,
+        conversationId: 82,
+        senderEmployeeId: 8,
         senderUserId: 8,
         senderName: 'Trainee One',
-        body: 'Ready to start?',
+        messageType: 'TEXT',
+        content: 'Ready to start?',
+        pinned: false,
+        deleted: false,
         createdAt: '2026-04-20T09:00:00Z',
-        mine: false,
-      }],
-      page: 0,
-      pageSize: 50,
-      hasMore: false,
-    });
+        attachments: [],
+      },
+    ]);
 
     renderPage('/mentoring/chat?relationshipId=42', <MentoringChatPage />);
 
+    expect(await screen.findByRole('link', { name: 'Back to Pairing Overview' })).toHaveAttribute(
+      'href',
+      '/mentoring/pairing/42'
+    );
     expect(await screen.findByText('Chat with your pairing')).toBeInTheDocument();
     expect(await screen.findByText('Ready to start?')).toBeInTheDocument();
-    expect(listMessages).toHaveBeenCalledWith(42, 0, 50);
+    expect(mentoringPairingApi.getMyMentoringConversations).not.toHaveBeenCalled();
+    expect(getConversationMessages).toHaveBeenCalledWith(82, undefined, undefined, 60);
   });
 
   it('loads shared resources for the selected relationship without adding backend behavior', async () => {
@@ -128,6 +147,10 @@ describe('Mentoring collaboration pages', () => {
 
     renderPage('/mentoring/resources?relationshipId=42', <MentoringResourcesPage />);
 
+    expect(await screen.findByRole('link', { name: 'Back to Pairing Overview' })).toHaveAttribute(
+      'href',
+      '/mentoring/pairing/42'
+    );
     expect(await screen.findByText('Share a resource')).toBeInTheDocument();
     expect(await screen.findByText('No resources yet')).toBeInTheDocument();
     expect(listResources).toHaveBeenCalledWith(42);

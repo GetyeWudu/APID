@@ -145,16 +145,6 @@ export function MentoringPairingDetailPage() {
                 <Video size={15} /> Join meeting
               </a>
             )}
-
-            {activeTab === 'progress' && (
-              <section className="apid-card boa-stack">
-                <div>
-                  <h2 className="boa-card-title">Progress and milestones</h2>
-                  <p className="boa-card-subtitle">Record and review learning milestones, observations, and next steps.</p>
-                </div>
-                <MentoringProgressPanel relationshipId={relationshipId} canAdd={detail.status === 'ACTIVE'} />
-              </section>
-            )}
           </div>
           {session.agenda && <p className="boa-muted">{session.agenda}</p>}
         </article>
@@ -349,7 +339,10 @@ export function MentoringPairingDetailPage() {
 
       {activeTab === 'sessions' && (
         <div className="boa-stack">
-          <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', gap: '0.5rem', flexWrap: 'wrap' }}>
+            <Link to={`/mentoring/pairing/${relationshipId}`} className="apid-btn apid-btn-outline apid-btn-sm">
+              <ArrowLeft size={15} /> Back to overview
+            </Link>
             <Link to={sessionsPath} className="apid-btn apid-btn-primary apid-btn-sm">
               <CalendarDays size={15} /> {sessionsAction}
             </Link>
@@ -379,6 +372,23 @@ export function MentoringPairingDetailPage() {
               {renderSessionCards(previousSessions)}
             </section>
           )}
+        </div>
+      )}
+
+      {activeTab === 'progress' && (
+        <div className="boa-stack">
+          <div>
+            <Link to={`/mentoring/pairing/${relationshipId}`} className="apid-btn apid-btn-outline apid-btn-sm">
+              <ArrowLeft size={15} /> Back to overview
+            </Link>
+          </div>
+          <section className="apid-card boa-stack">
+            <div>
+              <h2 className="boa-card-title">Progress and milestones</h2>
+              <p className="boa-card-subtitle">Record and review learning milestones, observations, and next steps.</p>
+            </div>
+            <MentoringProgressPanel relationshipId={relationshipId} canAdd={detail.status === 'ACTIVE'} />
+          </section>
         </div>
       )}
     </div>

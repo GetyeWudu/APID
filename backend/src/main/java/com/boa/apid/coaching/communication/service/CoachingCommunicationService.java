@@ -14,6 +14,7 @@ import com.boa.apid.mentoring.pairing.entity.MentoringRelationship;
 import com.boa.apid.mentoring.pairing.entity.MentoringRelationshipMember;
 import com.boa.apid.mentoring.pairing.entity.MentoringRelationshipMemberStatus;
 import com.boa.apid.mentoring.pairing.entity.MentoringRelationshipStatus;
+import com.boa.apid.mentoring.pairing.entity.MentoringRequestType;
 import com.boa.apid.mentoring.pairing.repository.MentoringRelationshipMemberRepository;
 import com.boa.apid.mentoring.pairing.repository.MentoringRelationshipRepository;
 import org.springframework.data.domain.PageRequest;
@@ -84,6 +85,40 @@ public class CoachingCommunicationService {
                         Comparator.nullsLast(Comparator.reverseOrder())
                 ))
                 .collect(Collectors.toList());
+    }
+
+    @Transactional(readOnly = true)
+    public List<ConversationSummaryDto> getMyMentoringConversations(Long userId) {
+        if (userId == null) {
+            return Collections.emptyList();
+        }
+        Set<Long> individualRelationshipIds = getVisibleRelationshipIds(userId, MentoringRequestType.INDIVIDUAL);
+        Set<Long> groupRelationshipIds = getVisibleRelationshipIds(userId, MentoringRequestType.GROUP);
+
+        return getMyConversations(userId).stream()
+                .filter(conversation -> conversation.getContextType() != null
+                        && conversation.getContextType().name().startsWith("MENTORING_"))
+                .filter(conversation -> {
+                    Long relationshipId = conversation.getMentoringRelationshipId();
+                    if (conversation.getContextType() == ConversationContextType.MENTORING_RELATIONSHIP_DIRECT) {
+                        return relationshipId != null && individualRelationshipIds.contains(relationshipId);
+                    }
+                    if (conversation.getContextType() == ConversationContextType.MENTORING_COHORT_GROUP) {
+                        return relationshipId != null && groupRelationshipIds.contains(relationshipId);
+                    }
+                    return true;
+                })
+                .collect(Collectors.toList());
+    }
+
+    private Set<Long> getVisibleRelationshipIds(Long userId, MentoringRequestType requestType) {
+        if (userId == null) {
+            return Collections.emptySet();
+        }
+        return mentoringRelationshipMemberRepository.findVisibleToUser(userId).stream()
+                .filter(member -> member.getRelationship().getRequest().getRequestType() == requestType)
+                .map(member -> member.getRelationship().getId())
+                .collect(Collectors.toSet());
     }
 
     /**
@@ -396,12 +431,18 @@ public class CoachingCommunicationService {
     }
 
     /**
-     * Finds or auto-provisions a direct 1:1 conversation for a MentoringRelationship.
+     * Finds or provisions the dedicated direct or group conversation for a mentoring relationship.
      */
     @Transactional
     public ConversationSummaryDto getOrCreateMentoringRelationshipConversation(Long relationshipId, Long userId) {
+        MentoringRelationship relationship = mentoringRelationshipRepository.findDetailedById(relationshipId)
+                .orElseThrow(() -> new IllegalArgumentException("Mentoring relationship not found: " + relationshipId));
+        boolean isGroup = relationship.getRequest().getRequestType() == MentoringRequestType.GROUP;
+        ConversationContextType contextType = isGroup
+                ? ConversationContextType.MENTORING_COHORT_GROUP
+                : ConversationContextType.MENTORING_RELATIONSHIP_DIRECT;
         Optional<CoachingConversation> existing = conversationRepository.findByMentoringRelationshipIdAndContextType(
-                relationshipId, ConversationContextType.MENTORING_RELATIONSHIP_DIRECT
+                relationshipId, contextType
         );
 
         if (existing.isPresent()) {
@@ -409,14 +450,14 @@ public class CoachingCommunicationService {
             return buildConversationSummary(existing.get(), userId);
         }
 
-        MentoringRelationship relationship = mentoringRelationshipRepository.findById(relationshipId)
-                .orElseThrow(() -> new IllegalArgumentException("Mentoring relationship not found: " + relationshipId));
-
         if (relationship.getStatus() != MentoringRelationshipStatus.ACTIVE) {
             throw new IllegalStateException("Cannot start chat on an inactive mentoring relationship.");
         }
 
-        List<MentoringRelationshipMember> members = mentoringRelationshipMemberRepository.findByRelationship_IdOrderByJoinedAtAsc(relationshipId);
+        List<MentoringRelationshipMember> members = mentoringRelationshipMemberRepository
+                .findByRelationship_IdOrderByJoinedAtAsc(relationshipId).stream()
+                .filter(member -> member.getStatus() == MentoringRelationshipMemberStatus.ACTIVE)
+                .toList();
         if (members.isEmpty()) {
             throw new IllegalStateException("Mentoring relationship has no assigned trainees.");
         }
@@ -431,11 +472,14 @@ public class CoachingCommunicationService {
                 .orElseThrow(() -> new IllegalStateException("Trainee does not have a linked employee profile."));
 
         CoachingConversation conv = new CoachingConversation();
-        conv.setConversationType(ConversationType.DIRECT);
-        conv.setContextType(ConversationContextType.MENTORING_RELATIONSHIP_DIRECT);
+        conv.setConversationType(isGroup ? ConversationType.GROUP : ConversationType.DIRECT);
+        conv.setContextType(contextType);
         conv.setMentoringRelationshipId(relationshipId);
         conv.setSkillId(primaryMember.getSkill() != null ? primaryMember.getSkill().getId() : null);
-        conv.setTitle("Mentoring · " + mentorEmp.getFullName() + " & " + traineeEmp.getFullName());
+        conv.setTitle(isGroup
+                ? "Class: " + (primaryMember.getSkill() != null ? primaryMember.getSkill().getName() : "Mentoring Skill")
+                        + " (" + mentorEmp.getFullName() + ")"
+                : "Mentoring · " + mentorEmp.getFullName() + " & " + traineeEmp.getFullName());
         conv.setStatus(ConversationStatus.ACTIVE);
         conv.setCreatedByUserId(userId);
 
@@ -450,19 +494,17 @@ public class CoachingCommunicationService {
         );
         participantRepository.save(trainerParticipant);
 
-        // Add Trainee participants (all active trainees in this relationship)
+        // Add only active trainees from this relationship.
         for (MentoringRelationshipMember member : members) {
-            if (member.getStatus() == MentoringRelationshipMemberStatus.ACTIVE) {
-                employeeRepository.findByUserId(member.getTraineeUser().getId()).ifPresent(tEmp -> {
-                    ConversationParticipant traineeParticipant = new ConversationParticipant(
-                            savedConv.getId(),
-                            tEmp.getId(),
-                            member.getTraineeUser().getId(),
-                            ConversationParticipantRole.TRAINEE
-                    );
-                    participantRepository.save(traineeParticipant);
-                });
-            }
+            employeeRepository.findByUserId(member.getTraineeUser().getId()).ifPresent(tEmp -> {
+                ConversationParticipant traineeParticipant = new ConversationParticipant(
+                        savedConv.getId(),
+                        tEmp.getId(),
+                        member.getTraineeUser().getId(),
+                        ConversationParticipantRole.TRAINEE
+                );
+                participantRepository.save(traineeParticipant);
+            });
         }
 
         accessService.verifyParticipantForRead(savedConv.getId(), userId);
@@ -470,8 +512,7 @@ public class CoachingCommunicationService {
     }
 
     /**
-     * Ensures that all mentoring conversations (1:1 relationship conversations and cohort class groups)
-     * are created and all active participants are present.
+     * Ensures that each active mentoring relationship has its own correctly scoped conversation.
      */
     @Transactional
     public void ensureMentoringConversationsForUser(Long userId) {
@@ -489,90 +530,12 @@ public class CoachingCommunicationService {
             return;
         }
 
-        // 1. Ensure 1:1 relationship conversation exists for each active relationship
+        // Ensure one conversation per active relationship, scoped to its individual or group request type.
+        Set<Long> processedRelationships = new HashSet<>();
         for (MentoringRelationshipMember member : myMembers) {
             Long relId = member.getRelationship().getId();
-            Optional<CoachingConversation> direct = conversationRepository.findByMentoringRelationshipIdAndContextType(
-                    relId, ConversationContextType.MENTORING_RELATIONSHIP_DIRECT
-            );
-            if (direct.isEmpty()) {
-                try {
-                    getOrCreateMentoringRelationshipConversation(relId, userId);
-                } catch (Exception ex) {
-                    // Ignore if already created or cannot be created yet
-                }
-            }
-        }
-
-        // 2. For each unique (mentorUserId, skillId), ensure MENTORING_COHORT_GROUP exists and has all active trainees
-        Set<String> processedGroups = new HashSet<>();
-        for (MentoringRelationshipMember member : myMembers) {
-            Long mentorUid = member.getMentorUser().getId();
-            Long skillId = member.getSkill() != null ? member.getSkill().getId() : null;
-            if (skillId == null) {
-                continue;
-            }
-            String key = mentorUid + "_" + skillId;
-            if (!processedGroups.add(key)) {
-                continue;
-            }
-
-            List<MentoringRelationshipMember> cohortMembers = mentoringRelationshipMemberRepository.findActiveByMentorAndSkill(mentorUid, skillId);
-            if (cohortMembers.isEmpty()) {
-                continue;
-            }
-
-            Optional<Employee> mentorEmpOpt = employeeRepository.findByUserId(mentorUid);
-            if (mentorEmpOpt.isEmpty()) {
-                continue;
-            }
-            Employee mentorEmp = mentorEmpOpt.get();
-
-            String skillName = member.getSkill() != null ? member.getSkill().getName() : "Mentoring Skill";
-            Optional<CoachingConversation> cohortConvOpt = conversationRepository.findMentoringCohortGroup(mentorUid, skillId);
-
-            CoachingConversation cohortConv;
-            if (cohortConvOpt.isEmpty()) {
-                cohortConv = new CoachingConversation();
-                cohortConv.setConversationType(ConversationType.GROUP);
-                cohortConv.setContextType(ConversationContextType.MENTORING_COHORT_GROUP);
-                cohortConv.setMentoringRelationshipId(member.getRelationship().getId());
-                cohortConv.setSkillId(skillId);
-                cohortConv.setTitle("Class: " + skillName + " (" + mentorEmp.getFullName() + ")");
-                cohortConv.setStatus(ConversationStatus.ACTIVE);
-                cohortConv.setCreatedByUserId(mentorUid);
-                cohortConv = conversationRepository.save(cohortConv);
-
-                participantRepository.save(new ConversationParticipant(
-                        cohortConv.getId(),
-                        mentorEmp.getId(),
-                        mentorUid,
-                        ConversationParticipantRole.TRAINER
-                ));
-            } else {
-                cohortConv = cohortConvOpt.get();
-            }
-
-            // Sync all active trainees into the cohort conversation
-            List<ConversationParticipant> existingParticipants = participantRepository.findAllByConversationId(cohortConv.getId());
-            Set<Long> existingEmpIds = existingParticipants.stream()
-                    .map(ConversationParticipant::getEmployeeId)
-                    .collect(Collectors.toSet());
-
-            final Long finalCohortConvId = cohortConv.getId();
-            for (MentoringRelationshipMember cm : cohortMembers) {
-                Long traineeUid = cm.getTraineeUser().getId();
-                employeeRepository.findByUserId(traineeUid).ifPresent(tEmp -> {
-                    if (!existingEmpIds.contains(tEmp.getId())) {
-                        participantRepository.save(new ConversationParticipant(
-                                finalCohortConvId,
-                                tEmp.getId(),
-                                traineeUid,
-                                ConversationParticipantRole.TRAINEE
-                        ));
-                        existingEmpIds.add(tEmp.getId());
-                    }
-                });
+            if (processedRelationships.add(relId)) {
+                getOrCreateMentoringRelationshipConversation(relId, userId);
             }
         }
     }

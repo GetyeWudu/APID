@@ -53,7 +53,7 @@ public class MentoringCommunicationController {
     }
 
     /**
-     * Resolves or auto-provisions the 1:1 direct conversation for a mentoring relationship.
+     * Resolves or provisions the dedicated conversation for an individual or group relationship.
      */
     @GetMapping("/relationships/{relationshipId}/conversation")
     public ApiResponse<ConversationSummaryDto> getRelationshipConversation(
@@ -67,18 +67,14 @@ public class MentoringCommunicationController {
     }
 
     /**
-     * Lists active conversations for the authenticated user that belong to the mentoring context.
+     * Lists active mentoring conversations that match the user's individual or group relationships.
      */
     @GetMapping("/conversations")
     public ApiResponse<List<ConversationSummaryDto>> getMyMentoringConversations(
             @AuthenticationPrincipal ApidUserPrincipal actor
     ) {
         communicationService.ensureMentoringConversationsForUser(actor.getUserId());
-        List<ConversationSummaryDto> all = communicationService.getMyConversations(actor.getUserId());
-        List<ConversationSummaryDto> mentoringOnly = all.stream()
-                .filter(c -> c.getContextType() != null && c.getContextType().name().startsWith("MENTORING_"))
-                .toList();
-        return ApiResponse.ok(mentoringOnly);
+        return ApiResponse.ok(communicationService.getMyMentoringConversations(actor.getUserId()));
     }
 
     /**

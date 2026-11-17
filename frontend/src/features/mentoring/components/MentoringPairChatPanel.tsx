@@ -23,7 +23,13 @@ function getErrorMessage(error: unknown, fallback: string) {
   return error instanceof Error ? error.message : fallback;
 }
 
-export function MentoringPairChatPanel({ relationshipId }: { relationshipId: number }) {
+export function MentoringPairChatPanel({
+  relationshipId,
+  showPairingLink = true,
+}: {
+  relationshipId: number;
+  showPairingLink?: boolean;
+}) {
   const { user } = useAuth();
   const queryClient = useQueryClient();
   const [replyToMessage, setReplyToMessage] = useState<MessageDto | null>(null);
@@ -64,6 +70,11 @@ export function MentoringPairChatPanel({ relationshipId }: { relationshipId: num
   }, [conversationId, messages]);
 
   const detail = detailQuery.data;
+  const traineeLabel = detail
+    ? detail.requestType === 'GROUP'
+      ? `${detail.trainees.length} trainee${detail.trainees.length === 1 ? '' : 's'}`
+      : `Trainee: ${detail.trainees[0]?.name ?? 'Not listed'}`
+    : '';
   const currentTrainee = detail?.trainees.find((t) => t.userId === user?.id);
   const canSendMessages =
     detail?.status === 'ACTIVE' &&
@@ -111,8 +122,7 @@ export function MentoringPairChatPanel({ relationshipId }: { relationshipId: num
             Chat with {detail.requestType === 'GROUP' ? 'your class' : 'your pairing'}
           </h2>
           <p className="boa-card-subtitle">
-            Mentor: {detail.mentorName} · {detail.trainees.length} trainee
-            {detail.trainees.length === 1 ? '' : 's'}
+            Mentor: {detail.mentorName} · {traineeLabel}
             {detail.skillName ? ` · ${detail.skillName}` : ''}
           </p>
         </div>
@@ -177,11 +187,13 @@ export function MentoringPairChatPanel({ relationshipId }: { relationshipId: num
         </p>
       )}
 
-      <div style={{ marginTop: '0.75rem' }}>
-        <Link to={`/mentoring/pairing/${relationshipId}`} className="apid-btn apid-btn-outline apid-btn-sm">
-          Back to pairing details
-        </Link>
-      </div>
+      {showPairingLink && (
+        <div style={{ marginTop: '0.75rem' }}>
+          <Link to={`/mentoring/pairing/${relationshipId}`} className="apid-btn apid-btn-outline apid-btn-sm">
+            Back to pairing details
+          </Link>
+        </div>
+      )}
     </section>
   );
 }

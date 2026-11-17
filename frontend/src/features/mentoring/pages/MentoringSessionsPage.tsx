@@ -1,7 +1,7 @@
 import { useState, type FormEvent } from 'react';
 import axios from 'axios';
 import { useQuery } from '@tanstack/react-query';
-import { CalendarDays, Video } from 'lucide-react';
+import { ArrowLeft, CalendarDays, Video } from 'lucide-react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../../../app/AuthContext';
 import type { ApiErrorPayload } from '../../../shared/api/apiClient';
@@ -68,6 +68,11 @@ export function MentoringSessionsPage({ view }: { view: SessionView }) {
   const [selectedRelationshipId, setSelectedRelationshipId] = useState(
     searchParams.get('relationshipId') ?? ''
   );
+  const selectedRelationshipNumber = Number(selectedRelationshipId);
+  const pairingOverviewPath =
+    Number.isSafeInteger(selectedRelationshipNumber) && selectedRelationshipNumber > 0
+      ? `/mentoring/pairing/${selectedRelationshipNumber}`
+      : null;
   const [isCreateFormOpen, setCreateFormOpen] = useState(Boolean(searchParams.get('relationshipId')));
   const [localSessionDrafts, setLocalSessionDrafts] = useState<LocalSessionDraft[]>([]);
   const { pushToast } = useToast();
@@ -188,15 +193,24 @@ export function MentoringSessionsPage({ view }: { view: SessionView }) {
         }
         source="live"
         actions={
-          view === 'mentor' && activeMentorRelationships.length > 0 ? (
-            <button
-              type="button"
-              className="apid-btn apid-btn-primary apid-btn-sm"
-              onClick={() => setCreateFormOpen((open) => !open)}
-            >
-              <CalendarDays size={15} />
-              {isCreateFormOpen ? 'Close form' : 'Create session'}
-            </button>
+          pairingOverviewPath || (view === 'mentor' && activeMentorRelationships.length > 0) ? (
+            <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+              {pairingOverviewPath && (
+                <Link to={pairingOverviewPath} className="apid-btn apid-btn-outline apid-btn-sm">
+                  <ArrowLeft size={15} /> Back to Pairing Overview
+                </Link>
+              )}
+              {view === 'mentor' && activeMentorRelationships.length > 0 && (
+                <button
+                  type="button"
+                  className="apid-btn apid-btn-primary apid-btn-sm"
+                  onClick={() => setCreateFormOpen((open) => !open)}
+                >
+                  <CalendarDays size={15} />
+                  {isCreateFormOpen ? 'Close form' : 'Create session'}
+                </button>
+              )}
+            </div>
           ) : undefined
         }
       />

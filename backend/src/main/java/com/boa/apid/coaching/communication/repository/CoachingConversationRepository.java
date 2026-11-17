@@ -35,20 +35,6 @@ public interface CoachingConversationRepository extends JpaRepository<CoachingCo
 
     @Query("""
             SELECT c FROM CoachingConversation c
-            JOIN ConversationParticipant p ON p.conversationId = c.id
-            WHERE c.contextType = 'MENTORING_COHORT_GROUP'
-              AND c.skillId = :skillId
-              AND p.userId = :mentorUserId
-              AND p.role = 'TRAINER'
-              AND c.status = 'ACTIVE'
-            """)
-    Optional<CoachingConversation> findMentoringCohortGroup(
-            @Param("mentorUserId") Long mentorUserId,
-            @Param("skillId") Long skillId
-    );
-
-    @Query("""
-            SELECT c FROM CoachingConversation c
             WHERE c.skillRequestId = :skillRequestId
               AND c.contextType = 'SKILL_PEER_DIRECT'
               AND c.peerEmployeeAId = :empA

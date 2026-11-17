@@ -122,10 +122,24 @@ describe('MentoringPairingDetailPage', () => {
     fireEvent.click(screen.getByRole('tab', { name: 'Sessions' }));
 
     expect(await screen.findByText('Previous session')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Back to overview' })).toHaveAttribute(
+      'href',
+      '/mentoring/pairing/77'
+    );
     expect(screen.getByRole('link', { name: 'Create session' })).toHaveAttribute(
       'href',
       '/mentoring?view=trainer-sessions&relationshipId=77'
     );
+  });
+
+  it('shows progress for the selected pairing and links back to its overview', async () => {
+    vi.spyOn(mentoringPairingApi, 'listProgressNotes').mockResolvedValue([]);
+    renderDetailPage();
+    fireEvent.click(await screen.findByRole('tab', { name: 'Progress' }));
+
+    expect(await screen.findByText('Progress and milestones')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('link', { name: 'Back to overview' }));
+    expect(await screen.findByText('Pairing details')).toBeInTheDocument();
   });
 
   it('links chat and resources to their shared workspaces with the pairing selected', async () => {
