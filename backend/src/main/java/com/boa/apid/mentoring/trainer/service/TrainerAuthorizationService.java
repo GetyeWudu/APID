@@ -28,13 +28,19 @@ import com.boa.apid.mentoring.collaboration.repository.MentoringRelationshipFeed
 import com.boa.apid.mentoring.matching.entity.MentoringMatchRequestStatus;
 import com.boa.apid.mentoring.matching.repository.MentoringMatchRequestRepository;
 import com.boa.apid.mentoring.pairing.entity.MentoringRelationship;
+import com.boa.apid.mentoring.pairing.entity.MentoringRelationshipMember;
+import com.boa.apid.mentoring.pairing.entity.MentoringRelationshipMemberStatus;
 import com.boa.apid.mentoring.pairing.entity.MentoringRelationshipStatus;
 import com.boa.apid.mentoring.pairing.entity.MentoringRequestRecipientStatus;
+import com.boa.apid.mentoring.pairing.entity.MentoringSession;
 import com.boa.apid.mentoring.pairing.repository.MentoringRelationshipMemberRepository;
 import com.boa.apid.mentoring.pairing.repository.MentoringRelationshipRepository;
 import com.boa.apid.mentoring.pairing.repository.MentoringRequestRecipientRepository;
 import com.boa.apid.mentoring.pairing.repository.MentoringSessionRepository;
 import com.boa.apid.mentoring.pairing.entity.MentoringSessionStatus;
+import com.boa.apid.mentoring.trainer.dto.MentorBadgeRemovalDecisionRequest;
+import com.boa.apid.mentoring.trainer.dto.MentorBadgeRemovalRequestBody;
+import com.boa.apid.mentoring.trainer.dto.MentorBadgeRemovalRequestDto;
 import com.boa.apid.mentoring.trainer.dto.MentoringHrOverviewDto;
 import com.boa.apid.mentoring.trainer.dto.MentoringSkillDemandDto;
 import com.boa.apid.mentoring.trainer.dto.HrMentorProfileDto;
@@ -50,7 +56,11 @@ import com.boa.apid.mentoring.trainer.entity.TrainerAuthorization;
 import com.boa.apid.mentoring.trainer.entity.TrainerAuthorizationSource;
 import com.boa.apid.mentoring.trainer.entity.TrainerAuthorizationStatus;
 import com.boa.apid.mentoring.trainer.entity.TrainerAuthorizationSkillStatus;
+import com.boa.apid.mentoring.trainer.entity.MentorBadgeRemovalDisposition;
+import com.boa.apid.mentoring.trainer.entity.MentorBadgeRemovalRequest;
+import com.boa.apid.mentoring.trainer.entity.MentorBadgeRemovalRequestStatus;
 import com.boa.apid.mentoring.trainer.entity.TrainerStatusHistory;
+import com.boa.apid.mentoring.trainer.repository.MentorBadgeRemovalRequestRepository;
 import com.boa.apid.mentoring.trainer.repository.TrainerAuthorizationRepository;
 import com.boa.apid.mentoring.trainer.repository.TrainerAuthorizationSkillStatusRepository;
 import com.boa.apid.mentoring.trainer.repository.TrainerStatusHistoryRepository;
@@ -78,6 +88,7 @@ public class TrainerAuthorizationService {
     private final TrainerAuthorizationRepository authorizationRepository;
     private final TrainerAuthorizationSkillStatusRepository skillStatusRepository;
     private final TrainerStatusHistoryRepository historyRepository;
+    private final MentorBadgeRemovalRequestRepository badgeRemovalRequestRepository;
     private final MentorApplicationRepository applicationRepository;
     private final EmployeeRepository employeeRepository;
     private final UserRepository userRepository;
@@ -100,6 +111,7 @@ public class TrainerAuthorizationService {
             TrainerAuthorizationRepository authorizationRepository,
             TrainerAuthorizationSkillStatusRepository skillStatusRepository,
             TrainerStatusHistoryRepository historyRepository,
+            MentorBadgeRemovalRequestRepository badgeRemovalRequestRepository,
             MentorApplicationRepository applicationRepository,
             EmployeeRepository employeeRepository,
             UserRepository userRepository,
@@ -121,6 +133,7 @@ public class TrainerAuthorizationService {
         this.authorizationRepository = authorizationRepository;
         this.skillStatusRepository = skillStatusRepository;
         this.historyRepository = historyRepository;
+        this.badgeRemovalRequestRepository = badgeRemovalRequestRepository;
         this.applicationRepository = applicationRepository;
         this.employeeRepository = employeeRepository;
         this.userRepository = userRepository;
@@ -393,6 +406,171 @@ public class TrainerAuthorizationService {
                 .stream().findFirst()
                 .orElseThrow(() -> new AccessDeniedException("Only an active mentor can view this profile."));
         return toRosterDto(authorization);
+    }
+
+    @Transactional(readOnly = true)
+    public MentorBadgeRemovalRequestDto getMyBadgeRemovalRequest(ApidUserPrincipal actor) {
+        TrainerAuthorization authorization = authorizationRepository
+                .findByUserIdAndStatus(actor.getUserId(), TrainerAuthorizationStatus.ACTIVE)
+                .stream()
+                .findFirst()
+                .orElse(null);
+        return (authorization == null
+                ? badgeRemovalRequestRepository
+                    .findFirstByAuthorization_Employee_UserIdOrderByCreatedAtDesc(actor.getUserId())
+                : badgeRemovalRequestRepository
+                    .findFirstByAuthorization_IdOrderByCreatedAtDesc(authorization.getId()))
+                .map(this::toBadgeRemovalRequestDto)
+                .orElse(null);
+    }
+
+    @Transactional
+    public MentorBadgeRemovalRequestDto submitBadgeRemovalRequest(
+            MentorBadgeRemovalRequestBody body,
+            ApidUserPrincipal actor
+    ) {
+        TrainerAuthorization currentAuthorization = authorizationRepository
+                .findByUserIdAndStatus(actor.getUserId(), TrainerAuthorizationStatus.ACTIVE)
+                .stream()
+                .findFirst()
+                .orElseThrow(() -> new AccessDeniedException("Only an active mentor can request badge removal."));
+        TrainerAuthorization authorization = authorizationRepository.findByIdForUpdate(currentAuthorization.getId())
+                .orElseThrow(() -> new ResourceNotFoundException("Mentor authorization not found"));
+        if (authorization.getStatus() != TrainerAuthorizationStatus.ACTIVE) {
+            throw new BusinessException(
+                    "MENTOR_AUTHORIZATION_NOT_ACTIVE",
+                    "Only an active mentor can request badge removal.",
+                    HttpStatus.CONFLICT
+            );
+        }
+        if (badgeRemovalRequestRepository.existsByAuthorization_IdAndStatus(
+                authorization.getId(), MentorBadgeRemovalRequestStatus.PENDING)) {
+            throw new BusinessException(
+                    "MENTOR_BADGE_REMOVAL_ALREADY_PENDING",
+                    "Your mentor badge removal request is already awaiting HR review.",
+                    HttpStatus.CONFLICT
+            );
+        }
+        MentorBadgeRemovalRequest previousRequest = badgeRemovalRequestRepository
+                .findFirstByAuthorization_IdOrderByCreatedAtDesc(authorization.getId())
+                .orElse(null);
+        if (previousRequest != null && previousRequest.getStatus() == MentorBadgeRemovalRequestStatus.APPROVED) {
+            throw new BusinessException(
+                    "MENTOR_BADGE_REMOVAL_ALREADY_APPROVED",
+                    "Your mentor badge removal request has already been approved.",
+                    HttpStatus.CONFLICT
+            );
+        }
+        User mentor = userRepository.findById(actor.getUserId())
+                .orElseThrow(() -> new ResourceNotFoundException("Mentor account not found"));
+        MentorBadgeRemovalRequest request = new MentorBadgeRemovalRequest();
+        request.setAuthorization(authorization);
+        request.setRequestedBy(mentor);
+        request.setReason(normalizeOptional(body.reason()));
+        MentorBadgeRemovalRequest saved = badgeRemovalRequestRepository.save(request);
+        recordAudit(
+                actor,
+                mentor.getId(),
+                "MENTOR_BADGE_REMOVAL_REQUESTED",
+                authorization.getId(),
+                Map.of("requestId", saved.getId())
+        );
+        return toBadgeRemovalRequestDto(saved);
+    }
+
+    @Transactional(readOnly = true)
+    public List<MentorBadgeRemovalRequestDto> listPendingBadgeRemovalRequests() {
+        return badgeRemovalRequestRepository
+                .findByStatusOrderByCreatedAtAsc(MentorBadgeRemovalRequestStatus.PENDING)
+                .stream()
+                .map(this::toBadgeRemovalRequestDto)
+                .toList();
+    }
+
+    @Transactional
+    public MentorBadgeRemovalRequestDto decideBadgeRemovalRequest(
+            Long requestId,
+            MentorBadgeRemovalDecisionRequest decision,
+            ApidUserPrincipal actor
+    ) {
+        if (decision.status() != MentorBadgeRemovalRequestStatus.APPROVED
+                && decision.status() != MentorBadgeRemovalRequestStatus.DECLINED) {
+            throw new BusinessException(
+                    "INVALID_MENTOR_BADGE_REMOVAL_DECISION",
+                    "Choose approve or decline for this request.",
+                    HttpStatus.BAD_REQUEST
+            );
+        }
+        if (decision.status() == MentorBadgeRemovalRequestStatus.APPROVED
+                && decision.disposition() == null) {
+            throw new BusinessException(
+                    "MENTOR_BADGE_REMOVAL_DISPOSITION_REQUIRED",
+                    "Choose whether to keep existing pairings or revoke all pairings.",
+                    HttpStatus.BAD_REQUEST
+            );
+        }
+        MentorBadgeRemovalRequest request = badgeRemovalRequestRepository.findByIdForUpdate(requestId)
+                .orElseThrow(() -> new ResourceNotFoundException("Mentor badge removal request not found"));
+        if (request.getStatus() != MentorBadgeRemovalRequestStatus.PENDING) {
+            throw new BusinessException(
+                    "MENTOR_BADGE_REMOVAL_ALREADY_REVIEWED",
+                    "This mentor badge removal request has already been reviewed.",
+                    HttpStatus.CONFLICT
+            );
+        }
+        User reviewer = userRepository.findById(actor.getUserId())
+                .orElseThrow(() -> new ResourceNotFoundException("HR account not found"));
+        TrainerAuthorization authorization = authorizationRepository
+                .findByIdForUpdate(request.getAuthorization().getId())
+                .orElseThrow(() -> new ResourceNotFoundException("Mentor authorization not found"));
+        String decisionReason = normalizeOptional(decision.decisionReason());
+
+        request.setStatus(decision.status());
+        request.setReviewedBy(reviewer);
+        request.setReviewedAt(Instant.now());
+        request.setDecisionReason(decisionReason);
+        if (decision.status() == MentorBadgeRemovalRequestStatus.APPROVED) {
+            request.setDisposition(decision.disposition());
+            availabilityService.setAcceptingNewPairings(authorization.getEmployee().getUserId(), false);
+            cancelAllPendingRequests(authorization.getEmployee().getUserId());
+            if (decision.disposition() == MentorBadgeRemovalDisposition.REVOKE_ALL_PAIRINGS) {
+                closeAllMentorRelationships(authorization.getEmployee().getUserId(), decisionReason);
+                revokeMentorAuthorization(authorization, reviewer, decisionReason);
+            }
+        } else {
+            request.setDisposition(null);
+        }
+        MentorBadgeRemovalRequest saved = badgeRemovalRequestRepository.save(request);
+        String message = decision.status() == MentorBadgeRemovalRequestStatus.DECLINED
+                ? "HR declined your request to remove your mentor badge."
+                : decision.disposition() == MentorBadgeRemovalDisposition.REVOKE_ALL_PAIRINGS
+                    ? "HR approved your request. Your mentor authorization and active pairings have been closed."
+                    : "HR approved your request. Existing pairings remain active, and you will not receive new matches.";
+        if (decisionReason != null) {
+            message += " HR note: " + decisionReason;
+        }
+        notify(
+                authorization.getEmployee().getUserId(),
+                "MENTOR_BADGE_REMOVAL_" + decision.status().name(),
+                decision.status() == MentorBadgeRemovalRequestStatus.APPROVED
+                        ? "Mentor badge removal approved"
+                        : "Mentor badge removal declined",
+                message,
+                "/mentoring?view=trainer"
+        );
+        Map<String, Object> auditDetails = new LinkedHashMap<>();
+        auditDetails.put("requestId", saved.getId());
+        auditDetails.put("decision", decision.status().name());
+        auditDetails.put("disposition", decision.disposition() == null ? "" : decision.disposition().name());
+        auditDetails.put("decisionReason", decisionReason == null ? "" : decisionReason);
+        recordAudit(
+                actor,
+                authorization.getEmployee().getUserId(),
+                "MENTOR_BADGE_REMOVAL_" + decision.status().name(),
+                authorization.getId(),
+                auditDetails
+        );
+        return toBadgeRemovalRequestDto(saved);
     }
 
     @Transactional(readOnly = true)
@@ -682,6 +860,112 @@ public class TrainerAuthorizationService {
         recipientRepository.saveAll(pending);
     }
 
+    private void cancelAllPendingRequests(Long mentorUserId) {
+        List<com.boa.apid.mentoring.pairing.entity.MentoringRequestRecipient> pending =
+                recipientRepository.findByRequest_MentorUser_IdAndStatus(
+                        mentorUserId, MentoringRequestRecipientStatus.PENDING);
+        Instant now = Instant.now();
+        for (var recipient : pending) {
+            recipient.setStatus(MentoringRequestRecipientStatus.CANCELLED);
+            recipient.setRespondedAt(now);
+            notify(
+                    recipient.getTraineeUser().getId(),
+                    "MENTORING_REQUEST_CANCELLED",
+                    "Mentoring request cancelled",
+                    "A pending mentoring request was cancelled because the mentor's badge removal was approved.",
+                    "/mentoring?view=trainee"
+            );
+        }
+        recipientRepository.saveAll(pending);
+    }
+
+    private void closeAllMentorRelationships(Long mentorUserId, String decisionReason) {
+        List<MentoringRelationship> relationships = relationshipRepository.findByMentorUser_IdAndStatusIn(
+                mentorUserId,
+                List.of(MentoringRelationshipStatus.ACTIVE, MentoringRelationshipStatus.PAUSED)
+        );
+        if (relationships.isEmpty()) {
+            return;
+        }
+        Instant now = Instant.now();
+        String closeReason = decisionReason == null
+                ? "HR approved mentor badge removal and closed this relationship."
+                : decisionReason;
+        List<Long> relationshipIds = relationships.stream().map(MentoringRelationship::getId).toList();
+        List<MentoringSession> sessions =
+                sessionRepository.findByRelationship_IdInOrderByScheduledStartDesc(relationshipIds);
+        for (MentoringSession session : sessions) {
+            if ((session.getStatus() == MentoringSessionStatus.SCHEDULED
+                    || session.getStatus() == MentoringSessionStatus.RESCHEDULED)
+                    && session.getScheduledStart().isAfter(now)) {
+                session.setStatus(MentoringSessionStatus.CANCELLED);
+            }
+        }
+        sessionRepository.saveAll(sessions);
+
+        for (MentoringRelationship relationship : relationships) {
+            relationship.setStatus(MentoringRelationshipStatus.CANCELLED);
+            relationship.setEndedAt(now);
+            List<MentoringRelationshipMember> members =
+                    memberRepository.findByRelationship_IdOrderByJoinedAtAsc(relationship.getId());
+            for (MentoringRelationshipMember member : members) {
+                if (member.getStatus() == MentoringRelationshipMemberStatus.ACTIVE) {
+                    member.setStatus(MentoringRelationshipMemberStatus.CANCELLED);
+                    member.setEndedAt(now);
+                    notify(
+                            member.getTraineeUser().getId(),
+                            "MENTORING_RELATIONSHIP_CANCELLED",
+                            "Mentoring relationship cancelled",
+                            "Your mentoring relationship has been cancelled because HR approved the mentor's badge removal. "
+                                    + closeReason,
+                            "/mentoring/pairing/" + relationship.getId()
+                    );
+                }
+            }
+            memberRepository.saveAll(members);
+        }
+        relationshipRepository.saveAll(relationships);
+    }
+
+    private void revokeMentorAuthorization(
+            TrainerAuthorization authorization,
+            User reviewer,
+            String decisionReason
+    ) {
+        String reason = decisionReason == null
+                ? "Mentor authorization revoked after badge removal request approval."
+                : decisionReason;
+        TrainerAuthorizationStatus previousStatus = authorization.getStatus();
+        authorization.setStatus(TrainerAuthorizationStatus.REVOKED);
+        authorization.setStatusReason(reason);
+        authorizationRepository.save(authorization);
+        for (TrainerAuthorizationSkillStatus skillStatus
+                : skillStatusRepository.findByAuthorization_IdOrderBySkill_NameAsc(authorization.getId())) {
+            TrainerAuthorizationStatus previousSkillStatus = skillStatus.getStatus();
+            if (previousSkillStatus == TrainerAuthorizationStatus.REVOKED) {
+                continue;
+            }
+            skillStatus.setStatus(TrainerAuthorizationStatus.REVOKED);
+            skillStatus.setStatusReason(reason);
+            TrainerStatusHistory history = new TrainerStatusHistory();
+            history.setAuthorization(authorization);
+            history.setSkill(skillStatus.getSkill());
+            history.setPreviousStatus(previousSkillStatus);
+            history.setNewStatus(TrainerAuthorizationStatus.REVOKED);
+            history.setReason(reason);
+            history.setChangedBy(reviewer);
+            historyRepository.save(history);
+        }
+        saveStatusHistory(
+                authorization,
+                null,
+                previousStatus,
+                TrainerAuthorizationStatus.REVOKED,
+                reason,
+                reviewer
+        );
+    }
+
     private void pauseActiveRelationships(Long mentorUserId, Long skillId) {
         if (mentorUserId == null) {
             return;
@@ -851,6 +1135,25 @@ public class TrainerAuthorizationService {
                 authorization.getExperienceYears(),
                 authorization.getMentoringApproach(),
                 authorization.getSessionsPerWeek()
+        );
+    }
+
+    private MentorBadgeRemovalRequestDto toBadgeRemovalRequestDto(MentorBadgeRemovalRequest request) {
+        TrainerAuthorization authorization = request.getAuthorization();
+        Employee employee = authorization.getEmployee();
+        return new MentorBadgeRemovalRequestDto(
+                request.getId(),
+                authorization.getId(),
+                employee.getEmployeeNumber(),
+                employee.getFullName(),
+                employee.getDepartmentName(),
+                skills(authorization, false).stream().map(TrainerSkillDto::name).toList(),
+                request.getReason(),
+                request.getStatus(),
+                request.getCreatedAt(),
+                request.getReviewedAt(),
+                request.getDisposition(),
+                request.getDecisionReason()
         );
     }
 

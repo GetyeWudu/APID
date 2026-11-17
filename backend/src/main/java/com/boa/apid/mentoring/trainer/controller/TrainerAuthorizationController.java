@@ -2,6 +2,9 @@ package com.boa.apid.mentoring.trainer.controller;
 
 import com.boa.apid.common.response.ApiResponse;
 import com.boa.apid.core.auth.security.ApidUserPrincipal;
+import com.boa.apid.mentoring.trainer.dto.MentorBadgeRemovalDecisionRequest;
+import com.boa.apid.mentoring.trainer.dto.MentorBadgeRemovalRequestBody;
+import com.boa.apid.mentoring.trainer.dto.MentorBadgeRemovalRequestDto;
 import com.boa.apid.mentoring.trainer.dto.HrMentorProfileDto;
 import com.boa.apid.mentoring.trainer.dto.HrMentorProfileRequest;
 import com.boa.apid.mentoring.trainer.dto.MentoringHrOverviewDto;
@@ -122,6 +125,45 @@ public class TrainerAuthorizationController {
             @AuthenticationPrincipal ApidUserPrincipal actor
     ) {
         return ApiResponse.ok(authorizationService.getOwnProfile(actor));
+    }
+
+    @GetMapping("/trainer-profile/badge-removal-request")
+    @PreAuthorize("isAuthenticated() and !principal.mustChangePassword and hasAuthority('EMPLOYEE_PORTAL_ACCESS')")
+    public ApiResponse<MentorBadgeRemovalRequestDto> getMyBadgeRemovalRequest(
+            @AuthenticationPrincipal ApidUserPrincipal actor
+    ) {
+        return ApiResponse.ok(authorizationService.getMyBadgeRemovalRequest(actor));
+    }
+
+    @PostMapping("/trainer-profile/badge-removal-request")
+    @PreAuthorize("isAuthenticated() and !principal.mustChangePassword and hasAuthority('EMPLOYEE_PORTAL_ACCESS')")
+    public ApiResponse<MentorBadgeRemovalRequestDto> submitBadgeRemovalRequest(
+            @Valid @RequestBody MentorBadgeRemovalRequestBody request,
+            @AuthenticationPrincipal ApidUserPrincipal actor
+    ) {
+        return ApiResponse.ok(
+                "Mentor badge removal request submitted",
+                authorizationService.submitBadgeRemovalRequest(request, actor)
+        );
+    }
+
+    @GetMapping("/hr/badge-removal-requests")
+    @PreAuthorize("hasAuthority('TRAINER_STATUS_MANAGE')")
+    public ApiResponse<List<MentorBadgeRemovalRequestDto>> listBadgeRemovalRequests() {
+        return ApiResponse.ok(authorizationService.listPendingBadgeRemovalRequests());
+    }
+
+    @PostMapping("/hr/badge-removal-requests/{requestId}/decision")
+    @PreAuthorize("hasAuthority('TRAINER_STATUS_MANAGE')")
+    public ApiResponse<MentorBadgeRemovalRequestDto> decideBadgeRemovalRequest(
+            @PathVariable Long requestId,
+            @Valid @RequestBody MentorBadgeRemovalDecisionRequest request,
+            @AuthenticationPrincipal ApidUserPrincipal actor
+    ) {
+        return ApiResponse.ok(
+                "Mentor badge removal request reviewed",
+                authorizationService.decideBadgeRemovalRequest(requestId, request, actor)
+        );
     }
 
     @GetMapping("/hr/my-mentor-profile")

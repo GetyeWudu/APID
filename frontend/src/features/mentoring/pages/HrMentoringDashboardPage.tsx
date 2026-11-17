@@ -15,13 +15,14 @@ import { mentorApplicationApi } from '../api/mentorApplicationApi';
 import { mentoringMatchApi } from '../api/mentoringMatchApi';
 import { mentoringTrainerApi } from '../api/mentoringTrainerApi';
 import { HrAnalyticsTab } from '../components/HrAnalyticsTab';
+import { TrainerBadgeRemovalRequestsTab } from '../components/TrainerBadgeRemovalRequestsTab';
 import { HrDirectMatchingTab } from '../components/HrDirectMatchingTab';
 import { HrMatchingTab } from '../components/HrMatchingTab';
 import { HrMentorSelfService } from '../components/HrMentorSelfService';
 import { TrainerApplicationsTab } from '../components/TrainerApplicationsTab';
 import { TrainerRosterTab } from '../components/TrainerRosterTab';
 
-type HrTabKey = 'my-mentor-profile' | 'applications' | 'trainers' | 'direct-matching' | 'matching' | 'analytics';
+type HrTabKey = 'my-mentor-profile' | 'applications' | 'trainers' | 'badge-removal-requests' | 'direct-matching' | 'matching' | 'analytics';
 
 interface HrTabMeta {
   key: HrTabKey;
@@ -37,6 +38,7 @@ const HR_TABS: HrTabMeta[] = [
     label: 'Approved Trainers',
     anyPermissions: ['TRAINER_DIRECT_APPOINT', 'TRAINER_STATUS_MANAGE', 'MENTORING_REPORT_VIEW_ALL'],
   },
+  { key: 'badge-removal-requests', label: 'Badge Removal Requests', anyPermissions: ['TRAINER_STATUS_MANAGE'] },
   { key: 'direct-matching', label: 'Match Mentor & Trainee', anyPermissions: ['MENTORING_MATCH_MANAGE'] },
   { key: 'matching', label: 'Match Requests & Reassignments', anyPermissions: ['MENTORING_MATCH_MANAGE', 'TRAINER_STATUS_MANAGE'] },
   { key: 'analytics', label: 'Outcomes', anyPermissions: ['MENTORING_REPORT_VIEW_ALL'] },
@@ -53,6 +55,7 @@ export function HrMentoringDashboardPage() {
   const activeTab = visibleTabs.find((tab) => tab.key === requestedTab)?.key ?? visibleTabs[0]?.key ?? null;
 
   const canReviewApplications = hasAnyPermission(['TRAINER_APPLICATION_REVIEW']);
+  const canManageTrainerStatus = hasAnyPermission(['TRAINER_STATUS_MANAGE']);
   const canManageTrainers = hasAnyPermission([
     'TRAINER_DIRECT_APPOINT',
     'TRAINER_STATUS_MANAGE',
@@ -93,6 +96,11 @@ export function HrMentoringDashboardPage() {
     queryFn: mentoringMatchApi.listForHr,
     enabled: canManageMatches,
   });
+  const badgeRemovalRequestsQuery = useQuery({
+    queryKey: ['mentoring', 'badge-removal-requests'],
+    queryFn: mentoringTrainerApi.listBadgeRemovalRequests,
+    enabled: canManageTrainerStatus && activeTab === 'badge-removal-requests',
+  });
   const overviewQuery = useQuery({
     queryKey: ['mentoring', 'hr-overview'],
     queryFn: mentoringTrainerApi.getOverview,
@@ -114,6 +122,7 @@ export function HrMentoringDashboardPage() {
     canManageMatches ? matchingEmployeesQuery : null,
     canAppointTrainers ? skillsQuery : null,
     canManageMatches ? matchRequestsQuery : null,
+    canManageTrainerStatus && activeTab === 'badge-removal-requests' ? badgeRemovalRequestsQuery : null,
     canViewReports && activeTab === 'analytics' ? overviewQuery : null,
   ].filter((query): query is NonNullable<typeof query> => query !== null);
   const isLoading = activeQueries.some((query) => query.isLoading);
@@ -130,6 +139,8 @@ export function HrMentoringDashboardPage() {
             ? 'Failed to load the active skills catalog.'
             : failedQuery === matchRequestsQuery
               ? 'Failed to load HR matching requests.'
+              : failedQuery === badgeRemovalRequestsQuery
+                ? 'Failed to load mentor badge removal requests.'
               : 'Failed to load mentoring analytics.';
 
   if (isLoading) return <LoadingSkeleton rows={6} height={28} />;
@@ -171,6 +182,12 @@ export function HrMentoringDashboardPage() {
             candidates={candidatesQuery.data ?? []}
             skills={activeSkills.map((skill) => ({ id: skill.id, name: skill.name }))}
           />
+        </PermissionGate>
+      )}
+
+      {activeTab === 'badge-removal-requests' && (
+        <PermissionGate permission="TRAINER_STATUS_MANAGE">
+          <TrainerBadgeRemovalRequestsTab requests={badgeRemovalRequestsQuery.data ?? []} />
         </PermissionGate>
       )}
 

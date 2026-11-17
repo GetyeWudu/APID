@@ -11,6 +11,7 @@ import org.springframework.data.repository.query.Param;
 import jakarta.persistence.LockModeType;
 import java.util.Optional;
 import java.util.List;
+import java.util.Collection;
 
 public interface MentoringRelationshipRepository extends JpaRepository<MentoringRelationship, Long> {
 
@@ -33,6 +34,12 @@ public interface MentoringRelationshipRepository extends JpaRepository<Mentoring
     List<MentoringRelationship> findByMentorUser_IdAndStatus(
             Long mentorUserId,
             MentoringRelationshipStatus status
+    );
+
+    @EntityGraph(attributePaths = {"request", "request.skill", "mentorUser"})
+    List<MentoringRelationship> findByMentorUser_IdAndStatusIn(
+            Long mentorUserId,
+            Collection<MentoringRelationshipStatus> statuses
     );
 
     long countByStatus(MentoringRelationshipStatus status);

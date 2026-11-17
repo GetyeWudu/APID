@@ -83,6 +83,7 @@ public class MentoringSession {
     public String getMeetingUrl() { return meetingUrl; }
     public void setMeetingUrl(String meetingUrl) { this.meetingUrl = meetingUrl; }
     public MentoringSessionStatus getStatus() { return status; }
+    public void setStatus(MentoringSessionStatus status) { this.status = status; }
     public String getNotes() { return notes; }
     public User getCreatedByUser() { return createdByUser; }
     public void setCreatedByUser(User createdByUser) { this.createdByUser = createdByUser; }

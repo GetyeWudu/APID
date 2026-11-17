@@ -5,6 +5,8 @@ export type TrainerAuthorizationSource = 'APPLICATION' | 'DIRECT_APPOINTMENT';
 export type TrainerInFlightPolicy =
   | 'BLOCK_NEW_SESSIONS_ONLY'
   | 'REQUIRE_HR_REASSIGNMENT';
+export type MentorBadgeRemovalRequestStatus = 'PENDING' | 'APPROVED' | 'DECLINED';
+export type MentorBadgeRemovalDisposition = 'KEEP_EXISTING_PAIRINGS' | 'REVOKE_ALL_PAIRINGS';
 
 export interface TrainerSkill {
   id: number;
@@ -133,6 +135,21 @@ export interface HrMentorProfile {
   activeSkills: TrainerSkill[];
 }
 
+export interface MentorBadgeRemovalRequest {
+  id: number;
+  authorizationId: number;
+  employeeNumber: string;
+  mentorName: string;
+  departmentName: string | null;
+  skills: string[];
+  reason: string | null;
+  status: MentorBadgeRemovalRequestStatus;
+  requestedAt: string;
+  reviewedAt: string | null;
+  disposition: MentorBadgeRemovalDisposition | null;
+  decisionReason: string | null;
+}
+
 export const mentoringTrainerApi = {
   async listRoster(): Promise<TrainerRosterItem[]> {
     const response = await apiClient.get<ApiResponse<TrainerRosterItem[]>>('/mentoring/hr/trainers');
@@ -220,6 +237,45 @@ export const mentoringTrainerApi = {
 
   async getProfile(): Promise<TrainerRosterItem> {
     const response = await apiClient.get<ApiResponse<TrainerRosterItem>>('/mentoring/trainer-profile');
+    return response.data.data;
+  },
+
+  async getMyBadgeRemovalRequest(): Promise<MentorBadgeRemovalRequest | null> {
+    const response = await apiClient.get<ApiResponse<MentorBadgeRemovalRequest | null>>(
+      '/mentoring/trainer-profile/badge-removal-request'
+    );
+    return response.data.data;
+  },
+
+  async submitBadgeRemovalRequest(reason?: string): Promise<MentorBadgeRemovalRequest> {
+    const response = await apiClient.post<ApiResponse<MentorBadgeRemovalRequest>>(
+      '/mentoring/trainer-profile/badge-removal-request',
+      { reason }
+    );
+    return response.data.data;
+  },
+
+  async listBadgeRemovalRequests(): Promise<MentorBadgeRemovalRequest[]> {
+    const response = await apiClient.get<ApiResponse<MentorBadgeRemovalRequest[]>>(
+      '/mentoring/hr/badge-removal-requests'
+    );
+    return response.data.data;
+  },
+
+  async decideBadgeRemovalRequest(input: {
+    requestId: number;
+    status: Exclude<MentorBadgeRemovalRequestStatus, 'PENDING'>;
+    disposition?: MentorBadgeRemovalDisposition;
+    decisionReason?: string;
+  }): Promise<MentorBadgeRemovalRequest> {
+    const response = await apiClient.post<ApiResponse<MentorBadgeRemovalRequest>>(
+      `/mentoring/hr/badge-removal-requests/${input.requestId}/decision`,
+      {
+        status: input.status,
+        disposition: input.disposition,
+        decisionReason: input.decisionReason,
+      }
+    );
     return response.data.data;
   },
 

@@ -37,6 +37,11 @@ export function MentorProfileForm({
     queryFn: mentorApplicationApi.listMine,
     enabled: !isHrAdmin,
   });
+  const badgeRemovalQuery = useQuery({
+    queryKey: ['mentoring', 'badge-removal-request', currentUserId],
+    queryFn: mentoringTrainerApi.getMyBadgeRemovalRequest,
+    enabled: !isHrAdmin,
+  });
   const hrProfileQuery = useQuery({
     queryKey: ['mentoring', 'hr', 'my-mentor-profile'],
     queryFn: mentoringTrainerApi.getHrMentorProfile,
@@ -50,6 +55,7 @@ export function MentorProfileForm({
   const [customSkill, setCustomSkill] = useState('');
   const [skillEvidence, setSkillEvidence] = useState<File[]>([]);
   const [skillRequestNote, setSkillRequestNote] = useState('');
+  const [badgeRemovalReason, setBadgeRemovalReason] = useState('');
 
   useEffect(() => {
     if (!profileQuery.data) return;
@@ -132,6 +138,25 @@ export function MentorProfileForm({
       tone: 'err',
     }),
   });
+  const badgeRemovalMutation = useMutation({
+    mutationFn: mentoringTrainerApi.submitBadgeRemovalRequest,
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({
+        queryKey: ['mentoring', 'badge-removal-request', currentUserId],
+      });
+      setBadgeRemovalReason('');
+      pushToast({
+        title: 'Request sent to HR',
+        message: 'Your mentor badge remains unchanged until HR reviews your request.',
+        tone: 'ok',
+      });
+    },
+    onError: (error: unknown) => pushToast({
+      title: 'Unable to request badge removal',
+      message: errorMessage(error),
+      tone: 'err',
+    }),
+  });
 
   const submit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -146,6 +171,7 @@ export function MentorProfileForm({
 
   if (profileQuery.isLoading
     || (!isHrAdmin && applicationsQuery.isLoading)
+    || (!isHrAdmin && badgeRemovalQuery.isLoading)
     || (isHrAdmin && hrProfileQuery.isLoading)) {
     return <LoadingSkeleton rows={3} height={28} />;
   }
@@ -165,6 +191,14 @@ export function MentorProfileForm({
       <ErrorState
         message="Unable to load your skill request history."
         onRetry={() => void applicationsQuery.refetch()}
+      />
+    );
+  }
+  if (!isHrAdmin && badgeRemovalQuery.isError) {
+    return (
+      <ErrorState
+        message="Unable to load your mentor badge removal request."
+        onRetry={() => void badgeRemovalQuery.refetch()}
       />
     );
   }
@@ -360,6 +394,72 @@ export function MentorProfileForm({
           </div>
         </div>
       </form>
+
+      {!isHrAdmin && (
+        <section className="apid-card boa-stack" style={{ marginBottom: 0 }}>
+          <div>
+            <h3 className="boa-card-title">Remove my mentor badge</h3>
+            <p className="boa-card-subtitle">
+              Submit a request for HR review. This option is available regardless of how many mentoring skills you have.
+              Your badge and pairings will not change until HR decides.
+            </p>
+          </div>
+          {badgeRemovalQuery.data?.status === 'PENDING' ? (
+            <div className="boa-stack">
+              <StatusPill label="Pending HR review" tone="warn" />
+              {badgeRemovalQuery.data.reason && (
+                <p className="boa-muted" style={{ margin: 0 }}>{badgeRemovalQuery.data.reason}</p>
+              )}
+            </div>
+          ) : badgeRemovalQuery.data?.status === 'APPROVED' ? (
+            <div className="boa-stack">
+              <StatusPill label="Approved" tone="ok" />
+              <p className="boa-muted" style={{ margin: 0 }}>
+                {badgeRemovalQuery.data.disposition === 'REVOKE_ALL_PAIRINGS'
+                  ? 'Your mentor authorization and existing pairings were closed.'
+                  : 'Existing pairings remain active, but new matches and pending requests were cancelled.'}
+              </p>
+              {badgeRemovalQuery.data.decisionReason && (
+                <p className="boa-muted" style={{ margin: 0 }}>HR note: {badgeRemovalQuery.data.decisionReason}</p>
+              )}
+            </div>
+          ) : (
+            <div className="boa-stack">
+              {badgeRemovalQuery.data?.status === 'DECLINED' && (
+                <div className="boa-stack">
+                  <StatusPill label="Previously declined" tone="neutral" />
+                  {badgeRemovalQuery.data.decisionReason && (
+                    <p className="boa-muted" style={{ margin: 0 }}>HR note: {badgeRemovalQuery.data.decisionReason}</p>
+                  )}
+                  <p className="boa-muted" style={{ margin: 0 }}>
+                    Your mentor badge is unchanged. You may submit another request if needed.
+                  </p>
+                </div>
+              )}
+              <label className="apid-field">
+                Reason (optional)
+                <textarea
+                  className="apid-input"
+                  rows={3}
+                  maxLength={1000}
+                  value={badgeRemovalReason}
+                  onChange={(event) => setBadgeRemovalReason(event.target.value)}
+                  disabled={badgeRemovalMutation.isPending}
+                  placeholder="Add context for HR"
+                />
+              </label>
+              <button
+                type="button"
+                className="apid-btn apid-btn-outline apid-btn-sm"
+                disabled={badgeRemovalMutation.isPending}
+                onClick={() => badgeRemovalMutation.mutate(badgeRemovalReason.trim() || undefined)}
+              >
+                {badgeRemovalMutation.isPending ? 'Sending request…' : 'Request mentor badge removal'}
+              </button>
+            </div>
+          )}
+        </section>
+      )}
 
       <section className="apid-card boa-stack" style={{ marginBottom: 0 }}>
         <div>
