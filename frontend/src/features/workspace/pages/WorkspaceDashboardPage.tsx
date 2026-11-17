@@ -32,7 +32,6 @@ import { mentoringMatchApi } from '../../mentoring/api/mentoringMatchApi';
 import { mentoringTrainerApi } from '../../mentoring/api/mentoringTrainerApi';
 import { HrMentorSelfService } from '../../mentoring/components/HrMentorSelfService';
 import { MentoringRequestsPanel } from '../../mentoring/components/MentoringRequestsPanel';
-import { SkillSupplyDemandCard } from '../../mentoring/components/SkillSupplyDemandCard';
 import { workspaceLiveApi } from '../api/workspaceDashboardApi';
 
 function formatDate(value: string) {
@@ -355,12 +354,6 @@ export function WorkspaceDashboardPage() {
                   />
                 )}
               </div>
-              {canViewMentoringReports && hrOverviewQuery.data && (
-                <SkillSupplyDemandCard
-                  liveSkillNames={hrOverviewQuery.data.skillSupplyDemand.map((row) => row.skillName)}
-                  skillSupplyDemand={hrOverviewQuery.data.skillSupplyDemand}
-                />
-              )}
             </div>
           )}
         </section>

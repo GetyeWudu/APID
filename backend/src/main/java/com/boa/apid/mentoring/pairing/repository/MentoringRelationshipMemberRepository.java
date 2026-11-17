@@ -7,6 +7,7 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+import java.util.Collection;
 import java.util.List;
 
 public interface MentoringRelationshipMemberRepository extends JpaRepository<MentoringRelationshipMember, Long> {
@@ -51,5 +52,17 @@ public interface MentoringRelationshipMemberRepository extends JpaRepository<Men
     List<MentoringRelationshipMember> findActiveByMentorAndSkill(
             @Param("mentorUserId") Long mentorUserId,
             @Param("skillId") Long skillId
+    );
+
+    @EntityGraph(attributePaths = {
+            "relationship",
+            "relationship.request",
+            "relationship.request.skill",
+            "mentorUser",
+            "traineeUser",
+            "skill"
+    })
+    List<MentoringRelationshipMember> findByRelationship_IdInOrderByJoinedAtAsc(
+            Collection<Long> relationshipIds
     );
 }

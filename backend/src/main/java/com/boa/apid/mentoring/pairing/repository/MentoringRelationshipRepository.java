@@ -27,6 +27,9 @@ public interface MentoringRelationshipRepository extends JpaRepository<Mentoring
     List<MentoringRelationship> findByStatusOrderByStartedAtDesc(MentoringRelationshipStatus status);
 
     @EntityGraph(attributePaths = {"request", "request.skill", "mentorUser"})
+    List<MentoringRelationship> findAllByOrderByStartedAtDescIdDesc();
+
+    @EntityGraph(attributePaths = {"request", "request.skill", "mentorUser"})
     List<MentoringRelationship> findByMentorUser_IdAndStatus(
             Long mentorUserId,
             MentoringRelationshipStatus status

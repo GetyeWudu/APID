@@ -87,6 +87,45 @@ export interface MentoringHrOverview {
   skillSupplyDemand: MentoringSkillDemand[];
 }
 
+export interface MentoringPairingReportSummary {
+  relationshipId: number;
+  requestId: number;
+  requestType: 'INDIVIDUAL' | 'GROUP';
+  status: 'ACTIVE' | 'PAUSED' | 'COMPLETED' | 'CANCELLED' | 'REASSIGNED';
+  mentorName: string;
+  traineeNames: string[];
+  skillName: string | null;
+  startedAt: string;
+  endedAt: string | null;
+  totalSessions: number;
+  completedSessions: number;
+  sessionCompletionRatePct: number;
+}
+
+export interface MentoringPairingReportOverview {
+  totalPairings: number;
+  completedPairings: number;
+  pairingCompletionRatePct: number;
+  totalSessions: number;
+  completedSessions: number;
+  sessionCompletionRatePct: number;
+  pairings: MentoringPairingReportSummary[];
+}
+
+export interface MentoringPairingReportDetail {
+  pairing: MentoringPairingReportSummary;
+  completionNote: string | null;
+  sessions: {
+    id: number;
+    title: string;
+    agenda: string | null;
+    scheduledStart: string;
+    scheduledEnd: string;
+    status: 'SCHEDULED' | 'COMPLETED' | 'MISSED' | 'CANCELLED' | 'RESCHEDULED';
+    reportNote: string | null;
+  }[];
+}
+
 export interface HrMentorProfile {
   acceptingNewPairings: boolean;
   profileSetupRequired: boolean;
@@ -116,6 +155,20 @@ export const mentoringTrainerApi = {
 
   async getOverview(): Promise<MentoringHrOverview> {
     const response = await apiClient.get<ApiResponse<MentoringHrOverview>>('/mentoring/hr/overview');
+    return response.data.data;
+  },
+
+  async getPairingReportOverview(): Promise<MentoringPairingReportOverview> {
+    const response = await apiClient.get<ApiResponse<MentoringPairingReportOverview>>(
+      '/mentoring/hr/reports/pairings'
+    );
+    return response.data.data;
+  },
+
+  async getPairingReport(relationshipId: number): Promise<MentoringPairingReportDetail> {
+    const response = await apiClient.get<ApiResponse<MentoringPairingReportDetail>>(
+      `/mentoring/hr/reports/pairings/${relationshipId}`
+    );
     return response.data.data;
   },
 
