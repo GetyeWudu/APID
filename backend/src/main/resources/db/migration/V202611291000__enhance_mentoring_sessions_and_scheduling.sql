@@ -1,4 +1,4 @@
--- Migration: V202611290900__enhance_mentoring_sessions_and_scheduling.sql
+-- Migration: V202611291000__enhance_mentoring_sessions_and_scheduling.sql
 -- Description: Expand mentoring session lifecycle statuses and add decline/reschedule columns
 
 DO $$

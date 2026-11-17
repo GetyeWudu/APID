@@ -30,10 +30,13 @@ import {
   type MentoringDeliveryMode,
 } from '../api/mentoringPairingApi';
 import { MentoringDailyVideoModal } from '../components/MentoringDailyVideoModal';
+import { MentoringSessionDetails } from '../components/MentoringSessionDetails';
+import { MentoringSessionReport } from '../components/MentoringSessionReport';
 import {
   BANK_OPERATING_TIME_OPTIONS,
   toEthiopianTime,
 } from '../../coaching/utils/ethiopianTimeUtils';
+import { isMentoringSessionDay } from '../utils/mentoringSessionUtils';
 
 type SessionView = 'mentor' | 'trainee';
 
@@ -716,6 +719,7 @@ export function MentoringSessionsPage({ view }: { view: SessionView }) {
                       View Pairing
                     </Link>
                     {(session.deliveryMode === 'ONLINE' || session.deliveryMode === 'HYBRID') &&
+                      isMentoringSessionDay(session.scheduledStart) &&
                       session.status !== 'CANCELLED' &&
                       session.status !== 'DECLINED' && (
                         <button
@@ -739,6 +743,9 @@ export function MentoringSessionsPage({ view }: { view: SessionView }) {
                     )}
                   </div>
                 </div>
+
+                <MentoringSessionDetails session={session} />
+                <MentoringSessionReport session={session} isMentor={isMentor} />
 
                 {/* Ethiopian Dual Clock Time Banner */}
                 <div

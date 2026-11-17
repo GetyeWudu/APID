@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import axios from 'axios';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { ArrowLeft, CalendarDays, MessageCircle, Video } from 'lucide-react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { ArrowLeft, CalendarDays, Check, MessageCircle, Video, X } from 'lucide-react';
 import { Link, useParams, useSearchParams } from 'react-router-dom';
 import type { ApiErrorPayload } from '../../../shared/api/apiClient';
 import {
@@ -10,14 +10,18 @@ import {
   LoadingSkeleton,
   PageHeader,
   StatusPill,
+  useToast,
 } from '../../../shared/components/ui';
 import { mentoringPairingApi, type MentoringSession } from '../api/mentoringPairingApi';
 import { MentoringDailyVideoModal } from '../components/MentoringDailyVideoModal';
+import { MentoringSessionDetails } from '../components/MentoringSessionDetails';
+import { MentoringSessionReport } from '../components/MentoringSessionReport';
 import {
   MentoringFeedbackForm,
   MentoringProgressPanel,
   MentoringRelationshipClosure,
 } from '../components/MentoringCollaborationTools';
+import { isMentoringSessionDay } from '../utils/mentoringSessionUtils';
 
 type DetailTab = 'overview' | 'sessions' | 'progress';
 
@@ -36,9 +40,9 @@ function getErrorMessage(error: unknown, fallback: string) {
 }
 
 function sessionStatusTone(status: MentoringSession['status'] | 'IN PROGRESS') {
-  if (status === 'COMPLETED') return 'ok';
-  if (status === 'SCHEDULED' || status === 'IN PROGRESS') return 'info';
-  if (status === 'MISSED') return 'err';
+  if (status === 'COMPLETED' || status === 'CONFIRMED') return 'ok';
+  if (status === 'SCHEDULED' || status === 'RESCHEDULE_PROPOSED' || status === 'IN PROGRESS') return 'info';
+  if (status === 'MISSED' || status === 'DECLINED' || status === 'CANCELLED') return 'err';
   return 'neutral';
 }
 
@@ -51,6 +55,7 @@ export function MentoringPairingDetailPage() {
   const activeTab: DetailTab =
     requestedTab === 'sessions' || requestedTab === 'progress' ? requestedTab : 'overview';
   const queryClient = useQueryClient();
+  const { pushToast } = useToast();
   const [selectedForVideo, setSelectedForVideo] = useState<MentoringSession | null>(null);
   const setActiveTab = (tab: DetailTab) => {
     const nextParams = new URLSearchParams(searchParams);
@@ -76,6 +81,53 @@ export function MentoringPairingDetailPage() {
     queryKey: ['mentoring', 'pairing', 'messages-preview', relationshipId],
     queryFn: () => mentoringPairingApi.listMessages(relationshipId, 0, 20),
     enabled: isValidRelationshipId && activeTab === 'overview',
+  });
+  const invalidateSessionData = () => {
+    void Promise.all([
+      queryClient.invalidateQueries({ queryKey: ['mentoring', 'pairing', 'sessions', relationshipId] }),
+      queryClient.invalidateQueries({ queryKey: ['mentoring', 'pairing', 'my-sessions'] }),
+      queryClient.invalidateQueries({ queryKey: ['scheduling', 'calendar'] }),
+    ]);
+  };
+  const acceptSessionMutation = useMutation({
+    mutationFn: (sessionId: number) =>
+      mentoringPairingApi.respondSession(relationshipId, sessionId, { accept: true }),
+    onSuccess: () => {
+      pushToast({
+        title: 'Session accepted',
+        message: 'The confirmed session is now visible to both participants.',
+        tone: 'ok',
+      });
+      invalidateSessionData();
+    },
+    onError: (error) => {
+      pushToast({
+        title: 'Unable to accept session',
+        message: getErrorMessage(error, 'Could not accept this session invitation.'),
+        tone: 'err',
+      });
+    },
+  });
+  const respondRescheduleMutation = useMutation({
+    mutationFn: (variables: { sessionId: number; accept: boolean }) =>
+      mentoringPairingApi.respondReschedule(relationshipId, variables.sessionId, variables.accept),
+    onSuccess: (_, variables) => {
+      pushToast({
+        title: variables.accept ? 'Reschedule accepted' : 'Original time kept',
+        message: variables.accept
+          ? 'The session now uses the proposed time.'
+          : 'The session remains scheduled at its original time.',
+        tone: variables.accept ? 'ok' : 'info',
+      });
+      invalidateSessionData();
+    },
+    onError: (error) => {
+      pushToast({
+        title: 'Unable to respond to reschedule',
+        message: getErrorMessage(error, 'Could not respond to this reschedule request.'),
+        tone: 'err',
+      });
+    },
   });
 
   if (!isValidRelationshipId) {
@@ -105,11 +157,25 @@ export function MentoringPairingDetailPage() {
   const detail = detailQuery.data;
   const messages = chatQuery.data?.messages ?? [];
   const sessions = sessionsQuery.data ?? [];
-  const previousSessions = sessions.filter((session) => {
-    const start = new Date(session.scheduledStart).getTime();
-    const end = new Date(session.scheduledEnd).getTime();
-    return session.status === 'COMPLETED' || (session.status === 'SCHEDULED' && start <= Date.now() && end > Date.now());
-  });
+  const sessionPriority = (session: MentoringSession) =>
+    session.status === 'SCHEDULED' || session.status === 'RESCHEDULE_PROPOSED'
+      ? 0
+      : session.status === 'CONFIRMED'
+        ? 1
+        : 2;
+  const pairingSessions = [...sessions].sort(
+    (a, b) =>
+      sessionPriority(a) - sessionPriority(b) ||
+      new Date(b.scheduledStart).getTime() - new Date(a.scheduledStart).getTime()
+  );
+  const hasUnfinishedConfirmedSessions = pairingSessions.some((session) => session.status === 'CONFIRMED');
+  const completionBlockedReason = sessionsQuery.isLoading
+    ? 'Checking session status before completing the pairing.'
+    : sessionsQuery.isError
+      ? 'Session status could not be checked. Try again before completing the pairing.'
+      : hasUnfinishedConfirmedSessions
+        ? 'Submit the report for every confirmed session before completing the pairing.'
+        : null;
   const sessionView = detail.currentUserRole === 'MENTOR' ? 'trainer-sessions' : 'trainee-sessions';
   const sessionsPath = `/mentoring?view=${sessionView}&relationshipId=${relationshipId}`;
   const sessionsAction =
@@ -122,7 +188,9 @@ export function MentoringPairingDetailPage() {
       const start = new Date(session.scheduledStart).getTime();
       const end = new Date(session.scheduledEnd).getTime();
       const status =
-        session.status === 'SCHEDULED' && start <= Date.now() && end > Date.now()
+        (session.status === 'SCHEDULED' || session.status === 'CONFIRMED') &&
+        start <= Date.now() &&
+        end > Date.now()
           ? 'IN PROGRESS'
           : session.status;
       return (
@@ -133,12 +201,16 @@ export function MentoringPairingDetailPage() {
               <p className="boa-muted" style={{ margin: '0.3rem 0 0', fontSize: '0.84rem' }}>
                 {formatDateTime(session.scheduledStart)} to {formatDateTime(session.scheduledEnd)}
               </p>
+              <p className="boa-muted" style={{ margin: '0.25rem 0 0', fontSize: '0.8rem' }}>
+                Scheduled by {session.createdByName}
+              </p>
             </div>
             <StatusPill label={status} tone={sessionStatusTone(status)} />
           </div>
           <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', marginTop: '0.7rem', flexWrap: 'wrap' }}>
             <StatusPill label={session.deliveryMode.replace('_', ' ')} tone="neutral" />
             {(session.deliveryMode === 'ONLINE' || session.deliveryMode === 'HYBRID') &&
+              isMentoringSessionDay(session.scheduledStart) &&
               session.status !== 'CANCELLED' &&
               session.status !== 'DECLINED' && (
                 <button
@@ -171,7 +243,67 @@ export function MentoringPairingDetailPage() {
               </section>
             )}
           </div>
+          <MentoringSessionDetails session={session} />
+          <MentoringSessionReport
+            session={session}
+            isMentor={detail.currentUserRole === 'MENTOR'}
+          />
           {session.agenda && <p className="boa-muted">{session.agenda}</p>}
+          {session.status === 'DECLINED' && (
+            <p className="boa-muted" role="status">
+              Declined{session.declineReason ? `: ${session.declineReason}` : '.'}
+            </p>
+          )}
+          {session.status === 'RESCHEDULE_PROPOSED' && (
+            <div className="boa-card" style={{ border: '1px solid var(--border)' }}>
+              <strong>Reschedule requested</strong>
+              {session.proposedStart && session.proposedEnd && (
+                <p className="boa-muted" style={{ margin: '0.35rem 0' }}>
+                  Proposed: {formatDateTime(session.proposedStart)} to {formatDateTime(session.proposedEnd)}
+                </p>
+              )}
+              {session.rescheduleReason && <p className="boa-muted" style={{ margin: '0.35rem 0' }}>{session.rescheduleReason}</p>}
+              {detail.currentUserRole === 'MENTOR' ? (
+                <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', marginTop: '0.65rem' }}>
+                  <button
+                    type="button"
+                    className="apid-btn apid-btn-primary apid-btn-sm"
+                    onClick={() => respondRescheduleMutation.mutate({ sessionId: session.id, accept: true })}
+                    disabled={respondRescheduleMutation.isPending}
+                  >
+                    <Check size={14} /> Accept new time
+                  </button>
+                  <button
+                    type="button"
+                    className="apid-btn apid-btn-outline apid-btn-sm"
+                    onClick={() => respondRescheduleMutation.mutate({ sessionId: session.id, accept: false })}
+                    disabled={respondRescheduleMutation.isPending}
+                  >
+                    <X size={14} /> Keep original time
+                  </button>
+                </div>
+              ) : (
+                <p className="boa-muted" style={{ margin: '0.35rem 0 0' }}>
+                  Waiting for the mentor to respond to this proposal.
+                </p>
+              )}
+            </div>
+          )}
+          {detail.currentUserRole === 'TRAINEE' && session.status === 'SCHEDULED' && (
+            <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+              <button
+                type="button"
+                className="apid-btn apid-btn-primary apid-btn-sm"
+                onClick={() => acceptSessionMutation.mutate(session.id)}
+                disabled={acceptSessionMutation.isPending}
+              >
+                <Check size={14} /> Accept session
+              </button>
+              <Link to={sessionsPath} className="apid-btn apid-btn-outline apid-btn-sm">
+                Propose another time or decline
+              </Link>
+            </div>
+          )}
         </article>
       );
     });
@@ -292,6 +424,8 @@ export function MentoringPairingDetailPage() {
                 <MentoringRelationshipClosure
                   relationshipId={relationshipId}
                   relationshipStatus={detail.status}
+                  canCompleteRelationship={completionBlockedReason === null}
+                  completionBlockedReason={completionBlockedReason}
                   onClosed={() => {
                     void Promise.all([
                       queryClient.invalidateQueries({ queryKey: ['mentoring', 'pairing', 'detail', relationshipId] }),
@@ -312,8 +446,8 @@ export function MentoringPairingDetailPage() {
           <section className="apid-card boa-stack">
             <div className="boa-card-header">
               <div>
-                <h2 className="boa-card-title">Completed and in-progress sessions</h2>
-                <p className="boa-card-subtitle">Sessions already underway or completed for this pairing.</p>
+                <h2 className="boa-card-title">Sessions for this pairing</h2>
+                <p className="boa-card-subtitle">Requests, accepted sessions, reschedules, and session history.</p>
               </div>
               <Link to={sessionsPath} className="apid-btn apid-btn-primary apid-btn-sm">
                 <CalendarDays size={15} /> {sessionsAction}
@@ -326,13 +460,13 @@ export function MentoringPairingDetailPage() {
                 message={getErrorMessage(sessionsQuery.error, 'Unable to load session history.')}
                 onRetry={() => void sessionsQuery.refetch()}
               />
-            ) : previousSessions.length === 0 ? (
+            ) : pairingSessions.length === 0 ? (
               <EmptyState
-                title="No completed or in-progress sessions"
-                description="Completed sessions and sessions currently underway will appear here."
+                title="No sessions scheduled yet"
+                description="Session requests and confirmed sessions for this pairing will appear here."
               />
             ) : (
-              <div className="boa-stack">{renderSessionCards(previousSessions.slice(0, 3))}</div>
+              <div className="boa-stack">{renderSessionCards(pairingSessions.slice(0, 3))}</div>
             )}
           </section>
 
@@ -379,22 +513,22 @@ export function MentoringPairingDetailPage() {
               message={getErrorMessage(sessionsQuery.error, 'Unable to load session history.')}
               onRetry={() => void sessionsQuery.refetch()}
             />
-          ) : previousSessions.length === 0 ? (
+          ) : pairingSessions.length === 0 ? (
             <div className="apid-card">
               <EmptyState
-                title="No completed or in-progress sessions"
-                description="Completed sessions and sessions currently underway will appear here."
+                title="No sessions for this pairing"
+                description="Requests, accepted sessions, reschedule proposals, and declined sessions will appear here."
               />
             </div>
           ) : (
             <section className="apid-card boa-stack">
               <div className="boa-card-header">
                 <div>
-                  <h2 className="boa-card-title">Session history</h2>
-                  <p className="boa-card-subtitle">Completed and in-progress sessions for this pairing.</p>
+                  <h2 className="boa-card-title">All sessions</h2>
+                  <p className="boa-card-subtitle">Requests, confirmations, reschedule proposals, and session history.</p>
                 </div>
               </div>
-              {renderSessionCards(previousSessions)}
+              {renderSessionCards(pairingSessions)}
             </section>
           )}
         </div>

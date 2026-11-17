@@ -1,10 +1,10 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import * as AuthContextModule from '../app/AuthContext';
 import type { UserProfile } from '../features/auth/types/auth.types';
-import { mentoringPairingApi } from '../features/mentoring/api/mentoringPairingApi';
+import { mentoringPairingApi, type MentoringSession } from '../features/mentoring/api/mentoringPairingApi';
 import { MentoringPairingDetailPage } from '../features/mentoring/pages/MentoringPairingDetailPage';
 import { ToastProvider } from '../shared/components/ui';
 
@@ -132,6 +132,205 @@ describe('MentoringPairingDetailPage', () => {
     );
   });
 
+  it('shows requested, confirmed, and declined sessions to the trainee and allows accepting an invitation', async () => {
+    vi.spyOn(AuthContextModule, 'useAuth').mockReturnValue(
+      buildAuthMock({
+        id: 8,
+        username: 'trainee',
+        mustChangePassword: false,
+        roles: ['Employee'],
+        permissions: ['EMPLOYEE_PORTAL_ACCESS'],
+      })
+    );
+    vi.spyOn(mentoringPairingApi, 'getRelationshipDetail').mockResolvedValue({
+      relationshipId: 77,
+      requestId: 201,
+      requestType: 'GROUP',
+      status: 'ACTIVE',
+      mentorUserId: 7,
+      mentorName: 'Mentor One',
+      skillName: 'Leadership',
+      requestMessage: null,
+      startedAt: '2026-04-20T08:00:00Z',
+      endedAt: null,
+      currentUserRole: 'TRAINEE',
+      trainees: [],
+    });
+    const listedSessions: MentoringSession[] = [
+      {
+        id: 5,
+        relationshipId: 77,
+        title: 'Session awaiting response',
+        agenda: null,
+        scheduledStart: '2026-11-25T09:00:00Z',
+        scheduledEnd: '2026-11-25T10:00:00Z',
+        deliveryMode: 'ONLINE',
+        meetingUrl: null,
+        status: 'SCHEDULED',
+        createdByUserId: 7,
+        createdByName: 'Mentor One',
+        createdAt: '2026-11-20T08:00:00Z',
+      },
+      {
+        id: 6,
+        relationshipId: 77,
+        title: 'Accepted session',
+        agenda: null,
+        scheduledStart: '2026-11-26T09:00:00Z',
+        scheduledEnd: '2026-11-26T10:00:00Z',
+        deliveryMode: 'ONLINE',
+        meetingUrl: null,
+        status: 'CONFIRMED',
+        createdByUserId: 7,
+        createdByName: 'Mentor One',
+        createdAt: '2026-11-20T08:00:00Z',
+      },
+      {
+        id: 7,
+        relationshipId: 77,
+        title: 'Declined session',
+        agenda: null,
+        scheduledStart: '2026-11-27T09:00:00Z',
+        scheduledEnd: '2026-11-27T10:00:00Z',
+        deliveryMode: 'ONLINE',
+        meetingUrl: null,
+        status: 'DECLINED',
+        declineReason: 'Schedule conflict',
+        createdByUserId: 7,
+        createdByName: 'Mentor One',
+        createdAt: '2026-11-20T08:00:00Z',
+      },
+    ];
+    vi.spyOn(mentoringPairingApi, 'listSessions').mockImplementation(async () => listedSessions);
+    const acceptedSession: MentoringSession = {
+      id: 5,
+      relationshipId: 77,
+      title: 'Session awaiting response',
+      agenda: null,
+      scheduledStart: '2026-11-25T09:00:00Z',
+      scheduledEnd: '2026-11-25T10:00:00Z',
+      deliveryMode: 'ONLINE',
+      meetingUrl: null,
+      status: 'CONFIRMED',
+      createdByUserId: 7,
+      createdByName: 'Mentor One',
+      createdAt: '2026-11-20T08:00:00Z',
+    };
+    const respondSpy = vi.spyOn(mentoringPairingApi, 'respondSession').mockImplementation(async () => {
+      listedSessions[0] = acceptedSession;
+      return acceptedSession;
+    });
+
+    renderDetailPage();
+    fireEvent.click(await screen.findByRole('tab', { name: 'Sessions' }));
+
+    expect(await screen.findByText('Session awaiting response')).toBeInTheDocument();
+    expect(screen.getByText('Accepted session')).toBeInTheDocument();
+    expect(screen.getByText('Declined session')).toBeInTheDocument();
+    expect(screen.getByText(/Declined: Schedule conflict/)).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: /Accept session/i }));
+    expect(await screen.findByText('Session accepted')).toBeInTheDocument();
+    expect(respondSpy).toHaveBeenCalledWith(77, 5, { accept: true });
+    const acceptedSessionCard = screen.getByText('Session awaiting response').closest('article');
+    expect(acceptedSessionCard).not.toBeNull();
+    if (acceptedSessionCard) {
+      expect(await within(acceptedSessionCard).findByText('CONFIRMED')).toBeInTheDocument();
+    }
+  });
+
+  it('lets mentors accept or reject a reschedule proposal and shows confirmed sessions', async () => {
+    vi.spyOn(mentoringPairingApi, 'listSessions').mockResolvedValue([
+      {
+        id: 8,
+        relationshipId: 77,
+        title: 'Accepted mentoring session',
+        agenda: null,
+        scheduledStart: '2026-11-26T09:00:00Z',
+        scheduledEnd: '2026-11-26T10:00:00Z',
+        deliveryMode: 'ONLINE',
+        meetingUrl: null,
+        status: 'CONFIRMED',
+        createdByUserId: 7,
+        createdByName: 'Mentor One',
+        createdAt: '2026-11-20T08:00:00Z',
+      },
+      {
+        id: 9,
+        relationshipId: 77,
+        title: 'Reschedule requested',
+        agenda: null,
+        scheduledStart: '2026-11-27T09:00:00Z',
+        scheduledEnd: '2026-11-27T10:00:00Z',
+        deliveryMode: 'ONLINE',
+        meetingUrl: null,
+        status: 'RESCHEDULE_PROPOSED',
+        proposedStart: '2026-11-28T09:00:00Z',
+        proposedEnd: '2026-11-28T10:00:00Z',
+        rescheduleReason: 'Conflicting appointment',
+        createdByUserId: 7,
+        createdByName: 'Mentor One',
+        createdAt: '2026-11-20T08:00:00Z',
+      },
+    ]);
+    const respondSpy = vi.spyOn(mentoringPairingApi, 'respondReschedule').mockResolvedValue({
+      id: 9,
+      relationshipId: 77,
+      title: 'Reschedule requested',
+      agenda: null,
+      scheduledStart: '2026-11-28T09:00:00Z',
+      scheduledEnd: '2026-11-28T10:00:00Z',
+      deliveryMode: 'ONLINE',
+      meetingUrl: null,
+      status: 'CONFIRMED',
+      createdByUserId: 7,
+      createdByName: 'Mentor One',
+      createdAt: '2026-11-20T08:00:00Z',
+    });
+
+    renderDetailPage();
+    fireEvent.click(await screen.findByRole('tab', { name: 'Sessions' }));
+
+    expect(await screen.findByText('Accepted mentoring session')).toBeInTheDocument();
+    expect(screen.getByText('Conflicting appointment')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: /Accept new time/i }));
+
+    expect(await screen.findByText('Reschedule accepted')).toBeInTheDocument();
+    expect(respondSpy).toHaveBeenCalledWith(77, 9, true);
+    expect(screen.getByRole('button', { name: /Keep original time/i })).toBeInTheDocument();
+  });
+
+  it('hides the video join button until the scheduled local day', async () => {
+    const tomorrowStart = new Date();
+    tomorrowStart.setDate(tomorrowStart.getDate() + 1);
+    const tomorrowEnd = new Date(tomorrowStart.getTime() + 45 * 60 * 1000);
+    vi.spyOn(mentoringPairingApi, 'listSessions').mockResolvedValue([
+      {
+        id: 10,
+        relationshipId: 77,
+        title: 'Tomorrow session',
+        agenda: null,
+        scheduledStart: tomorrowStart.toISOString(),
+        scheduledEnd: tomorrowEnd.toISOString(),
+        deliveryMode: 'ONLINE',
+        meetingUrl: null,
+        status: 'CONFIRMED',
+        createdByUserId: 7,
+        createdByName: 'Mentor One',
+        createdAt: new Date().toISOString(),
+      },
+    ]);
+
+    renderDetailPage();
+    fireEvent.click(await screen.findByRole('tab', { name: 'Sessions' }));
+
+    expect(await screen.findByText('Tomorrow session')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Join Daily\.co Video/i })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Session details' }));
+    expect(screen.getByText('Video only')).toBeInTheDocument();
+    expect(screen.getByText('1 day remaining')).toBeInTheDocument();
+  });
+
   it('shows progress for the selected pairing and links back to its overview', async () => {
     vi.spyOn(mentoringPairingApi, 'listProgressNotes').mockResolvedValue([]);
     renderDetailPage();
@@ -140,6 +339,74 @@ describe('MentoringPairingDetailPage', () => {
     expect(await screen.findByText('Progress and milestones')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('link', { name: 'Back to overview' }));
     expect(await screen.findByText('Pairing details')).toBeInTheDocument();
+  });
+
+  it('lets the mentor submit an end-of-session report and displays the saved report', async () => {
+    const session: MentoringSession = {
+      id: 12,
+      relationshipId: 77,
+      title: 'Completed session',
+      agenda: null,
+      scheduledStart: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString(),
+      scheduledEnd: new Date(Date.now() - 60 * 60 * 1000).toISOString(),
+      deliveryMode: 'ONLINE',
+      meetingUrl: null,
+      status: 'CONFIRMED',
+      notes: null,
+      createdByUserId: 7,
+      createdByName: 'Mentor One',
+      createdAt: new Date().toISOString(),
+    };
+    const savedSession = { ...session, status: 'COMPLETED' as const, notes: 'Reviewed goals and next steps.' };
+    const listSessionsSpy = vi.spyOn(mentoringPairingApi, 'listSessions')
+      .mockResolvedValue([session]);
+    listSessionsSpy.mockResolvedValueOnce([session]).mockResolvedValue([savedSession]);
+    const submitReportSpy = vi.spyOn(mentoringPairingApi, 'submitSessionReport')
+      .mockResolvedValue(savedSession);
+
+    renderDetailPage();
+    fireEvent.click(await screen.findByRole('tab', { name: 'Sessions' }));
+
+    const reportInput = await screen.findByLabelText('Session report');
+    fireEvent.change(reportInput, { target: { value: 'Reviewed goals and next steps.' } });
+    const submitButton = screen.getByRole('button', { name: 'Submit report and complete session' });
+    expect(submitButton).not.toBeDisabled();
+    fireEvent.click(submitButton);
+
+    await waitFor(() =>
+      expect(submitReportSpy).toHaveBeenCalledWith(77, 12, 'Reviewed goals and next steps.')
+    );
+    expect(await screen.findByRole('region', { name: 'Session report' })).toHaveTextContent(
+      'Reviewed goals and next steps.'
+    );
+  });
+
+  it('blocks pairing completion while a confirmed session remains', async () => {
+    vi.spyOn(mentoringPairingApi, 'listSessions').mockResolvedValue([
+      {
+        id: 13,
+        relationshipId: 77,
+        title: 'Upcoming session',
+        agenda: null,
+        scheduledStart: new Date(Date.now() + 60 * 60 * 1000).toISOString(),
+        scheduledEnd: new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString(),
+        deliveryMode: 'ONLINE',
+        meetingUrl: null,
+        status: 'CONFIRMED',
+        createdByUserId: 7,
+        createdByName: 'Mentor One',
+        createdAt: new Date().toISOString(),
+      },
+    ]);
+
+    renderDetailPage();
+    fireEvent.click(await screen.findByRole('button', { name: 'Close relationship' }));
+
+    expect(await screen.findByText(
+      'Submit the report for every confirmed session before completing the pairing.'
+    )).toBeInTheDocument();
+    expect(screen.getByRole('option', { name: 'Complete objectives' })).toBeDisabled();
+    expect(screen.getByRole('option', { name: 'Cancel relationship' })).not.toBeDisabled();
   });
 
   it('links chat and resources to their shared workspaces with the pairing selected', async () => {

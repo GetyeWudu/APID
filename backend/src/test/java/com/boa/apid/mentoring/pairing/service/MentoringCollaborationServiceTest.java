@@ -11,6 +11,7 @@ import com.boa.apid.core.organization.entity.EmploymentStatus;
 import com.boa.apid.core.organization.repository.EmployeeRepository;
 import com.boa.apid.core.skills.entity.Skill;
 import com.boa.apid.mentoring.pairing.dto.MentoringChatMessageRequest;
+import com.boa.apid.mentoring.pairing.dto.MentoringSessionReportRequest;
 import com.boa.apid.mentoring.pairing.dto.MentoringSessionRequest;
 import com.boa.apid.mentoring.pairing.entity.MentoringDeliveryMode;
 import com.boa.apid.mentoring.pairing.entity.MentoringMessage;
@@ -20,6 +21,7 @@ import com.boa.apid.mentoring.pairing.entity.MentoringRelationshipStatus;
 import com.boa.apid.mentoring.pairing.entity.MentoringRequest;
 import com.boa.apid.mentoring.pairing.entity.MentoringRequestType;
 import com.boa.apid.mentoring.pairing.entity.MentoringSession;
+import com.boa.apid.mentoring.pairing.entity.MentoringSessionStatus;
 import com.boa.apid.mentoring.pairing.repository.MentoringMessageRepository;
 import com.boa.apid.mentoring.pairing.repository.MentoringRelationshipMemberRepository;
 import com.boa.apid.mentoring.pairing.repository.MentoringRelationshipRepository;
@@ -186,6 +188,83 @@ class MentoringCollaborationServiceTest {
         );
 
         verify(messageRepository, never()).save(any(MentoringMessage.class));
+    }
+
+    @Test
+    void mentorReportCompletesConfirmedSessionAfterItsScheduledEnd() {
+        User mentor = user(1L, "mentor");
+        MentoringRelationship relationship = relationship(mentor, MentoringRelationshipStatus.ACTIVE);
+        MentoringSession session = new MentoringSession();
+        ReflectionTestUtils.setField(session, "id", 11L);
+        session.setRelationship(relationship);
+        session.setCreatedByUser(mentor);
+        session.setScheduledStart(Instant.now().minusSeconds(7200));
+        session.setScheduledEnd(Instant.now().minusSeconds(3600));
+        session.setStatus(MentoringSessionStatus.CONFIRMED);
+        when(relationshipRepository.findDetailedById(7L)).thenReturn(Optional.of(relationship));
+        when(sessionRepository.findByIdForUpdate(11L)).thenReturn(Optional.of(session));
+        when(sessionRepository.save(any(MentoringSession.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+        when(employeeRepository.findDetailedByUserIdIn(any())).thenReturn(List.of());
+
+        var result = service.submitSessionReport(
+                7L,
+                11L,
+                new MentoringSessionReportRequest("  Covered goals and next steps  "),
+                actor(1L, "mentor")
+        );
+
+        assertEquals(MentoringSessionStatus.COMPLETED, session.getStatus());
+        assertEquals("Covered goals and next steps", session.getNotes());
+        assertEquals(session.getNotes(), result.notes());
+        verify(reservationService).release("MENTORING", 11L, "Session report submitted.");
+    }
+
+    @Test
+    void sessionReportCannotBeSubmittedBeforeScheduledEnd() {
+        User mentor = user(1L, "mentor");
+        MentoringRelationship relationship = relationship(mentor, MentoringRelationshipStatus.ACTIVE);
+        MentoringSession session = new MentoringSession();
+        ReflectionTestUtils.setField(session, "id", 11L);
+        session.setRelationship(relationship);
+        session.setCreatedByUser(mentor);
+        session.setScheduledStart(Instant.now());
+        session.setScheduledEnd(Instant.now().plusSeconds(3600));
+        session.setStatus(MentoringSessionStatus.CONFIRMED);
+        when(relationshipRepository.findDetailedById(7L)).thenReturn(Optional.of(relationship));
+        when(sessionRepository.findByIdForUpdate(11L)).thenReturn(Optional.of(session));
+
+        assertThrows(
+                BusinessException.class,
+                () -> service.submitSessionReport(
+                        7L,
+                        11L,
+                        new MentoringSessionReportRequest("Session report"),
+                        actor(1L, "mentor")
+                )
+        );
+
+        verify(sessionRepository, never()).save(any(MentoringSession.class));
+    }
+
+    @Test
+    void traineeCannotSubmitMentorSessionReport() {
+        User mentor = user(1L, "mentor");
+        MentoringRelationship relationship = relationship(mentor, MentoringRelationshipStatus.ACTIVE);
+        when(relationshipRepository.findDetailedById(7L)).thenReturn(Optional.of(relationship));
+        when(memberRepository.existsByRelationship_IdAndTraineeUser_Id(7L, 2L)).thenReturn(true);
+
+        assertThrows(
+                AccessDeniedException.class,
+                () -> service.submitSessionReport(
+                        7L,
+                        11L,
+                        new MentoringSessionReportRequest("Session report"),
+                        actor(2L, "trainee")
+                )
+        );
+
+        verify(sessionRepository, never()).findByIdForUpdate(11L);
     }
 
     private static MentoringSessionRequest sessionRequest(Instant start, Instant end) {

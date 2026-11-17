@@ -116,6 +116,7 @@ export interface MentoringSession {
   proposedEnd?: string | null;
   respondedAt?: string | null;
   cancellationReason?: string | null;
+  notes?: string | null;
   createdByUserId: number;
   createdByName: string;
   createdAt: string;
@@ -224,6 +225,18 @@ export const mentoringPairingApi = {
     const response = await apiClient.post<ApiResponse<MentoringSession>>(
       `/mentoring/pairing/relationships/${relationshipId}/sessions/${sessionId}/respond`,
       input
+    );
+    return response.data.data;
+  },
+
+  async submitSessionReport(
+    relationshipId: number,
+    sessionId: number,
+    reportNote: string
+  ): Promise<MentoringSession> {
+    const response = await apiClient.post<ApiResponse<MentoringSession>>(
+      `/mentoring/pairing/relationships/${relationshipId}/sessions/${sessionId}/report`,
+      { reportNote }
     );
     return response.data.data;
   },

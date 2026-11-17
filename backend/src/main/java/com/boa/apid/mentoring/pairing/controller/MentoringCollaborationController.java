@@ -9,6 +9,7 @@ import com.boa.apid.mentoring.pairing.dto.MentoringChatMessageDto;
 import com.boa.apid.mentoring.pairing.dto.MentoringChatMessageRequest;
 import com.boa.apid.mentoring.pairing.dto.MentoringPairingDetailDto;
 import com.boa.apid.mentoring.pairing.dto.MentoringSessionDto;
+import com.boa.apid.mentoring.pairing.dto.MentoringSessionReportRequest;
 import com.boa.apid.mentoring.pairing.dto.MentoringSessionRequest;
 import com.boa.apid.mentoring.pairing.dto.ProposeMentoringRescheduleRequest;
 import com.boa.apid.mentoring.pairing.dto.RespondMentoringSessionRequest;
@@ -68,6 +69,19 @@ public class MentoringCollaborationController {
         return ApiResponse.ok(
                 request.accept() ? "Mentoring session confirmed" : "Mentoring session declined",
                 collaborationService.respondSession(relationshipId, sessionId, request, actor)
+        );
+    }
+
+    @PostMapping("/sessions/{sessionId}/report")
+    public ApiResponse<MentoringSessionDto> submitSessionReport(
+            @PathVariable Long relationshipId,
+            @PathVariable Long sessionId,
+            @RequestBody @jakarta.validation.Valid MentoringSessionReportRequest request,
+            @AuthenticationPrincipal ApidUserPrincipal actor
+    ) {
+        return ApiResponse.ok(
+                "Mentoring session report submitted",
+                collaborationService.submitSessionReport(relationshipId, sessionId, request, actor)
         );
     }
 

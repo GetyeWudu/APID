@@ -33,6 +33,8 @@ import com.boa.apid.mentoring.pairing.entity.MentoringRelationshipMemberStatus;
 import com.boa.apid.mentoring.pairing.entity.MentoringRelationshipStatus;
 import com.boa.apid.mentoring.pairing.repository.MentoringRelationshipMemberRepository;
 import com.boa.apid.mentoring.pairing.repository.MentoringRelationshipRepository;
+import com.boa.apid.mentoring.pairing.entity.MentoringSessionStatus;
+import com.boa.apid.mentoring.pairing.repository.MentoringSessionRepository;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
@@ -50,6 +52,7 @@ public class MentoringRelationshipManagementService {
 
     private final MentoringRelationshipRepository relationshipRepository;
     private final MentoringRelationshipMemberRepository memberRepository;
+    private final MentoringSessionRepository sessionRepository;
     private final MentoringResourceRepository resourceRepository;
     private final MentoringProgressNoteRepository progressNoteRepository;
     private final MentoringRelationshipFeedbackRepository feedbackRepository;
@@ -63,6 +66,7 @@ public class MentoringRelationshipManagementService {
     public MentoringRelationshipManagementService(
             MentoringRelationshipRepository relationshipRepository,
             MentoringRelationshipMemberRepository memberRepository,
+            MentoringSessionRepository sessionRepository,
             MentoringResourceRepository resourceRepository,
             MentoringProgressNoteRepository progressNoteRepository,
             MentoringRelationshipFeedbackRepository feedbackRepository,
@@ -75,6 +79,7 @@ public class MentoringRelationshipManagementService {
     ) {
         this.relationshipRepository = relationshipRepository;
         this.memberRepository = memberRepository;
+        this.sessionRepository = sessionRepository;
         this.resourceRepository = resourceRepository;
         this.progressNoteRepository = progressNoteRepository;
         this.feedbackRepository = feedbackRepository;
@@ -258,6 +263,17 @@ public class MentoringRelationshipManagementService {
             throw new BusinessException(
                     "MENTORING_RELATIONSHIP_ALREADY_CLOSED",
                     "Only an active or paused mentoring relationship can be closed.",
+                    HttpStatus.CONFLICT
+            );
+        }
+        if (nextStatus == MentoringRelationshipStatus.COMPLETED
+                && sessionRepository.countByRelationship_IdAndStatus(
+                        relationshipId,
+                        MentoringSessionStatus.CONFIRMED
+                ) > 0) {
+            throw new BusinessException(
+                    "MENTORING_SESSIONS_UNFINISHED",
+                    "Submit a report for every confirmed session before completing the relationship.",
                     HttpStatus.CONFLICT
             );
         }

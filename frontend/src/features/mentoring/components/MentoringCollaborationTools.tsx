@@ -336,10 +336,14 @@ export function MentoringFeedbackForm({
 export function MentoringRelationshipClosure({
   relationshipId,
   relationshipStatus,
+  canCompleteRelationship,
+  completionBlockedReason,
   onClosed,
 }: {
   relationshipId: number;
   relationshipStatus: 'ACTIVE' | 'PAUSED' | 'COMPLETED' | 'CANCELLED' | 'REASSIGNED';
+  canCompleteRelationship: boolean;
+  completionBlockedReason: string | null;
   onClosed: () => void;
 }) {
   const { pushToast } = useToast();
@@ -371,16 +375,23 @@ export function MentoringRelationshipClosure({
         <div className="apid-modal-backdrop" role="dialog" aria-modal="true" aria-label="Close mentoring relationship">
           <form className="apid-card apid-modal boa-stack" onSubmit={(event) => {
             event.preventDefault();
-            if (reason.trim().length >= 5) closeMutation.mutate();
+            if (reason.trim().length >= 5 && (status === 'CANCELLED' || canCompleteRelationship)) {
+              closeMutation.mutate();
+            }
           }}>
             <h3 style={{ margin: 0 }}>Close mentoring relationship</h3>
             <label>
               Outcome
               <select className="apid-input" value={status} onChange={(event) => setStatus(event.target.value as 'COMPLETED' | 'CANCELLED')}>
-                <option value="COMPLETED">Complete objectives</option>
+                <option value="COMPLETED" disabled={!canCompleteRelationship}>Complete objectives</option>
                 <option value="CANCELLED">Cancel relationship</option>
               </select>
             </label>
+            {status === 'COMPLETED' && !canCompleteRelationship && (
+              <p className="boa-muted" role="status">
+                {completionBlockedReason ?? 'Complete all confirmed sessions before completing the relationship.'}
+              </p>
+            )}
             <label>
               Reason or completion summary
               <textarea className="apid-input" rows={3} maxLength={1000} value={reason} onChange={(event) => setReason(event.target.value)} required />
@@ -389,7 +400,15 @@ export function MentoringRelationshipClosure({
               <button type="button" className="apid-btn apid-btn-outline" disabled={closeMutation.isPending} onClick={() => setOpen(false)}>
                 Keep open
               </button>
-              <button type="submit" className="apid-btn apid-btn-primary" disabled={closeMutation.isPending || reason.trim().length < 5}>
+              <button
+                type="submit"
+                className="apid-btn apid-btn-primary"
+                disabled={
+                  closeMutation.isPending ||
+                  reason.trim().length < 5 ||
+                  (status === 'COMPLETED' && !canCompleteRelationship)
+                }
+              >
                 {closeMutation.isPending ? 'Saving...' : `Confirm ${status.toLowerCase()}`}
               </button>
             </div>

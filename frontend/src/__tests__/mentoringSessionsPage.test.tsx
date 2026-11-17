@@ -187,7 +187,16 @@ describe('MentoringSessionsPage', () => {
     });
   });
 
-  it('renders "Join Daily.co Video" button and launches video room modal', async () => {
+  it('renders "Join Daily.co Video" on the scheduled day and launches the video room modal', async () => {
+    const sessionStart = new Date();
+    sessionStart.setHours(12, 0, 0, 0);
+    vi.spyOn(mentoringPairingApi, 'listMySessions').mockResolvedValue([
+      {
+        ...mockScheduledSession,
+        scheduledStart: sessionStart.toISOString(),
+        scheduledEnd: new Date(sessionStart.getTime() + 45 * 60 * 1000).toISOString(),
+      },
+    ]);
     const getJoinTokenSpy = vi.spyOn(mentoringPairingApi, 'getJoinToken').mockResolvedValue({
       roomUrlWithToken: 'https://amakari.daily.co/apid-mentoring-77-101?t=mock-token',
       token: 'mock-token',

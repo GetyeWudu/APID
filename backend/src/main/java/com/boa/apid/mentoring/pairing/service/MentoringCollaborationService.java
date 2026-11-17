@@ -179,6 +179,54 @@ public class MentoringCollaborationService {
     }
 
     @Transactional
+    public MentoringSessionDto submitSessionReport(
+            Long relationshipId,
+            Long sessionId,
+            MentoringSessionReportRequest request,
+            ApidUserPrincipal actor
+    ) {
+        MentoringRelationship relationship = requireRelationshipAccess(relationshipId, actor.getUserId());
+        if (!relationship.getMentorUser().getId().equals(actor.getUserId())) {
+            throw new AccessDeniedException("Only the mentor can submit the end-of-session report.");
+        }
+
+        MentoringSession session = sessionRepository.findByIdForUpdate(sessionId)
+                .orElseThrow(() -> new ResourceNotFoundException("Mentoring session not found."));
+        if (!session.getRelationship().getId().equals(relationshipId)) {
+            throw new BusinessException("SESSION_MISMATCH", "Session does not belong to this relationship.", HttpStatus.BAD_REQUEST);
+        }
+        if (session.getStatus() != MentoringSessionStatus.CONFIRMED) {
+            throw new BusinessException(
+                    "INVALID_SESSION_REPORT_STATE",
+                    "Only a confirmed session without a report can be completed.",
+                    HttpStatus.CONFLICT
+            );
+        }
+        if (session.getScheduledEnd().isAfter(Instant.now())) {
+            throw new BusinessException(
+                    "MENTORING_SESSION_NOT_ENDED",
+                    "The session report can be submitted after the scheduled session end time.",
+                    HttpStatus.CONFLICT
+            );
+        }
+        if (request == null || request.reportNote() == null || request.reportNote().isBlank()
+                || request.reportNote().trim().length() > 4000) {
+            throw new BusinessException(
+                    "INVALID_MENTORING_SESSION_REPORT",
+                    "Enter a session report of 4000 characters or fewer."
+            );
+        }
+
+        session.setNotes(request.reportNote().trim());
+        session.setStatus(MentoringSessionStatus.COMPLETED);
+        MentoringSession saved = sessionRepository.save(session);
+        reservationService.release("MENTORING", sessionId, "Session report submitted.");
+        Map<Long, Employee> employeesByUserId =
+                loadEmployees(List.of(actor.getUserId(), session.getCreatedByUser().getId()));
+        return toSessionDto(saved, employeesByUserId);
+    }
+
+    @Transactional
     public MentoringSessionDto createSession(
             Long relationshipId,
             MentoringSessionRequest body,
