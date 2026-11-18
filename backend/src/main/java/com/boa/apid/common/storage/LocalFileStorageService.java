@@ -189,6 +189,8 @@ public class LocalFileStorageService implements FileStorageService {
             case TRAINER_CERT -> perms.contains("TRAINER_APPLICATION_REVIEW")
                     || perms.contains("TRAINER_STATUS_MANAGE")
                     || perms.contains("MENTORING_REPORT_VIEW_ALL");
+            case MENTOR_PROFILE_PHOTO -> perms.contains("TRAINER_APPLICATION_REVIEW")
+                    || perms.contains("MENTORING_REPORT_VIEW_ALL");
             case MENTORING_RESOURCE -> perms.contains("MENTORING_MATCH_MANAGE")
                     || perms.contains("MENTORING_REPORT_VIEW_ALL");
             case PMS_REPORT, SKILL_DEV_DOC -> perms.contains("PMS_REPORT_UPLOAD")

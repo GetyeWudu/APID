@@ -35,6 +35,14 @@ export interface TrainerRosterItem {
   experienceYears?: number | null;
   mentoringApproach?: string | null;
   sessionsPerWeek?: number | null;
+  profilePictureFileId?: number | null;
+  profilePictureFileName?: string | null;
+  profileApplicationDetails?: string | null;
+  profileApplicationEvidence?: Array<{
+    fileId: number;
+    fileName: string;
+    context: string;
+  }>;
   skills: TrainerSkill[];
   effectiveFrom: string;
   updatedAt: string;
@@ -230,16 +238,22 @@ export const mentoringTrainerApi = {
     return response.data.data;
   },
 
-  async updateProfile(input: {
-    bio: string;
-    availabilityNotes?: string;
-    experienceYears: number | null;
-    mentoringApproach: string;
-    sessionsPerWeek: number | null;
-    maxConcurrentTrainees?: number;
-  }): Promise<TrainerRosterItem> {
-    const response = await apiClient.patch<ApiResponse<TrainerRosterItem>>('/mentoring/trainer-profile', input);
+  async updateProfilePicture(image: File): Promise<TrainerRosterItem> {
+    const formData = new FormData();
+    formData.append('image', image);
+    const response = await apiClient.post<ApiResponse<TrainerRosterItem>>(
+      '/mentoring/trainer-profile/picture',
+      formData,
+      { headers: { 'Content-Type': 'multipart/form-data' } }
+    );
     return response.data.data;
+  },
+
+  async downloadProfilePicture(fileId: number): Promise<Blob> {
+    const response = await apiClient.get<Blob>(`/core/files/${fileId}/download`, {
+      responseType: 'blob',
+    });
+    return response.data;
   },
 
   async getProfile(): Promise<TrainerRosterItem> {

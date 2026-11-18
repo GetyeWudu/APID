@@ -29,8 +29,8 @@ public class MentorApplication {
     @Column(name = "application_type", nullable = false, length = 30)
     private MentorApplicationType applicationType = MentorApplicationType.INITIAL;
 
-    @ManyToOne(fetch = FetchType.LAZY, optional = false)
-    @JoinColumn(name = "proof_file_id", nullable = false)
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "proof_file_id")
     private StoredFile proofDocument;
 
     @ManyToOne(fetch = FetchType.LAZY)
@@ -65,11 +65,14 @@ public class MentorApplication {
     )
     private Set<StoredFile> supportingEvidence = new LinkedHashSet<>();
 
-    @Column(name = "custom_skill", length = 150)
+    @Column(name = "custom_skill", length = 1000)
     private String customSkill;
 
     @Column(name = "note", columnDefinition = "TEXT")
     private String note;
+
+    @Column(name = "evidence_contexts", columnDefinition = "TEXT")
+    private String evidenceContexts;
 
     @Column(name = "expertise_summary", length = 2000)
     private String expertiseSummary;
@@ -143,6 +146,9 @@ public class MentorApplication {
 
     public String getNote() { return note; }
     public void setNote(String note) { this.note = note; }
+
+    public String getEvidenceContexts() { return evidenceContexts; }
+    public void setEvidenceContexts(String evidenceContexts) { this.evidenceContexts = evidenceContexts; }
 
     public String getExpertiseSummary() { return expertiseSummary; }
     public void setExpertiseSummary(String expertiseSummary) { this.expertiseSummary = expertiseSummary; }

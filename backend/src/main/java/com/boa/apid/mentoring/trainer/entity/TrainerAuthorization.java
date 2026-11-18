@@ -1,6 +1,7 @@
 package com.boa.apid.mentoring.trainer.entity;
 
 import com.boa.apid.core.authorization.entity.User;
+import com.boa.apid.common.storage.StoredFile;
 import com.boa.apid.core.organization.entity.Employee;
 import com.boa.apid.core.skills.entity.Skill;
 import com.boa.apid.mentoring.application.entity.MentorApplication;
@@ -42,6 +43,10 @@ public class TrainerAuthorization {
 
     @Column(name = "availability_notes", length = 1000)
     private String availabilityNotes;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "profile_picture_file_id")
+    private StoredFile profilePicture;
 
     @Column(name = "experience_years")
     private Integer experienceYears;
@@ -106,6 +111,8 @@ public class TrainerAuthorization {
     public void setBio(String bio) { this.bio = bio; }
     public String getAvailabilityNotes() { return availabilityNotes; }
     public void setAvailabilityNotes(String availabilityNotes) { this.availabilityNotes = availabilityNotes; }
+    public StoredFile getProfilePicture() { return profilePicture; }
+    public void setProfilePicture(StoredFile profilePicture) { this.profilePicture = profilePicture; }
     public Integer getExperienceYears() { return experienceYears; }
     public void setExperienceYears(Integer experienceYears) { this.experienceYears = experienceYears; }
     public String getMentoringApproach() { return mentoringApproach; }

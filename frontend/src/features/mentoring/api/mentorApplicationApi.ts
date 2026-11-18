@@ -3,6 +3,7 @@ import { apiClient, type ApiResponse } from '../../../shared/api/apiClient';
 export interface SubmitMentorApplicationPayload {
   proofDocument?: File;
   supportingEvidence?: File[];
+  supportingEvidenceContexts?: string[];
   catalogSkillId?: number;
   catalogSkillIds?: number[];
   customSkill?: string;
@@ -17,7 +18,7 @@ export interface SubmitMentorApplicationPayload {
 
 export interface SubmittedMentorApplication {
   id: number;
-  applicationType: 'INITIAL' | 'SKILL_ADDITION';
+  applicationType: 'INITIAL' | 'SKILL_ADDITION' | 'PROFILE_UPDATE';
   status: 'PENDING' | 'APPROVED' | 'DECLINED';
   catalogSkillId: number | null;
   catalogSkillIds: number[];
@@ -28,15 +29,15 @@ export interface SubmittedMentorApplication {
 export interface MentorApplication {
   id: number;
   applicantUsername: string;
-  applicationType: 'INITIAL' | 'SKILL_ADDITION';
+  applicationType: 'INITIAL' | 'SKILL_ADDITION' | 'PROFILE_UPDATE';
   status: 'PENDING' | 'APPROVED' | 'DECLINED';
   skillName: string;
   skillNames: string[];
   catalogSkillIds: number[];
   customSkill: string | null;
-  proofFileId: number;
-  proofFileName: string;
-  evidenceFiles: Array<{ fileId: number; fileName: string }>;
+  proofFileId: number | null;
+  proofFileName: string | null;
+  evidenceFiles: Array<{ fileId: number; fileName: string; context?: string }>;
   note: string | null;
   expertiseSummary: string | null;
   availabilityNotes: string | null;
@@ -55,6 +56,9 @@ function buildApplicationFormData(payload: SubmitMentorApplicationPayload) {
   if (payload.supportingEvidence?.length) {
     payload.supportingEvidence.forEach((file) => formData.append('supportingEvidence', file));
   }
+  payload.supportingEvidenceContexts?.forEach((context) => {
+    formData.append('supportingEvidenceContext', context);
+  });
   if (payload.proofDocument) {
     formData.append('proofDocument', payload.proofDocument);
   }
@@ -145,6 +149,21 @@ export const mentorApplicationApi = {
       '/mentoring/applications/skill-additions',
       buildApplicationFormData(payload),
       { headers: { 'Content-Type': 'multipart/form-data' } }
+    );
+    return response.data.data;
+  },
+
+  async requestProfileUpdate(input: {
+    bio: string;
+    availabilityNotes: string;
+    experienceYears: number | null;
+    mentoringApproach: string;
+    sessionsPerWeek: number | null;
+    maxConcurrentTrainees: number;
+  }): Promise<SubmittedMentorApplication> {
+    const response = await apiClient.post<ApiResponse<SubmittedMentorApplication>>(
+      '/mentoring/applications/profile-updates',
+      input
     );
     return response.data.data;
   },

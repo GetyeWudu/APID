@@ -34,6 +34,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.util.List;
 
@@ -116,6 +117,18 @@ public class TrainerAuthorizationController {
         return ApiResponse.ok(
                 "Mentor profile updated",
                 authorizationService.updateOwnProfile(request, actor)
+        );
+    }
+
+    @PostMapping(value = "/trainer-profile/picture", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    @PreAuthorize("isAuthenticated() and !principal.mustChangePassword and hasAuthority('EMPLOYEE_PORTAL_ACCESS')")
+    public ApiResponse<TrainerRosterDto> updateOwnProfilePicture(
+            @RequestParam("image") MultipartFile image,
+            @AuthenticationPrincipal ApidUserPrincipal actor
+    ) {
+        return ApiResponse.ok(
+                "Mentor profile picture updated",
+                authorizationService.updateOwnProfilePicture(image, actor)
         );
     }
 

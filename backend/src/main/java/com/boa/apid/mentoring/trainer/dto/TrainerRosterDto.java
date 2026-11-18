@@ -27,6 +27,12 @@ public record TrainerRosterDto(
         Instant updatedAt,
         Integer experienceYears,
         String mentoringApproach,
-        Integer sessionsPerWeek
+        Integer sessionsPerWeek,
+        Long profilePictureFileId,
+        String profilePictureFileName,
+        String profileApplicationDetails,
+        List<ProfileEvidence> profileApplicationEvidence
 ) {
+    public record ProfileEvidence(Long fileId, String fileName, String context) {
+    }
 }

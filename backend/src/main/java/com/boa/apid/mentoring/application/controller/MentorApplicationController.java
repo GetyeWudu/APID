@@ -6,6 +6,7 @@ import com.boa.apid.mentoring.application.dto.MentorApplicationDto;
 import com.boa.apid.mentoring.application.dto.MentorApplicationReviewRequest;
 import com.boa.apid.mentoring.application.dto.MentorApplicationSubmittedDto;
 import com.boa.apid.mentoring.application.service.MentorApplicationService;
+import com.boa.apid.mentoring.trainer.dto.TrainerProfileRequest;
 import jakarta.validation.Valid;
 import org.springframework.http.MediaType;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -48,6 +49,7 @@ public class MentorApplicationController {
             @RequestParam(value = "maxConcurrentTrainees", required = false) Integer maxConcurrentTrainees,
             @RequestParam(value = "proofDocument", required = false) MultipartFile proofDocument,
             @RequestParam(value = "supportingEvidence", required = false) List<MultipartFile> supportingEvidence,
+            @RequestParam(value = "supportingEvidenceContext", required = false) List<String> supportingEvidenceContexts,
             @AuthenticationPrincipal ApidUserPrincipal actor
     ) {
         List<Long> selectedSkillIds = new ArrayList<>();
@@ -58,11 +60,16 @@ public class MentorApplicationController {
             selectedSkillIds.addAll(catalogSkillIds);
         }
         List<MultipartFile> evidenceFiles = new ArrayList<>();
+        List<String> evidenceContexts = new ArrayList<>();
         if (supportingEvidence != null) {
             evidenceFiles.addAll(supportingEvidence);
+            if (supportingEvidenceContexts != null) {
+                evidenceContexts.addAll(supportingEvidenceContexts);
+            }
         }
         if (proofDocument != null) {
             evidenceFiles.add(proofDocument);
+            evidenceContexts.add("Supporting evidence");
         }
         return ApiResponse.ok(
                 "Mentor application submitted",
@@ -77,6 +84,7 @@ public class MentorApplicationController {
                         sessionsPerWeek,
                         maxConcurrentTrainees,
                         evidenceFiles,
+                        evidenceContexts,
                         actor
                 )
         );
@@ -116,6 +124,18 @@ public class MentorApplicationController {
                         evidenceFiles,
                         actor
                 )
+        );
+    }
+
+    @PostMapping("/profile-updates")
+    @PreAuthorize("hasAuthority('EMPLOYEE_PORTAL_ACCESS')")
+    public ApiResponse<MentorApplicationSubmittedDto> requestProfileUpdate(
+            @Valid @RequestBody TrainerProfileRequest request,
+            @AuthenticationPrincipal ApidUserPrincipal actor
+    ) {
+        return ApiResponse.ok(
+                "Mentor profile update submitted for HR review",
+                mentorApplicationService.submitProfileUpdate(request, actor)
         );
     }
 

@@ -2,6 +2,11 @@ package com.boa.apid.mentoring.trainer.service;
 
 import com.boa.apid.common.exception.BusinessException;
 import com.boa.apid.common.exception.ResourceNotFoundException;
+import com.boa.apid.common.storage.FilePurpose;
+import com.boa.apid.common.storage.FileStorageService;
+import com.boa.apid.common.storage.StoredFile;
+import com.boa.apid.common.storage.StoredFileDto;
+import com.boa.apid.common.storage.StoredFileRepository;
 import com.boa.apid.core.audit.service.AuditService;
 import com.boa.apid.core.auth.security.ApidUserPrincipal;
 import com.boa.apid.core.authorization.entity.Role;
@@ -69,6 +74,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.time.Instant;
 import java.util.ArrayList;
@@ -86,6 +92,8 @@ public class TrainerAuthorizationService {
             List.of(TrainerAuthorizationStatus.ACTIVE, TrainerAuthorizationStatus.SUSPENDED);
 
     private final TrainerAuthorizationRepository authorizationRepository;
+    private final StoredFileRepository storedFileRepository;
+    private final FileStorageService fileStorageService;
     private final TrainerAuthorizationSkillStatusRepository skillStatusRepository;
     private final TrainerStatusHistoryRepository historyRepository;
     private final MentorBadgeRemovalRequestRepository badgeRemovalRequestRepository;
@@ -109,6 +117,8 @@ public class TrainerAuthorizationService {
 
     public TrainerAuthorizationService(
             TrainerAuthorizationRepository authorizationRepository,
+            StoredFileRepository storedFileRepository,
+            FileStorageService fileStorageService,
             TrainerAuthorizationSkillStatusRepository skillStatusRepository,
             TrainerStatusHistoryRepository historyRepository,
             MentorBadgeRemovalRequestRepository badgeRemovalRequestRepository,
@@ -131,6 +141,8 @@ public class TrainerAuthorizationService {
             ApplicationEventPublisher eventPublisher
     ) {
         this.authorizationRepository = authorizationRepository;
+        this.storedFileRepository = storedFileRepository;
+        this.fileStorageService = fileStorageService;
         this.skillStatusRepository = skillStatusRepository;
         this.historyRepository = historyRepository;
         this.badgeRemovalRequestRepository = badgeRemovalRequestRepository;
@@ -367,36 +379,79 @@ public class TrainerAuthorizationService {
 
     @Transactional
     public TrainerRosterDto updateOwnProfile(TrainerProfileRequest request, ApidUserPrincipal actor) {
+        throw new BusinessException(
+                "MENTOR_PROFILE_REVIEW_REQUIRED",
+                "Mentor profile changes must be submitted for HR review.",
+                HttpStatus.CONFLICT
+        );
+    }
+
+    @Transactional
+    public TrainerRosterDto updateOwnProfilePicture(MultipartFile image, ApidUserPrincipal actor) {
+        if (image == null || image.isEmpty()) {
+            throw new BusinessException("MENTOR_PROFILE_PHOTO_REQUIRED", "Choose a profile picture to upload.");
+        }
         TrainerAuthorization authorization = authorizationRepository.findByUserIdAndStatus(
                         actor.getUserId(), TrainerAuthorizationStatus.ACTIVE)
                 .stream().findFirst()
                 .orElseThrow(() -> new AccessDeniedException("Only an active mentor can update this profile."));
-        if (request.maxConcurrentTrainees() != null) {
-            long committedCapacity = relationshipRepository.countActiveTraineesByMentorUserId(
-                    actor.getUserId(), MentoringRelationshipStatus.ACTIVE)
-                    + recipientRepository.countByMentorAndStatus(
-                            actor.getUserId(), MentoringRequestRecipientStatus.PENDING);
-            if (request.maxConcurrentTrainees() < committedCapacity) {
-                throw new BusinessException(
-                        "TRAINER_CAPACITY_BELOW_COMMITMENTS",
-                        "Trainer capacity cannot be lower than active trainees plus pending requests.",
-                        HttpStatus.CONFLICT
-                );
-            }
-            authorization.setMaxConcurrentTrainees(request.maxConcurrentTrainees());
+        StoredFileDto uploaded = fileStorageService.store(image, FilePurpose.MENTOR_PROFILE_PHOTO, actor);
+        StoredFile profilePicture = storedFileRepository.findByIdAndDeletedFalse(uploaded.id())
+                .orElseThrow(() -> new ResourceNotFoundException("Uploaded profile picture not found"));
+        if (!actor.getUserId().equals(profilePicture.getUploadedByUserId())
+                || profilePicture.getPurpose() != FilePurpose.MENTOR_PROFILE_PHOTO) {
+            throw new AccessDeniedException("Profile pictures must be uploaded by the mentor.");
         }
-        if (request.mentoringApproach() != null || request.bio() != null) {
-            String approach = normalizeOptional(
-                    request.mentoringApproach() == null ? request.bio() : request.mentoringApproach());
-            authorization.setMentoringApproach(approach);
-            authorization.setBio(approach);
-        }
-        if (request.availabilityNotes() != null) {
-            authorization.setAvailabilityNotes(normalizeOptional(request.availabilityNotes()));
-        }
-        authorization.setExperienceYears(request.experienceYears());
-        authorization.setSessionsPerWeek(request.sessionsPerWeek());
+        authorization.setProfilePicture(profilePicture);
         return toRosterDto(authorizationRepository.save(authorization));
+    }
+
+    @Transactional
+    public TrainerRosterDto approveProfileUpdate(MentorApplication application) {
+        Long mentorUserId = application.getApplicant().getId();
+        TrainerAuthorization authorization = authorizationRepository.findByUserIdAndStatus(
+                        mentorUserId, TrainerAuthorizationStatus.ACTIVE)
+                .stream().findFirst()
+                .orElseThrow(() -> new BusinessException(
+                        "ACTIVE_MENTOR_REQUIRED",
+                        "The mentor authorization is no longer active.",
+                        HttpStatus.CONFLICT
+                ));
+        authorization = authorizationRepository.findByIdForUpdate(authorization.getId())
+                .orElseThrow(() -> new ResourceNotFoundException("Mentor authorization not found"));
+        if (authorization.getStatus() != TrainerAuthorizationStatus.ACTIVE) {
+            throw new BusinessException(
+                    "ACTIVE_MENTOR_REQUIRED",
+                    "The mentor authorization is no longer active.",
+                    HttpStatus.CONFLICT
+            );
+        }
+        int requestedCapacity = application.getMaxConcurrentTrainees() == null
+                ? authorization.getMaxConcurrentTrainees()
+                : application.getMaxConcurrentTrainees();
+        validateProfileCapacity(mentorUserId, requestedCapacity);
+        authorization.setBio(application.getMentoringApproach());
+        authorization.setMentoringApproach(application.getMentoringApproach());
+        authorization.setAvailabilityNotes(application.getAvailabilityNotes());
+        authorization.setExperienceYears(application.getExperienceYears());
+        authorization.setSessionsPerWeek(application.getSessionsPerWeek());
+        authorization.setMaxConcurrentTrainees(requestedCapacity);
+        return toRosterDto(authorizationRepository.save(authorization));
+    }
+
+    @Transactional(readOnly = true)
+    public void validateProfileCapacity(Long mentorUserId, int requestedCapacity) {
+        long committedCapacity = relationshipRepository.countActiveTraineesByMentorUserId(
+                mentorUserId, MentoringRelationshipStatus.ACTIVE)
+                + recipientRepository.countByMentorAndStatus(
+                        mentorUserId, MentoringRequestRecipientStatus.PENDING);
+        if (requestedCapacity < committedCapacity) {
+            throw new BusinessException(
+                    "TRAINER_CAPACITY_BELOW_COMMITMENTS",
+                    "Trainer capacity cannot be lower than active trainees plus pending requests.",
+                    HttpStatus.CONFLICT
+            );
+        }
     }
 
     @Transactional(readOnly = true)
@@ -652,7 +707,11 @@ public class TrainerAuthorizationService {
             assignMentorRole(user, user);
             createdProfile = true;
         } else if (authorization != null && !skillIds.isEmpty()) {
-            authorization = addHrMentorSkills(authorization, skillIds, user);
+            throw new BusinessException(
+                    "HR_MENTOR_SKILL_REVIEW_REQUIRED",
+                    "Mentor skills must be submitted through a request for HR review.",
+                    HttpStatus.CONFLICT
+            );
         } else if (authorization == null && !skillIds.isEmpty()) {
             throw new BusinessException(
                     "HR_MENTOR_PROFILE_REQUIRED",
@@ -696,6 +755,13 @@ public class TrainerAuthorizationService {
             TrainerAuthorization authorization = existingAuthorizations.get(0);
             Set<Skill> authorizedSkills = new LinkedHashSet<>(authorization.getSkills());
             authorizedSkills.addAll(applicationSkills);
+            if (application.getApplicationType() == MentorApplicationType.INITIAL
+                    && authorization.getSourceApplication() == null) {
+                authorization.setSourceApplication(application);
+                if (authorization.getProfilePicture() == null) {
+                    authorization.setProfilePicture(profilePictureEvidence(application));
+                }
+            }
             authorization.setSkills(authorizedSkills);
             TrainerAuthorization saved = authorizationRepository.save(authorization);
 
@@ -753,6 +819,7 @@ public class TrainerAuthorizationService {
         authorization.setEmployee(employee);
         authorization.setSourceType(TrainerAuthorizationSource.APPLICATION);
         authorization.setSourceApplication(application);
+        authorization.setProfilePicture(profilePictureEvidence(application));
         authorization.setStatus(TrainerAuthorizationStatus.ACTIVE);
         authorization.setMaxConcurrentTrainees(application.getMaxConcurrentTrainees() == null
                 ? configService.getDefaultMaxTraineesPerTrainer()
@@ -1032,77 +1099,6 @@ public class TrainerAuthorizationService {
                 ));
     }
 
-    private TrainerAuthorization addHrMentorSkills(
-            TrainerAuthorization authorization,
-            List<Long> skillIds,
-            User actor
-    ) {
-        if (authorization.getStatus() != TrainerAuthorizationStatus.ACTIVE) {
-            throw new BusinessException(
-                    "HR_MENTOR_AUTHORIZATION_INACTIVE",
-                    "Your mentor authorization must be active before updating its skills.",
-                    HttpStatus.CONFLICT
-            );
-        }
-        List<Long> uniqueSkillIds = new ArrayList<>(new LinkedHashSet<>(skillIds));
-        if (uniqueSkillIds.size() != skillIds.size()) {
-            throw new BusinessException("DUPLICATE_TRAINER_SKILL", "Choose each mentor skill only once.");
-        }
-
-        List<Skill> skillsToAdd = resolveActiveSkills(uniqueSkillIds);
-        Map<Long, TrainerAuthorizationSkillStatus> statusesBySkillId = new LinkedHashMap<>();
-        skillStatusRepository.findByAuthorization_IdOrderBySkill_NameAsc(authorization.getId())
-                .forEach(status -> statusesBySkillId.put(status.getSkill().getId(), status));
-        Set<Skill> authorizedSkills = new LinkedHashSet<>(authorization.getSkills());
-        List<TrainerAuthorizationSkillStatus> changedStatuses = new ArrayList<>();
-        List<TrainerStatusHistory> statusHistory = new ArrayList<>();
-        String reason = "HR administrator updated mentor skills";
-
-        for (Skill skill : skillsToAdd) {
-            TrainerAuthorizationSkillStatus skillStatus = statusesBySkillId.get(skill.getId());
-            TrainerAuthorizationStatus previousStatus = null;
-            if (skillStatus == null) {
-                skillStatus = new TrainerAuthorizationSkillStatus();
-                skillStatus.setAuthorization(authorization);
-                skillStatus.setSkill(skill);
-            } else {
-                throw new BusinessException(
-                        skillStatus.getStatus() == TrainerAuthorizationStatus.ACTIVE
-                                ? "MENTOR_SKILL_ALREADY_ACTIVE"
-                                : "MENTOR_SKILL_STATUS_MANAGED_BY_HR",
-                        skillStatus.getStatus() == TrainerAuthorizationStatus.ACTIVE
-                                ? skill.getName() + " is already active on your mentor profile."
-                                : skill.getName() + " already has an HR-managed status.",
-                        HttpStatus.CONFLICT
-                );
-            }
-            authorizedSkills.add(skill);
-            skillStatus.setStatus(TrainerAuthorizationStatus.ACTIVE);
-            skillStatus.setStatusReason(reason);
-            changedStatuses.add(skillStatus);
-
-            TrainerStatusHistory history = new TrainerStatusHistory();
-            history.setAuthorization(authorization);
-            history.setSkill(skill);
-            history.setPreviousStatus(previousStatus);
-            history.setNewStatus(TrainerAuthorizationStatus.ACTIVE);
-            history.setReason(reason);
-            history.setChangedBy(actor);
-            statusHistory.add(history);
-        }
-
-        authorization.setSkills(authorizedSkills);
-        TrainerAuthorization saved = authorizationRepository.save(authorization);
-        skillStatusRepository.saveAll(changedStatuses);
-        historyRepository.saveAll(statusHistory);
-        List<TrainerAuthorizationSkillStatus> updatedStatuses =
-                skillStatusRepository.findByAuthorization_IdOrderBySkill_NameAsc(saved.getId());
-        if (!updatedStatuses.isEmpty()) {
-            saved.setStatus(aggregateStatus(updatedStatuses));
-        }
-        return authorizationRepository.save(saved);
-    }
-
     private List<Skill> resolveActiveSkills(List<Long> skillIds) {
         List<Skill> skills = skillRepository.findAllById(skillIds).stream()
                 .filter(Skill::isActive)
@@ -1115,6 +1111,11 @@ public class TrainerAuthorizationService {
 
     private TrainerRosterDto toRosterDto(TrainerAuthorization authorization) {
         Employee employee = authorization.getEmployee();
+        MentorApplication profileApplication = authorization.getSourceApplication();
+        if (profileApplication != null
+                && profileApplication.getApplicationType() != MentorApplicationType.INITIAL) {
+            profileApplication = null;
+        }
         Long userId = employee.getUserId();
         int active = userId == null ? 0 : (int) relationshipRepository.countActiveTraineesByMentorUserId(
                 userId, MentoringRelationshipStatus.ACTIVE);
@@ -1143,8 +1144,64 @@ public class TrainerAuthorizationService {
                 authorization.getUpdatedAt(),
                 authorization.getExperienceYears(),
                 authorization.getMentoringApproach(),
-                authorization.getSessionsPerWeek()
+                authorization.getSessionsPerWeek(),
+                authorization.getProfilePicture() == null ? null : authorization.getProfilePicture().getId(),
+                authorization.getProfilePicture() == null
+                        ? null : authorization.getProfilePicture().getOriginalFilename(),
+                profileApplication == null ? null : profileApplication.getNote(),
+                profileApplicationEvidence(profileApplication)
         );
+    }
+
+    private StoredFile profilePictureEvidence(MentorApplication application) {
+        Map<Long, String> contexts = evidenceContexts(application);
+        return application.getSupportingEvidence().stream()
+                .filter(file -> "Profile picture".equals(contexts.get(file.getId())))
+                .filter(file -> file.getContentType() != null && file.getContentType().startsWith("image/"))
+                .findFirst()
+                .orElse(null);
+    }
+
+    private List<TrainerRosterDto.ProfileEvidence> profileApplicationEvidence(MentorApplication application) {
+        if (application == null) {
+            return List.of();
+        }
+        Map<Long, String> contexts = evidenceContexts(application);
+        List<TrainerRosterDto.ProfileEvidence> evidence = application.getSupportingEvidence().stream()
+                .map(file -> new TrainerRosterDto.ProfileEvidence(
+                        file.getId(),
+                        file.getOriginalFilename(),
+                        contexts.getOrDefault(file.getId(), "Supporting evidence")
+                ))
+                .toList();
+        if (evidence.isEmpty() && application.getProofDocument() != null) {
+            return List.of(new TrainerRosterDto.ProfileEvidence(
+                    application.getProofDocument().getId(),
+                    application.getProofDocument().getOriginalFilename(),
+                    contexts.getOrDefault(application.getProofDocument().getId(), "Supporting evidence")
+            ));
+        }
+        return evidence;
+    }
+
+    private Map<Long, String> evidenceContexts(MentorApplication application) {
+        Map<Long, String> contexts = new LinkedHashMap<>();
+        String serialized = application.getEvidenceContexts();
+        if (serialized == null || serialized.isBlank()) {
+            return contexts;
+        }
+        for (String line : serialized.split("\\r?\\n")) {
+            int separator = line.indexOf('\t');
+            if (separator <= 0) {
+                throw new IllegalStateException("Invalid mentor application evidence context metadata");
+            }
+            try {
+                contexts.put(Long.parseLong(line.substring(0, separator)), line.substring(separator + 1));
+            } catch (NumberFormatException error) {
+                throw new IllegalStateException("Invalid mentor application evidence context metadata", error);
+            }
+        }
+        return contexts;
     }
 
     private MentorBadgeRemovalRequestDto toBadgeRemovalRequestDto(MentorBadgeRemovalRequest request) {

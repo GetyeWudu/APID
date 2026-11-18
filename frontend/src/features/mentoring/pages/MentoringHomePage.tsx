@@ -324,9 +324,13 @@ export function MentoringHomePage() {
       <div className="boa-stack">
         <PageHeader
           title="Apply to Become a Mentor"
-          subtitle="Submit one application with all requested skills and supporting evidence."
+          subtitle="Complete your profile and supporting documents. A mentor profile is created only after administrator approval."
         />
-        <ApplyForMentorForm activeSkills={activeSkills} currentUserId={user?.id ?? 0} />
+        <ApplyForMentorForm
+          activeSkills={activeSkills}
+          currentUserId={user?.id ?? 0}
+          defaultFullName={linkedEmployee.fullName}
+        />
       </div>
     );
   }

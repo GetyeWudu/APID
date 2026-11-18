@@ -22,7 +22,11 @@ public interface MentorApplicationRepository extends JpaRepository<MentorApplica
             MentorApplicationStatus status
     );
 
-    boolean existsByApplicant_IdAndApplicationType(Long applicantId, MentorApplicationType applicationType);
+    boolean existsByApplicant_IdAndApplicationTypeAndStatusIn(
+            Long applicantId,
+            MentorApplicationType applicationType,
+            List<MentorApplicationStatus> statuses
+    );
 
     List<MentorApplication> findAllByOrderBySubmittedAtDesc();
 
