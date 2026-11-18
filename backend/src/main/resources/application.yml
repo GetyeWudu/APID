@@ -72,16 +72,21 @@ apid:
   bootstrap:
     admin-username: ${APID_BOOTSTRAP_ADMIN_USERNAME:admin}
     admin-password: ${APID_BOOTSTRAP_ADMIN_PASSWORD:}
-  daily:
-    api-base-url: ${DAILY_API_BASE_URL:https://api.daily.co/v1}
-    api-key: ${DAILY_API_KEY:}
-    webhook-secret: ${DAILY_WEBHOOK_SECRET:}
-    domain-name: ${DAILY_DOMAIN_NAME:amakari}
+  meeting:
+    provider: ${MEETING_PROVIDER:livekit}
+  livekit:
+    api-url: ${LIVEKIT_API_URL:http://10.9.36.155:7880}
+    public-url: ${LIVEKIT_PUBLIC_URL:ws://10.9.36.155:7880}
+    api-key: ${LIVEKIT_API_KEY:APIDLocalKey}
+    api-secret: ${LIVEKIT_API_SECRET:HErVoKzJMGiiWkzXrZMPaKMGc1IWXISSjuxGI1AJNic=}
+    token-ttl-seconds: ${LIVEKIT_TOKEN_TTL:7200}
+  ai:
+    enabled: ${AI_ENABLED:true}
+    provider: ${AI_PROVIDER:ollama}
+    ollama:
+      base-url: ${OLLAMA_BASE_URL:http://10.9.36.155:11434}
+      model: ${OLLAMA_MODEL:qwen3:8b}
+      timeout-seconds: ${OLLAMA_TIMEOUT_SECONDS:120}
 
-daily:
-  api-base-url: ${DAILY_API_BASE_URL:https://api.daily.co/v1}
-  api-key: ${DAILY_API_KEY:}
-  webhook-secret: ${DAILY_WEBHOOK_SECRET:}
-  domain-name: ${DAILY_DOMAIN_NAME:amakari}
 
 

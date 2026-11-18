@@ -14,8 +14,8 @@ import com.boa.apid.coaching.session.entity.*;
 import com.boa.apid.coaching.session.repository.CoachingSessionRepository;
 import com.boa.apid.coaching.session.repository.SessionParticipantRepository;
 import com.boa.apid.coaching.session.service.CoachingSessionService;
-import com.boa.apid.coaching.session.video.MeetingRoomDetails;
-import com.boa.apid.coaching.session.video.VideoMeetingProvider;
+import com.boa.apid.platform.video.api.MeetingRoomDetails;
+import com.boa.apid.platform.video.api.VideoMeetingProvider;
 import com.boa.apid.coaching.skillrequest.entity.SkillCoachingRequest;
 import com.boa.apid.coaching.skillrequest.entity.SkillCoachingRequestStatus;
 import com.boa.apid.coaching.skillrequest.entity.SkillCoachingRequestTarget;
@@ -440,13 +440,13 @@ public class ScheduleSeriesGeneratorService {
             Instant startInstant = SchedulingTimezones.toUtcInstant(p.sessionDate(), p.startTime());
             Instant endInstant = SchedulingTimezones.toUtcInstant(p.sessionDate(), p.endTime());
 
-            String dailyRoomName = null;
-            String dailyRoomUrl = null;
-            if (series.getMeetingMode() == SessionMeetingMode.VIRTUAL_VIDEO) {
+            String roomName = null;
+            String roomUrl = null;
+            if (series.getMeetingMode().isVideoRequired()) {
                 String prefix = hasAssignment ? "pms-" + request.assignmentId() : "skill-" + request.skillRequestId();
                 MeetingRoomDetails room = videoMeetingProvider.createRoom(prefix + "-s" + p.sequenceNumber(), endInstant.plus(Duration.ofHours(2)));
-                dailyRoomName = room.roomName();
-                dailyRoomUrl = room.roomUrl();
+                roomName = room.roomName();
+                roomUrl = room.roomUrl();
             }
 
             CoachingSession session = new CoachingSession();
@@ -460,8 +460,11 @@ public class ScheduleSeriesGeneratorService {
             session.setDurationMinutes(request.durationMinutes());
             session.setMeetingMode(series.getMeetingMode());
             session.setMeetingLocation(series.getMeetingLocation());
-            session.setDailyRoomName(dailyRoomName);
-            session.setDailyRoomUrl(dailyRoomUrl);
+            session.setMeetingProvider(videoMeetingProvider.getProviderName());
+            session.setMeetingRoomName(roomName);
+            session.setMeetingRoomUrl(roomUrl);
+            session.setDailyRoomName(roomName);
+            session.setDailyRoomUrl(roomUrl);
             session.setTargetPmsGoalId(request.targetPmsGoalId());
             session.setCreatedByUserId(actor.getUserId());
             session.setStatus(SessionStatus.CONFIRMED);
@@ -508,7 +511,7 @@ public class ScheduleSeriesGeneratorService {
                     SchedulingTimezones.DEFAULT_ZONE_ID,
                     series.getMeetingMode().name(),
                     series.getMeetingLocation(),
-                    dailyRoomUrl,
+                    savedSession.getMeetingRoomUrl(),
                     resParts
             ));
 

@@ -20,6 +20,7 @@ import {
   Sliders,
   PlusCircle,
   AlertCircle,
+  Plus,
 } from 'lucide-react';
 import { useAuth } from '../../../app/AuthContext';
 import { coreConfigApi } from '../../admin/config/api/coreConfigApi';
@@ -570,10 +571,15 @@ export const CoachingSessionsTab: React.FC<CoachingSessionsTabProps> = ({
                     color: 'var(--text-secondary, #334155)',
                   }}
                 >
-                  {session.meetingMode === 'VIRTUAL_VIDEO' ? (
+                  {session.meetingMode === 'VIRTUAL_VIDEO' || session.meetingMode === 'ONLINE' ? (
                     <>
                       <Video size={13} style={{ color: '#0284c7' }} />
-                      <span>Daily.co Live Video</span>
+                      <span>LiveKit Video</span>
+                    </>
+                  ) : session.meetingMode === 'HYBRID' ? (
+                    <>
+                      <Video size={13} style={{ color: '#0284c7' }} />
+                      <span>Hybrid Call</span>
                     </>
                   ) : session.meetingMode === 'PHONE_CALL' ? (
                     <>
@@ -1090,8 +1096,8 @@ export const CoachingSessionsTab: React.FC<CoachingSessionsTabProps> = ({
                   </button>
                 )}
 
-                {/* Primary Action: Daily.co Video Call (Window guarded) */}
-                {session.meetingMode === 'VIRTUAL_VIDEO' &&
+                {/* Primary Action: Video Call (Window guarded) */}
+                {(session.meetingMode === 'VIRTUAL_VIDEO' || session.meetingMode === 'ONLINE' || session.meetingMode === 'HYBRID') &&
                   session.status !== 'CANCELLED' &&
                   session.status !== 'COMPLETED' && (
                     isTooEarlyForCall ? (
@@ -1137,7 +1143,7 @@ export const CoachingSessionsTab: React.FC<CoachingSessionsTabProps> = ({
                         }}
                       >
                         <Video size={16} />
-                        Join Daily.co Video
+                        Join LiveKit Video
                       </button>
                     ) : (
                       <span
@@ -2046,13 +2052,13 @@ export const CoachingSessionsTab: React.FC<CoachingSessionsTabProps> = ({
             </p>
           </div>
 
-          {/* Primary Action Button: Standard Bank Recurring Coaching Rhythm */}
+          {/* Primary Action Button: Schedule Coaching Session (Mentoring Style) */}
           {canSchedule && (
             <div style={{ display: 'flex', gap: '0.6rem', alignItems: 'center' }}>
               <button
                 type="button"
                 className="apid-btn apid-btn-primary"
-                onClick={() => setIsSeriesOpen(true)}
+                onClick={() => setIsScheduleOpen(true)}
                 style={{
                   display: 'inline-flex',
                   alignItems: 'center',
@@ -2066,8 +2072,8 @@ export const CoachingSessionsTab: React.FC<CoachingSessionsTabProps> = ({
                   boxShadow: '0 2px 4px rgba(202, 138, 4, 0.25)',
                 }}
               >
-                <Sparkles size={16} />
-                <span>{mode === 'SKILLS' ? 'Schedule Workshop Rhythm' : 'Set Meeting Rhythm'}</span>
+                <Plus size={16} />
+                <span>Schedule Coaching Session</span>
               </button>
             </div>
           )}
@@ -2483,7 +2489,7 @@ export const CoachingSessionsTab: React.FC<CoachingSessionsTabProps> = ({
           <button
             type="button"
             className="apid-btn apid-btn-primary"
-            onClick={() => setIsSeriesOpen(true)}
+            onClick={() => setIsScheduleOpen(true)}
             style={{
               display: 'inline-flex',
               alignItems: 'center',
@@ -2493,7 +2499,7 @@ export const CoachingSessionsTab: React.FC<CoachingSessionsTabProps> = ({
               color: '#fff',
             }}
           >
-            <Calendar size={16} /> Set Meeting Rhythm
+            <Plus size={16} /> Schedule Coaching Session
           </button>
         </div>
       )}
@@ -2785,7 +2791,7 @@ export const CoachingSessionsTab: React.FC<CoachingSessionsTabProps> = ({
         }}
       />
 
-      {/* Daily.co Video Meeting Modal */}
+      {/* LiveKit Video Meeting Modal */}
       <DailyVideoModal
         session={selectedForVideo}
         isOpen={selectedForVideo !== null}

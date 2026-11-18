@@ -54,7 +54,7 @@ const mockScheduledSession: MentoringSession = {
   scheduledStart: '2026-11-20T06:00:00Z',
   scheduledEnd: '2026-11-20T06:45:00Z',
   deliveryMode: 'ONLINE',
-  meetingUrl: 'https://daily.co/boa-mentoring-101',
+  meetingUrl: 'https://apid-livekit.home.arpa/boa-mentoring-101',
   location: null,
   status: 'SCHEDULED',
   createdByUserId: 7,
@@ -187,7 +187,7 @@ describe('MentoringSessionsPage', () => {
     });
   });
 
-  it('renders "Join Daily.co Video" on the scheduled day and launches the video room modal', async () => {
+  it('renders "Join LiveKit Video" on the scheduled day and launches the video room modal', async () => {
     const sessionStart = new Date();
     sessionStart.setHours(12, 0, 0, 0);
     vi.spyOn(mentoringPairingApi, 'listMySessions').mockResolvedValue([
@@ -198,7 +198,7 @@ describe('MentoringSessionsPage', () => {
       },
     ]);
     const getJoinTokenSpy = vi.spyOn(mentoringPairingApi, 'getJoinToken').mockResolvedValue({
-      roomUrlWithToken: 'https://amakari.daily.co/apid-mentoring-77-101?t=mock-token',
+      roomUrlWithToken: 'https://apid-livekit.home.arpa/apid-mentoring-77-101?t=mock-token',
       token: 'mock-token',
       expiresAt: '2026-11-20T08:00:00Z',
       isMock: true,
@@ -219,7 +219,7 @@ describe('MentoringSessionsPage', () => {
       </QueryClientProvider>
     );
 
-    const joinBtn = await screen.findByRole('button', { name: /Join Daily\.co Video/i });
+    const joinBtn = await screen.findByRole('button', { name: /Join LiveKit Video/i });
     expect(joinBtn).toBeInTheDocument();
 
     fireEvent.click(joinBtn);
@@ -228,7 +228,7 @@ describe('MentoringSessionsPage', () => {
       expect(getJoinTokenSpy).toHaveBeenCalledWith(77, 101);
     });
 
-    expect(await screen.findByText(/Daily\.co Mentoring Video Session Active/i)).toBeInTheDocument();
+    expect(await screen.findByText(/LiveKit Mentoring Video Session Active/i)).toBeInTheDocument();
     expect(screen.getByText('apid-mentoring-77-101')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Leave Meeting/i })).toBeInTheDocument();
   });

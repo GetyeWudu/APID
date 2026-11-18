@@ -1,7 +1,7 @@
 import { apiClient } from '../../../shared/api/apiClient';
 import { AssignmentPathway } from './coachingAssignmentApi';
 
-export type SessionMeetingMode = 'VIRTUAL_VIDEO' | 'PHONE_CALL' | 'IN_PERSON';
+export type SessionMeetingMode = 'ONLINE' | 'IN_PERSON' | 'HYBRID' | 'VIRTUAL_VIDEO' | 'PHONE_CALL';
 
 export type SessionStatus =
   | 'PROPOSED'

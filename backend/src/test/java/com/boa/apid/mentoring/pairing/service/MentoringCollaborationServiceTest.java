@@ -66,7 +66,7 @@ class MentoringCollaborationServiceTest {
     @Mock private TrainerAuthorizationRepository trainerAuthorizationRepository;
     @Mock private TrainerAuthorizationSkillStatusRepository skillStatusRepository;
     @Mock private com.boa.apid.core.scheduling.service.ScheduleReservationService reservationService;
-    @Mock private com.boa.apid.coaching.session.video.VideoMeetingProvider videoMeetingProvider;
+    @Mock private com.boa.apid.platform.video.api.VideoMeetingProvider videoMeetingProvider;
 
     @InjectMocks
     private MentoringCollaborationService service;

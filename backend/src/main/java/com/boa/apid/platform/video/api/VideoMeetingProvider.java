@@ -1,4 +1,4 @@
-package com.boa.apid.coaching.session.video;
+package com.boa.apid.platform.video.api;
 
 import java.time.Instant;
 
@@ -15,5 +15,6 @@ public interface VideoMeetingProvider {
     );
 
     void deleteRoom(String roomName);
-}
 
+    String getProviderName();
+}

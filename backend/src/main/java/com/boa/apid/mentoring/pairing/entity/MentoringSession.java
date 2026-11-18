@@ -36,6 +36,15 @@ public class MentoringSession {
     @Column(name = "meeting_url", length = 1000)
     private String meetingUrl;
 
+    @Column(name = "meeting_provider", length = 30)
+    private String meetingProvider = "LIVEKIT";
+
+    @Column(name = "meeting_room_name", length = 120)
+    private String meetingRoomName;
+
+    @Column(name = "meeting_room_url", columnDefinition = "TEXT")
+    private String meetingRoomUrl;
+
     @Column(length = 255)
     private String location;
 
@@ -101,8 +110,20 @@ public class MentoringSession {
     public void setScheduledEnd(Instant scheduledEnd) { this.scheduledEnd = scheduledEnd; }
     public MentoringDeliveryMode getDeliveryMode() { return deliveryMode; }
     public void setDeliveryMode(MentoringDeliveryMode deliveryMode) { this.deliveryMode = deliveryMode; }
-    public String getMeetingUrl() { return meetingUrl; }
-    public void setMeetingUrl(String meetingUrl) { this.meetingUrl = meetingUrl; }
+    public String getMeetingUrl() { return meetingRoomUrl != null ? meetingRoomUrl : meetingUrl; }
+    public void setMeetingUrl(String meetingUrl) {
+        this.meetingUrl = meetingUrl;
+        if (this.meetingRoomUrl == null) this.meetingRoomUrl = meetingUrl;
+    }
+    public String getMeetingProvider() { return meetingProvider; }
+    public void setMeetingProvider(String meetingProvider) { this.meetingProvider = meetingProvider; }
+    public String getMeetingRoomName() { return meetingRoomName; }
+    public void setMeetingRoomName(String meetingRoomName) { this.meetingRoomName = meetingRoomName; }
+    public String getMeetingRoomUrl() { return meetingRoomUrl != null ? meetingRoomUrl : meetingUrl; }
+    public void setMeetingRoomUrl(String meetingRoomUrl) {
+        this.meetingRoomUrl = meetingRoomUrl;
+        this.meetingUrl = meetingRoomUrl;
+    }
     public String getLocation() { return location; }
     public void setLocation(String location) { this.location = location; }
     public MentoringSessionStatus getStatus() { return status; }

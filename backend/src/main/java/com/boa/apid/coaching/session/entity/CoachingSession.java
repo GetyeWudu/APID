@@ -50,6 +50,15 @@ public class CoachingSession {
     @Column(name = "daily_room_url", columnDefinition = "TEXT")
     private String dailyRoomUrl;
 
+    @Column(name = "meeting_provider", length = 30)
+    private String meetingProvider = "LIVEKIT";
+
+    @Column(name = "meeting_room_name", length = 120)
+    private String meetingRoomName;
+
+    @Column(name = "meeting_room_url", columnDefinition = "TEXT")
+    private String meetingRoomUrl;
+
     @Enumerated(EnumType.STRING)
     @Column(name = "status", nullable = false, length = 30)
     private SessionStatus status = SessionStatus.PROPOSED;
@@ -138,11 +147,32 @@ public class CoachingSession {
     public String getMeetingLocation() { return meetingLocation; }
     public void setMeetingLocation(String meetingLocation) { this.meetingLocation = meetingLocation; }
 
-    public String getDailyRoomName() { return dailyRoomName; }
-    public void setDailyRoomName(String dailyRoomName) { this.dailyRoomName = dailyRoomName; }
+    public String getDailyRoomName() { return meetingRoomName != null ? meetingRoomName : dailyRoomName; }
+    public void setDailyRoomName(String dailyRoomName) {
+        this.dailyRoomName = dailyRoomName;
+        if (this.meetingRoomName == null) this.meetingRoomName = dailyRoomName;
+    }
 
-    public String getDailyRoomUrl() { return dailyRoomUrl; }
-    public void setDailyRoomUrl(String dailyRoomUrl) { this.dailyRoomUrl = dailyRoomUrl; }
+    public String getDailyRoomUrl() { return meetingRoomUrl != null ? meetingRoomUrl : dailyRoomUrl; }
+    public void setDailyRoomUrl(String dailyRoomUrl) {
+        this.dailyRoomUrl = dailyRoomUrl;
+        if (this.meetingRoomUrl == null) this.meetingRoomUrl = dailyRoomUrl;
+    }
+
+    public String getMeetingProvider() { return meetingProvider; }
+    public void setMeetingProvider(String meetingProvider) { this.meetingProvider = meetingProvider; }
+
+    public String getMeetingRoomName() { return meetingRoomName != null ? meetingRoomName : dailyRoomName; }
+    public void setMeetingRoomName(String meetingRoomName) {
+        this.meetingRoomName = meetingRoomName;
+        this.dailyRoomName = meetingRoomName;
+    }
+
+    public String getMeetingRoomUrl() { return meetingRoomUrl != null ? meetingRoomUrl : dailyRoomUrl; }
+    public void setMeetingRoomUrl(String meetingRoomUrl) {
+        this.meetingRoomUrl = meetingRoomUrl;
+        this.dailyRoomUrl = meetingRoomUrl;
+    }
 
     public SessionStatus getStatus() { return status; }
     public void setStatus(SessionStatus status) { this.status = status; }

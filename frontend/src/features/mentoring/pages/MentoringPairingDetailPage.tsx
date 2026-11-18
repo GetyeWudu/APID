@@ -229,7 +229,7 @@ export function MentoringPairingDetailPage() {
                     cursor: 'pointer',
                   }}
                 >
-                  <Video size={14} /> Join Daily.co Video
+                  <Video size={14} /> Join LiveKit Video
                 </button>
             )}
           </div>

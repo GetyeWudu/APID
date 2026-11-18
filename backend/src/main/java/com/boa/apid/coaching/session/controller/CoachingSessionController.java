@@ -5,6 +5,7 @@ import com.boa.apid.coaching.session.dto.*;
 import com.boa.apid.coaching.session.service.CoachingSessionService;
 import com.boa.apid.common.response.ApiResponse;
 import com.boa.apid.core.auth.security.ApidUserPrincipal;
+import com.boa.apid.platform.video.api.SessionJoinTokenDto;
 import jakarta.validation.Valid;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;

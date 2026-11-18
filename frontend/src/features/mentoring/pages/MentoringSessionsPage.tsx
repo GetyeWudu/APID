@@ -536,13 +536,13 @@ export function MentoringSessionsPage({ view }: { view: SessionView }) {
                 value={createDeliveryMode}
                 onChange={(e) => setCreateDeliveryMode(e.target.value as MentoringDeliveryMode)}
               >
-                <option value="ONLINE">Online Video Call (Daily.co / Teams)</option>
+                <option value="ONLINE">Online Video Call (LiveKit)</option>
                 <option value="IN_PERSON">In-Person (Branch / Training Center)</option>
                 <option value="HYBRID">Hybrid</option>
               </select>
               {(createDeliveryMode === 'ONLINE' || createDeliveryMode === 'HYBRID') && (
                 <span style={{ fontSize: '0.78rem', color: '#0284c7', fontWeight: 500, marginTop: '0.2rem' }}>
-                  ✨ A secure Daily.co video room will be automatically provisioned for this session.
+                  ✨ A secure LiveKit video room will be automatically provisioned for this session.
                 </span>
               )}
             </div>
@@ -565,7 +565,7 @@ export function MentoringSessionsPage({ view }: { view: SessionView }) {
                   className="apid-input"
                   value={createMeetingUrl}
                   onChange={(e) => setCreateMeetingUrl(e.target.value)}
-                  placeholder="Leave empty to use automatic Daily.co video room"
+                  placeholder="Leave empty to use automatic LiveKit video room"
                 />
               </div>
             )}
@@ -732,7 +732,7 @@ export function MentoringSessionsPage({ view }: { view: SessionView }) {
                             cursor: 'pointer',
                           }}
                         >
-                          <Video size={14} /> Join Daily.co Video
+                          <Video size={14} /> Join LiveKit Video
                         </button>
                     )}
                   </div>

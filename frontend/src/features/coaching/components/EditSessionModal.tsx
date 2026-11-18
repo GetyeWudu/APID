@@ -436,8 +436,10 @@ export const EditSessionModal: React.FC<EditSessionModalProps> = ({
                   fontSize: '0.86rem',
                 }}
               >
-                <option value="VIRTUAL_VIDEO">📹 Daily.co Live Video</option>
+                <option value="ONLINE">📹 LiveKit Video</option>
                 <option value="IN_PERSON">🏢 Branch / In Person</option>
+                <option value="HYBRID">🌐 Hybrid (Video & Branch)</option>
+                <option value="VIRTUAL_VIDEO">📹 Live Video (Legacy)</option>
                 <option value="PHONE_CALL">📞 Phone Call</option>
               </select>
             </div>
@@ -465,7 +467,7 @@ export const EditSessionModal: React.FC<EditSessionModalProps> = ({
             </div>
           </div>
 
-          {meetingMode === 'IN_PERSON' && (
+          {(meetingMode === 'IN_PERSON' || meetingMode === 'HYBRID') && (
             <div>
               <label style={{ display: 'block', fontSize: '0.84rem', fontWeight: 600, marginBottom: '0.35rem' }}>
                 Branch Meeting Room / Office Location

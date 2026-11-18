@@ -11,9 +11,10 @@ import com.boa.apid.coaching.session.entity.*;
 import com.boa.apid.coaching.session.repository.CoachingSessionRepository;
 import com.boa.apid.coaching.session.repository.SessionParticipantRepository;
 import com.boa.apid.coaching.session.repository.SessionScheduleProposalRepository;
-import com.boa.apid.coaching.session.video.MeetingRoomDetails;
-import com.boa.apid.coaching.session.video.MeetingTokenDetails;
-import com.boa.apid.coaching.session.video.VideoMeetingProvider;
+import com.boa.apid.platform.video.api.MeetingRoomDetails;
+import com.boa.apid.platform.video.api.MeetingTokenDetails;
+import com.boa.apid.platform.video.api.SessionJoinTokenDto;
+import com.boa.apid.platform.video.api.VideoMeetingProvider;
 import com.boa.apid.coaching.skillrequest.entity.SkillCoachingRequest;
 import com.boa.apid.coaching.skillrequest.entity.SkillCoachingRequestStatus;
 import com.boa.apid.coaching.skillrequest.entity.SkillCoachingRequestTarget;
@@ -188,14 +189,19 @@ public class CoachingSessionService {
             throw new BusinessException("COACH_DOUBLE_BOOKED", "Coach already has another confirmed coaching session during this time window.");
         }
 
-        // Provision Daily.co video room if VIRTUAL_VIDEO
-        String dailyRoomName = null;
-        String dailyRoomUrl = null;
-        if (request.meetingMode() == SessionMeetingMode.VIRTUAL_VIDEO) {
+        if (request.meetingMode().isLocationRequired()
+                && (request.meetingLocation() == null || request.meetingLocation().isBlank())) {
+            throw new BusinessException("LOCATION_REQUIRED", "A meeting location is required for in-person or hybrid coaching sessions.");
+        }
+
+        // Provision LiveKit video room if ONLINE, HYBRID, or legacy VIRTUAL_VIDEO
+        String roomName = null;
+        String roomUrl = null;
+        if (request.meetingMode().isVideoRequired()) {
             String prefix = hasAssignment ? "pms-" + request.assignmentId() : "skill-" + request.skillRequestId();
             MeetingRoomDetails room = videoMeetingProvider.createRoom(prefix, endTime.plus(Duration.ofHours(2)));
-            dailyRoomName = room.roomName();
-            dailyRoomUrl = room.roomUrl();
+            roomName = room.roomName();
+            roomUrl = room.roomUrl();
         }
 
         CoachingSession session = new CoachingSession();
@@ -209,8 +215,11 @@ public class CoachingSessionService {
         session.setDurationMinutes(duration);
         session.setMeetingMode(request.meetingMode());
         session.setMeetingLocation(request.meetingLocation());
-        session.setDailyRoomName(dailyRoomName);
-        session.setDailyRoomUrl(dailyRoomUrl);
+        session.setMeetingProvider(videoMeetingProvider.getProviderName());
+        session.setMeetingRoomName(roomName);
+        session.setMeetingRoomUrl(roomUrl);
+        session.setDailyRoomName(roomName);
+        session.setDailyRoomUrl(roomUrl);
         session.setTargetPmsGoalId(request.targetPmsGoalId());
         session.setCreatedByUserId(actor.getUserId());
         session.setStatus(SessionStatus.CONFIRMED); // Confirmed on proposal by coach
@@ -763,15 +772,15 @@ public class CoachingSessionService {
         CoachingSession session = sessionRepository.findById(sessionId)
                 .orElseThrow(() -> new ResourceNotFoundException("Coaching session not found"));
 
-        if (session.getMeetingMode() != SessionMeetingMode.VIRTUAL_VIDEO) {
-            throw new BusinessException("NOT_A_VIDEO_SESSION", "This coaching session is configured for phone or in-person delivery, not video.");
+        if (!session.getMeetingMode().isVideoRequired()) {
+            throw new BusinessException("NOT_A_VIDEO_SESSION", "This coaching session is configured for in-person delivery, not online video.");
         }
 
         SessionParticipant participant = participantRepository.findBySessionIdAndEmployeeId(sessionId, callerEmp.id())
                 .orElseThrow(() -> new AccessDeniedException("You are not authorized to join this coaching video call."));
 
         boolean isCoach = participant.getRole() == ParticipantRole.COACH;
-        String roomName = session.getDailyRoomName();
+        String roomName = session.getMeetingRoomName() != null ? session.getMeetingRoomName() : session.getDailyRoomName();
         if (roomName == null || roomName.isBlank()) {
             roomName = "session-" + session.getId();
         }

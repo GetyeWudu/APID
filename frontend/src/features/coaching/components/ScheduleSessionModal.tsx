@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Calendar, Video, Phone, MapPin, X, Target, AlertTriangle } from 'lucide-react';
+import { Calendar, Video, MapPin, X, Target, AlertTriangle } from 'lucide-react';
 import { coachingSessionApi, CreateSessionPayload, SessionMeetingMode } from '../api/coachingSessionApi';
 import { coachingAssignmentApi, MyCoacheeItem } from '../api/coachingAssignmentApi';
 import { skillCoachingRequestApi, SkillCoachingRequestItem } from '../api/skillCoachingRequestApi';
@@ -29,7 +29,7 @@ export const ScheduleSessionModal: React.FC<ScheduleSessionModalProps> = ({
   const [startDate, setStartDate] = useState('');
   const [startTime, setStartTime] = useState('15:00');
   const [duration, setDuration] = useState<number>(45);
-  const [meetingMode, setMeetingMode] = useState<SessionMeetingMode>('VIRTUAL_VIDEO');
+  const [meetingMode, setMeetingMode] = useState<SessionMeetingMode>('ONLINE');
   const [meetingLocation, setMeetingLocation] = useState('');
   const [selectedGoalId, setSelectedGoalId] = useState<number | ''>('');
   const [error, setError] = useState<string | null>(null);
@@ -508,19 +508,11 @@ export const ScheduleSessionModal: React.FC<ScheduleSessionModalProps> = ({
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '0.5rem', marginTop: '0.25rem' }}>
               <button
                 type="button"
-                className={`apid-btn ${meetingMode === 'VIRTUAL_VIDEO' ? 'apid-btn-primary' : 'apid-btn-outline'}`}
+                className={`apid-btn ${meetingMode === 'ONLINE' || meetingMode === 'VIRTUAL_VIDEO' ? 'apid-btn-primary' : 'apid-btn-outline'}`}
                 style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.35rem' }}
-                onClick={() => setMeetingMode('VIRTUAL_VIDEO')}
+                onClick={() => setMeetingMode('ONLINE')}
               >
-                <Video size={16} /> Daily.co Video
-              </button>
-              <button
-                type="button"
-                className={`apid-btn ${meetingMode === 'PHONE_CALL' ? 'apid-btn-primary' : 'apid-btn-outline'}`}
-                style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.35rem' }}
-                onClick={() => setMeetingMode('PHONE_CALL')}
-              >
-                <Phone size={16} /> Phone Call
+                <Video size={16} /> LiveKit Video
               </button>
               <button
                 type="button"
@@ -530,10 +522,18 @@ export const ScheduleSessionModal: React.FC<ScheduleSessionModalProps> = ({
               >
                 <MapPin size={16} /> In-Person
               </button>
+              <button
+                type="button"
+                className={`apid-btn ${meetingMode === 'HYBRID' ? 'apid-btn-primary' : 'apid-btn-outline'}`}
+                style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.35rem' }}
+                onClick={() => setMeetingMode('HYBRID')}
+              >
+                <Video size={16} /> Hybrid
+              </button>
             </div>
           </div>
 
-          {meetingMode !== 'VIRTUAL_VIDEO' && (
+          {(meetingMode === 'IN_PERSON' || meetingMode === 'HYBRID' || meetingMode === 'PHONE_CALL') && (
             <div className="apid-field" style={{ marginBottom: '1rem' }}>
               <label htmlFor="meeting-location" style={{ fontWeight: 600 }}>
                 {meetingMode === 'PHONE_CALL' ? 'Phone Number / Extension' : 'Branch Meeting Room Location'}

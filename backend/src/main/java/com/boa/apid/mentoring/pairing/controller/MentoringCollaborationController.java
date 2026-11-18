@@ -1,6 +1,6 @@
 package com.boa.apid.mentoring.pairing.controller;
 
-import com.boa.apid.coaching.session.dto.SessionJoinTokenDto;
+import com.boa.apid.platform.video.api.SessionJoinTokenDto;
 import com.boa.apid.common.response.ApiResponse;
 import com.boa.apid.core.auth.security.ApidUserPrincipal;
 import com.boa.apid.mentoring.pairing.dto.CancelMentoringSessionRequest;

@@ -1459,7 +1459,7 @@ export const ScheduleSeriesModal: React.FC<ScheduleSeriesModalProps> = ({
                   onChange={() => setMeetingMode('VIRTUAL_VIDEO')}
                 />
                 <Video size={18} color="var(--gold-primary)" />
-                <span style={{ fontSize: '0.85rem', fontWeight: 600 }}>Daily.co Live Video</span>
+                <span style={{ fontSize: '0.85rem', fontWeight: 600 }}>LiveKit Video Call</span>
               </label>
 
               <label
