@@ -1,7 +1,8 @@
-package com.boa.apid.mentoring.recommendation.service;
+package com.boa.apid.mentoring.ai.recommendation.service;
 
 import com.boa.apid.common.exception.BusinessException;
-import com.boa.apid.mentoring.recommendation.dto.MentorRecommendationRequest;
+import com.boa.apid.mentoring.ai.client.MentoringAiClient;
+import com.boa.apid.mentoring.ai.recommendation.dto.MentorRecommendationRequest;
 import com.boa.apid.mentoring.trainer.dto.TrainerDirectoryDto;
 import com.boa.apid.mentoring.trainer.dto.TrainerSkillDto;
 import com.boa.apid.mentoring.trainer.entity.TrainerAuthorizationStatus;
@@ -27,7 +28,7 @@ class MentorRecommendationServiceTest {
     private MentorRecommendationContextService contextService;
 
     @Mock
-    private OllamaRecommendationClient ollamaClient;
+    private MentoringAiClient ollamaClient;
 
     private MentorRecommendationService service;
 

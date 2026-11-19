@@ -1,44 +1,29 @@
-package com.boa.apid.mentoring.recommendation.service;
+package com.boa.apid.mentoring.ai.recommendation.service;
 
 import com.boa.apid.common.exception.BusinessException;
-import com.boa.apid.common.storage.FileStorageService;
 import com.boa.apid.common.storage.StoredFile;
 import com.boa.apid.mentoring.application.entity.MentorApplication;
 import com.boa.apid.mentoring.application.entity.MentorApplicationType;
+import com.boa.apid.mentoring.document.service.MentoringDocumentTextExtractor;
 import com.boa.apid.mentoring.trainer.dto.TrainerDirectoryDto;
 import com.boa.apid.mentoring.trainer.entity.TrainerAuthorization;
 import com.boa.apid.mentoring.trainer.entity.TrainerAuthorizationStatus;
 import com.boa.apid.mentoring.trainer.repository.TrainerAuthorizationRepository;
 import com.boa.apid.mentoring.trainer.service.TrainerAuthorizationService;
-import com.lowagie.text.ExceptionConverter;
-import com.lowagie.text.pdf.PdfReader;
-import com.lowagie.text.pdf.parser.PdfTextExtractor;
-import org.apache.poi.hwpf.HWPFDocument;
-import org.apache.poi.hwpf.extractor.WordExtractor;
-import org.apache.poi.ooxml.POIXMLException;
-import org.apache.poi.xwpf.extractor.XWPFWordExtractor;
-import org.apache.poi.xwpf.usermodel.XWPFDocument;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-import org.springframework.core.io.Resource;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.io.IOException;
-import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
-import java.util.Set;
 import java.util.regex.Pattern;
 
 @Service
 public class MentorRecommendationContextService {
 
-    private static final Logger log = LoggerFactory.getLogger(MentorRecommendationContextService.class);
     private static final int MAX_CANDIDATES = 40;
     private static final int MAX_PROFILE_CHARS = 2500;
     private static final int MAX_EVIDENCE_CHARS = 1800;
@@ -49,20 +34,18 @@ public class MentorRecommendationContextService {
     private static final Pattern PHONE_PATTERN = Pattern.compile(
             "(?<!\\d)\\+?\\d[\\d\\s().-]{7,}\\d(?!\\d)"
     );
-    private static final Set<String> TEXT_DOCUMENT_EXTENSIONS = Set.of("pdf", "doc", "docx");
-
     private final TrainerAuthorizationService authorizationService;
     private final TrainerAuthorizationRepository authorizationRepository;
-    private final FileStorageService fileStorageService;
+    private final MentoringDocumentTextExtractor documentTextExtractor;
 
     public MentorRecommendationContextService(
             TrainerAuthorizationService authorizationService,
             TrainerAuthorizationRepository authorizationRepository,
-            FileStorageService fileStorageService
+            MentoringDocumentTextExtractor documentTextExtractor
     ) {
         this.authorizationService = authorizationService;
         this.authorizationRepository = authorizationRepository;
-        this.fileStorageService = fileStorageService;
+        this.documentTextExtractor = documentTextExtractor;
     }
 
     @Transactional(readOnly = true)
@@ -152,13 +135,14 @@ public class MentorRecommendationContextService {
                 truncatedEvidence = true;
                 break;
             }
-            String extension = extension(file.getOriginalFilename());
-            if (!TEXT_DOCUMENT_EXTENSIONS.contains(extension)) {
+            if (!documentTextExtractor.supports(file.getOriginalFilename())) {
                 unsupportedEvidence = true;
                 continue;
             }
-            String extracted = redact(extractText(file), mentor);
-            if (extracted.length() > remaining) truncatedEvidence = true;
+            MentoringDocumentTextExtractor.ExtractedDocumentText extractedDocument =
+                    extractEvidence(file, remaining);
+            String extracted = redact(extractedDocument.text(), mentor);
+            if (extractedDocument.truncated() || extracted.length() > remaining) truncatedEvidence = true;
             String bounded = extracted.substring(0, Math.min(remaining, extracted.length()));
             if (!bounded.isBlank()) {
                 append(profile, "Document evidence", bounded);
@@ -173,52 +157,16 @@ public class MentorRecommendationContextService {
         }
     }
 
-    private String extractText(StoredFile file) {
-        Resource resource = fileStorageService.loadForAuthorizedModule(file.getId()).resource();
-        try (InputStream input = resource.getInputStream()) {
-            String extension = extension(file.getOriginalFilename());
-            return switch (extension) {
-                case "pdf" -> extractPdf(input);
-                case "doc" -> extractDoc(input);
-                case "docx" -> extractDocx(input);
-                default -> "";
-            };
-        } catch (IOException | ExceptionConverter | POIXMLException | IllegalArgumentException error) {
-            log.warn("Could not extract mentor recommendation evidence file id={}", file.getId(), error);
+    private MentoringDocumentTextExtractor.ExtractedDocumentText extractEvidence(StoredFile file, int maxCharacters) {
+        try {
+            return documentTextExtractor.extract(file.getId(), file.getOriginalFilename(), maxCharacters);
+        } catch (BusinessException error) {
+            if (!"MENTOR_DOCUMENT_EXTRACTION_FAILED".equals(error.getErrorCode())) throw error;
             throw new BusinessException(
                     "MENTOR_EVIDENCE_EXTRACTION_FAILED",
                     "A mentor evidence document could not be read, so recommendations could not be generated.",
-                    HttpStatus.UNPROCESSABLE_ENTITY
+                    error.getStatus()
             );
-        }
-    }
-
-    private String extractPdf(InputStream input) throws IOException {
-        PdfReader reader = new PdfReader(input);
-        try {
-            PdfTextExtractor extractor = new PdfTextExtractor(reader);
-            StringBuilder text = new StringBuilder();
-            for (int page = 1; page <= reader.getNumberOfPages(); page++) {
-                text.append(extractor.getTextFromPage(page)).append('\n');
-                if (text.length() >= MAX_EVIDENCE_CHARS) break;
-            }
-            return text.toString();
-        } finally {
-            reader.close();
-        }
-    }
-
-    private String extractDoc(InputStream input) throws IOException {
-        try (HWPFDocument document = new HWPFDocument(input);
-             WordExtractor extractor = new WordExtractor(document)) {
-            return extractor.getText();
-        }
-    }
-
-    private String extractDocx(InputStream input) throws IOException {
-        try (XWPFDocument document = new XWPFDocument(input);
-             XWPFWordExtractor extractor = new XWPFWordExtractor(document)) {
-            return extractor.getText();
         }
     }
 
@@ -251,12 +199,6 @@ public class MentorRecommendationContextService {
     private void append(StringBuilder target, String label, Object value) {
         if (value == null || value.toString().isBlank()) return;
         target.append(label).append(": ").append(value).append('\n');
-    }
-
-    private String extension(String filename) {
-        if (filename == null) return "";
-        int dot = filename.lastIndexOf('.');
-        return dot < 0 ? "" : filename.substring(dot + 1).toLowerCase(Locale.ROOT);
     }
 
     public record MentorCandidateContext(TrainerDirectoryDto mentor, String profile) {

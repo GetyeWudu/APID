@@ -1,4 +1,4 @@
-package com.boa.apid.mentoring.recommendation.dto;
+package com.boa.apid.mentoring.ai.recommendation.dto;
 
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;

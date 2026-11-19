@@ -1,10 +1,10 @@
-package com.boa.apid.mentoring.recommendation.service;
+package com.boa.apid.mentoring.ai.recommendation.service;
 
 import com.boa.apid.common.exception.BusinessException;
-import com.boa.apid.mentoring.recommendation.dto.MentorRecommendationDto;
-import com.boa.apid.mentoring.recommendation.dto.MentorRecommendationRequest;
-import com.boa.apid.mentoring.recommendation.dto.MentorRecommendationResponse;
-import com.boa.apid.mentoring.recommendation.service.MentorRecommendationContextService.MentorCandidateContext;
+import com.boa.apid.mentoring.ai.client.MentoringAiClient;
+import com.boa.apid.mentoring.ai.recommendation.dto.MentorRecommendationDto;
+import com.boa.apid.mentoring.ai.recommendation.dto.MentorRecommendationRequest;
+import com.boa.apid.mentoring.ai.recommendation.dto.MentorRecommendationResponse;
 import com.boa.apid.mentoring.trainer.dto.TrainerDirectoryDto;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -23,12 +23,12 @@ import java.util.stream.Collectors;
 public class MentorRecommendationService {
 
     private final MentorRecommendationContextService contextService;
-    private final OllamaRecommendationClient ollamaClient;
+    private final MentoringAiClient ollamaClient;
     private final ObjectMapper objectMapper;
 
     public MentorRecommendationService(
             MentorRecommendationContextService contextService,
-            OllamaRecommendationClient ollamaClient,
+            MentoringAiClient ollamaClient,
             ObjectMapper objectMapper
     ) {
         this.contextService = contextService;

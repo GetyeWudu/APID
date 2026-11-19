@@ -51,6 +51,14 @@ export interface MentorApplication {
   reviewReason: string | null;
 }
 
+export interface MentorApplicationDocumentSummary {
+  applicationId: number;
+  fileId: number;
+  fileName: string;
+  summary: string;
+  sourceTruncated: boolean;
+}
+
 function buildApplicationFormData(payload: SubmitMentorApplicationPayload) {
   const formData = new FormData();
   if (payload.supportingEvidence?.length) {
@@ -131,6 +139,13 @@ export const mentorApplicationApi = {
       responseType: 'blob',
     });
     return response.data;
+  },
+
+  async summarizeDocument(applicationId: number, fileId: number): Promise<MentorApplicationDocumentSummary> {
+    const response = await apiClient.post<ApiResponse<MentorApplicationDocumentSummary>>(
+      `/mentoring/applications/${applicationId}/evidence/${fileId}/summary`
+    );
+    return response.data.data;
   },
 
   async submit(payload: SubmitMentorApplicationPayload): Promise<SubmittedMentorApplication> {

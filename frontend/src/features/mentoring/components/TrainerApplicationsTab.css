@@ -428,6 +428,61 @@
   margin-top: 0.45rem;
 }
 
+.mentor-application-evidence-entry {
+  display: grid;
+  gap: 0.45rem;
+  margin-top: 0.45rem;
+}
+
+.mentor-application-evidence-entry .mentor-application-evidence-item {
+  margin-top: 0;
+}
+
+.mentor-document-summary {
+  display: grid;
+  gap: 0.4rem;
+  padding: 0.75rem;
+  border: 1px solid var(--brand-soft-border);
+  border-radius: 9px;
+  background: var(--brand-soft);
+}
+
+.mentor-document-summary > div {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  color: var(--brand);
+  font-size: 0.76rem;
+}
+
+.mentor-document-summary p {
+  margin: 0;
+  color: var(--text);
+  font-size: 0.78rem;
+  line-height: 1.55;
+  white-space: pre-wrap;
+}
+
+.mentor-document-summary > span,
+.mentor-document-summary-error {
+  color: var(--muted);
+  font-size: 0.7rem;
+  line-height: 1.45;
+}
+
+.mentor-document-summary-error {
+  margin: 0;
+  color: var(--err);
+}
+
+.mentor-document-summary-spinner {
+  animation: mentor-document-summary-spin 1s linear infinite;
+}
+
+@keyframes mentor-document-summary-spin {
+  to { transform: rotate(360deg); }
+}
+
 .mentor-application-evidence-description {
   flex: 1 1 180px;
   min-width: 0;

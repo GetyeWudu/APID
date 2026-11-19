@@ -231,6 +231,54 @@ describe('mentor application workflow', () => {
     expect(screen.getByText('5')).toBeInTheDocument();
   });
 
+  it('summarizes an uploaded application document in the details modal', async () => {
+    const summarizeDocument = vi.spyOn(mentorApplicationApi, 'summarizeDocument').mockResolvedValue({
+      applicationId: 23,
+      fileId: 61,
+      fileName: 'resume.pdf',
+      summary: 'The document describes the applicant’s software engineering experience.',
+      sourceTruncated: false,
+    });
+
+    renderWithProviders(<TrainerApplicationsTab applications={[{
+      id: 23,
+      applicantUsername: 'mentor.one',
+      applicationType: 'INITIAL',
+      status: 'PENDING',
+      skillName: 'Backend Development',
+      skillNames: ['Backend Development'],
+      catalogSkillIds: [4],
+      customSkill: null,
+      proofFileId: 63,
+      proofFileName: 'letter.doc',
+      evidenceFiles: [
+        { fileId: 61, fileName: 'resume.pdf', context: 'Curriculum vitae' },
+        { fileId: 62, fileName: 'portrait.png', context: 'Profile picture' },
+      ],
+      note: null,
+      expertiseSummary: null,
+      availabilityNotes: null,
+      maxConcurrentTrainees: null,
+      submittedAt: '2026-01-01T00:00:00Z',
+      reviewedByUsername: null,
+      reviewedAt: null,
+      reviewReason: null,
+    }]} />);
+
+    fireEvent.click(screen.getByRole('button', { name: /^view$/i }));
+    const summaryButtons = await screen.findAllByRole('button', { name: 'AI summary' });
+    expect(summaryButtons[0]).toBeEnabled();
+    expect(summaryButtons[1]).toBeDisabled();
+    expect(summaryButtons[2]).toBeEnabled();
+    expect(screen.getByText('letter.doc')).toBeInTheDocument();
+    fireEvent.click(summaryButtons[0]);
+
+    expect(await screen.findByText(
+      'The document describes the applicant’s software engineering experience.'
+    )).toBeInTheDocument();
+    expect(summarizeDocument).toHaveBeenCalledWith(23, 61);
+  });
+
   it('shows requested mentor profile changes in HR review details', async () => {
     renderWithProviders(<TrainerApplicationsTab applications={[{
       id: 22,

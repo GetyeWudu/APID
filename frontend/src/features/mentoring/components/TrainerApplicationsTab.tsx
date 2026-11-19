@@ -10,11 +10,14 @@ import {
   Eye,
   FileText,
   GraduationCap,
+  LoaderCircle,
+  Sparkles,
   Users,
   X,
   XCircle,
 } from 'lucide-react';
 import { DataSourceBadge, EmptyState, StatusPill, useToast } from '../../../shared/components/ui';
+import { extractApiErrorMessage } from '../../../shared/api/apiClient';
 import type { MentorApplication } from '../api/mentorApplicationApi';
 import { mentorApplicationApi } from '../api/mentorApplicationApi';
 import './TrainerApplicationsTab.css';
@@ -103,6 +106,10 @@ function parseAvailability(value: string | undefined) {
 
 function documentName(value: string | undefined) {
   return value?.replace(/\s+\(\d+(?:\.\d+)?\s*(?:KB|MB)\)$/i, '').trim() ?? '';
+}
+
+function supportsAiSummary(fileName: string) {
+  return /\.(pdf|doc|docx)$/i.test(fileName);
 }
 
 function evidenceContextFromNote(note: string | null, fileName: string) {
@@ -231,6 +238,18 @@ export function TrainerApplicationsTab({
   const [busyId, setBusyId] = useState<number | null>(null);
   const [downloadingId, setDownloadingId] = useState<number | null>(null);
   const [viewingId, setViewingId] = useState<number | null>(null);
+  const [summarizingId, setSummarizingId] = useState<number | null>(null);
+  const [documentSummary, setDocumentSummary] = useState<{
+    applicationId: number;
+    fileId: number;
+    summary: string;
+    sourceTruncated: boolean;
+  } | null>(null);
+  const [summaryError, setSummaryError] = useState<{
+    applicationId: number;
+    fileId: number;
+    message: string;
+  } | null>(null);
 
   useEffect(() => () => {
     if (previewTarget) URL.revokeObjectURL(previewTarget.objectUrl);
@@ -278,6 +297,29 @@ export function TrainerApplicationsTab({
       });
     } finally {
       setViewingId(null);
+    }
+  };
+
+  const handleSummarizeEvidence = async (applicationId: number, fileId: number) => {
+    setSummarizingId(fileId);
+    setDocumentSummary(null);
+    setSummaryError(null);
+    try {
+      const result = await mentorApplicationApi.summarizeDocument(applicationId, fileId);
+      setDocumentSummary({
+        applicationId: result.applicationId,
+        fileId: result.fileId,
+        summary: result.summary,
+        sourceTruncated: result.sourceTruncated,
+      });
+    } catch (error) {
+      setSummaryError({
+        applicationId,
+        fileId,
+        message: extractApiErrorMessage(error, 'Unable to summarize this document.'),
+      });
+    } finally {
+      setSummarizingId(null);
     }
   };
 
@@ -381,16 +423,18 @@ export function TrainerApplicationsTab({
     detailNote['Mentorship formats'] || availability?.formats.join(', ')
   );
   const detailEvidence = detailTarget
-    ? (detailTarget.evidenceFiles?.length
-      ? detailTarget.evidenceFiles
-      : detailTarget.proofFileName
+    ? [
+      ...(detailTarget.evidenceFiles ?? []),
+      ...(detailTarget.proofFileName
         && detailTarget.proofFileId !== null
+        && !detailTarget.evidenceFiles?.some((evidence) => evidence.fileId === detailTarget.proofFileId)
         ? [{
           fileId: detailTarget.proofFileId,
           fileName: detailTarget.proofFileName,
-          context: 'Supporting evidence',
+          context: 'Proof document',
         }]
-        : [])
+        : []),
+    ]
     : [];
   const normalizedSearch = searchQuery.trim().toLowerCase();
   const filteredApplications = applications.filter((application) => {
@@ -531,7 +575,11 @@ export function TrainerApplicationsTab({
                           <button
                             type="button"
                             className="apid-btn apid-btn-outline apid-btn-sm mentor-application-view-button"
-                            onClick={() => setDetailTarget(app)}
+                            onClick={() => {
+                              setDocumentSummary(null);
+                              setSummaryError(null);
+                              setDetailTarget(app);
+                            }}
                           >
                             <Eye size={14} /> View
                           </button>
@@ -786,33 +834,64 @@ export function TrainerApplicationsTab({
                   <div className="mentor-application-evidence-list">
                     <h5>Uploaded evidence</h5>
                     {detailEvidence.map((evidence) => (
-                      <div className="mentor-application-evidence-item" key={evidence.fileId}>
-                        <div className="mentor-application-evidence-description">
-                          <span className="mentor-application-evidence-context">
-                            {evidence.context && evidence.context !== 'Supporting evidence'
-                              ? evidence.context
-                              : evidenceContextFromNote(detailTarget.note, evidence.fileName)}
-                          </span>
-                          <span className="mentor-application-evidence-name">
-                            <FileText size={14} />{evidence.fileName}
-                          </span>
+                      <div className="mentor-application-evidence-entry" key={evidence.fileId}>
+                        <div className="mentor-application-evidence-item">
+                          <div className="mentor-application-evidence-description">
+                            <span className="mentor-application-evidence-context">
+                              {evidence.context && evidence.context !== 'Supporting evidence'
+                                ? evidence.context
+                                : evidenceContextFromNote(detailTarget.note, evidence.fileName)}
+                            </span>
+                            <span className="mentor-application-evidence-name">
+                              <FileText size={14} />{evidence.fileName}
+                            </span>
+                          </div>
+                          <button
+                            type="button"
+                            className="apid-btn apid-btn-outline apid-btn-sm"
+                            disabled={summarizingId !== null || !supportsAiSummary(evidence.fileName)}
+                            title={!supportsAiSummary(evidence.fileName)
+                              ? 'AI summaries support PDF, DOC, and DOCX files.'
+                              : undefined}
+                            onClick={() => void handleSummarizeEvidence(detailTarget.id, evidence.fileId)}
+                          >
+                            {summarizingId === evidence.fileId
+                              ? <><LoaderCircle className="mentor-document-summary-spinner" size={13} /> Summarizing…</>
+                              : <><Sparkles size={13} /> AI summary</>}
+                          </button>
+                          <button
+                            type="button"
+                            className="apid-btn apid-btn-outline apid-btn-sm"
+                            disabled={viewingId !== null}
+                            onClick={() => void handleViewEvidence(evidence.fileId, evidence.fileName)}
+                          >
+                            <Eye size={13} />{viewingId === evidence.fileId ? 'Opening…' : 'View'}
+                          </button>
+                          <button
+                            type="button"
+                            className="apid-btn apid-btn-outline apid-btn-sm"
+                            disabled={downloadingId !== null}
+                            onClick={() => void handleDownloadEvidence(evidence.fileId, evidence.fileName)}
+                          >
+                            <Download size={13} />{downloadingId === evidence.fileId ? 'Downloading…' : 'Download'}
+                          </button>
                         </div>
-                        <button
-                          type="button"
-                          className="apid-btn apid-btn-outline apid-btn-sm"
-                          disabled={viewingId !== null}
-                          onClick={() => void handleViewEvidence(evidence.fileId, evidence.fileName)}
-                        >
-                          <Eye size={13} />{viewingId === evidence.fileId ? 'Opening…' : 'View'}
-                        </button>
-                        <button
-                          type="button"
-                          className="apid-btn apid-btn-outline apid-btn-sm"
-                          disabled={downloadingId !== null}
-                          onClick={() => void handleDownloadEvidence(evidence.fileId, evidence.fileName)}
-                        >
-                          <Download size={13} />{downloadingId === evidence.fileId ? 'Downloading…' : 'Download'}
-                        </button>
+                        {documentSummary?.applicationId === detailTarget.id
+                          && documentSummary.fileId === evidence.fileId && (
+                            <div className="mentor-document-summary" aria-live="polite">
+                              <div><Sparkles size={15} /><strong>AI document summary</strong></div>
+                              <p>{documentSummary.summary}</p>
+                              {documentSummary.sourceTruncated && (
+                                <span>The document was longer than the summary limit; only its beginning was analyzed.</span>
+                              )}
+                            </div>
+                          )}
+                        {summaryError?.applicationId === detailTarget.id
+                          && summaryError.fileId === evidence.fileId && (
+                            <p className="mentor-document-summary-error" role="alert">
+                              Summary failed: {summaryError.message}
+                            </p>
+                          )}
                       </div>
                     ))}
                   </div>

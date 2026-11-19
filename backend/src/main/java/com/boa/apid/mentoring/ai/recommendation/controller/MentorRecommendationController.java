@@ -1,10 +1,10 @@
-package com.boa.apid.mentoring.recommendation.controller;
+package com.boa.apid.mentoring.ai.recommendation.controller;
 
 import com.boa.apid.common.response.ApiResponse;
 import com.boa.apid.core.auth.security.ApidUserPrincipal;
-import com.boa.apid.mentoring.recommendation.dto.MentorRecommendationRequest;
-import com.boa.apid.mentoring.recommendation.dto.MentorRecommendationResponse;
-import com.boa.apid.mentoring.recommendation.service.MentorRecommendationService;
+import com.boa.apid.mentoring.ai.recommendation.dto.MentorRecommendationRequest;
+import com.boa.apid.mentoring.ai.recommendation.dto.MentorRecommendationResponse;
+import com.boa.apid.mentoring.ai.recommendation.service.MentorRecommendationService;
 import jakarta.validation.Valid;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;

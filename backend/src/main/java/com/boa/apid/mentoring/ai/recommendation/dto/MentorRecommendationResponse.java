@@ -1,4 +1,4 @@
-package com.boa.apid.mentoring.recommendation.dto;
+package com.boa.apid.mentoring.ai.recommendation.dto;
 
 import java.util.List;
 
