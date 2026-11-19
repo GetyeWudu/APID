@@ -167,6 +167,17 @@ function splitCommaSeparated(value: string | undefined) {
   return value.split(',').map((item) => item.trim()).filter(Boolean);
 }
 
+function getInitials(value: string) {
+  const initials = value
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part.charAt(0).toUpperCase())
+    .join('');
+  return initials || 'M';
+}
+
 function externalLink(value: unknown, label: string): ReactNode {
   if (typeof value !== 'string' || !value.trim()) return 'Not provided';
   try {
@@ -546,7 +557,15 @@ export function TrainerApplicationsTab({
             aria-labelledby="mentor-application-detail-title"
           >
             <header className="mentor-application-detail-header">
-              <div>
+              <div className="mentor-application-detail-person">
+                <div className="mentor-application-detail-avatar" aria-hidden="true">
+                  {getInitials(
+                    noteText(detailNote['Full name']) === 'Not provided'
+                      ? detailTarget.applicantUsername
+                      : noteText(detailNote['Full name'])
+                  )}
+                </div>
+                <div>
                 <span className="mentor-application-detail-eyebrow">
                   {detailTarget.applicationType === 'SKILL_ADDITION'
                     ? 'Additional skills request'
@@ -560,6 +579,7 @@ export function TrainerApplicationsTab({
                     : noteText(detailNote['Full name'])}
                 </h3>
                 <p>{detailTarget.applicantUsername} · Submitted {new Date(detailTarget.submittedAt).toLocaleString()}</p>
+                </div>
               </div>
               <div className="mentor-application-detail-header-actions">
                 {renderStatus(detailTarget.status)}
@@ -574,16 +594,47 @@ export function TrainerApplicationsTab({
               </div>
             </header>
 
+            {detailTarget.applicationType !== 'SKILL_ADDITION' && (
+              <div className="mentor-application-detail-summary" aria-label="Application summary">
+                <div>
+                  <span>Expertise</span>
+                  <strong>{mentoringSkills.length} skills</strong>
+                </div>
+                <div>
+                  <span>Education</span>
+                  <strong>{educationRecords.length || 'No'} record{educationRecords.length === 1 ? '' : 's'}</strong>
+                </div>
+                <div>
+                  <span>Certificates</span>
+                  <strong>{professionalCertificates.length || 'No'} file{professionalCertificates.length === 1 ? '' : 's'}</strong>
+                </div>
+                <div>
+                  <span>Capacity</span>
+                  <strong>{noteText(detailNote['Maximum concurrent mentees'])} mentees</strong>
+                </div>
+              </div>
+            )}
+
             <div className="mentor-application-detail-grid">
-              {detailTarget.applicationType === 'PROFILE_UPDATE' ? (
+              {detailTarget.applicationType === 'PROFILE_UPDATE' && (
                 <ApplicationDetailSection icon={<BriefcaseBusiness size={17} />} title="Requested profile changes">
                   <dl>
+                    <div><dt>Requested changes</dt><dd>{noteText(detailNote['Requested changes'])}</dd></div>
                     <div><dt>Years of experience</dt><dd>{detailTarget.experienceYears ?? 'Not provided'}</dd></div>
                     <div><dt>Mentoring approach</dt><dd>{noteText(detailTarget.mentoringApproach)}</dd></div>
                     <div><dt>Availability notes</dt><dd>{noteText(detailTarget.availabilityNotes)}</dd></div>
                     <div><dt>Sessions per week</dt><dd>{detailTarget.sessionsPerWeek ?? 'Not provided'}</dd></div>
-                    <div><dt>Maximum concurrent trainees</dt><dd>{detailTarget.maxConcurrentTrainees ?? 'Not provided'}</dd></div>
+                    <div><dt>Maximum concurrent trainees</dt><dd>{noteText(detailNote['Maximum concurrent mentees'])}</dd></div>
                   </dl>
+                </ApplicationDetailSection>
+              )}
+              {detailTarget.applicationType === 'SKILL_ADDITION' ? (
+                <ApplicationDetailSection icon={<BriefcaseBusiness size={17} />} title="Requested skills">
+                  <div className="mentor-application-detail-tags">
+                    {(detailTarget.skillNames?.length ? detailTarget.skillNames : [detailTarget.skillName])
+                      .filter(Boolean)
+                      .map((skill) => <StatusPill key={skill} label={skill} tone="neutral" />)}
+                  </div>
                 </ApplicationDetailSection>
               ) : (
                 <>
@@ -714,11 +765,23 @@ export function TrainerApplicationsTab({
               </ApplicationDetailSection>
 
               <ApplicationDetailSection icon={<FileText size={17} />} title="Application documents">
-                <dl>
-                  <div><dt>CV</dt><dd>{noteText(detailNote.CV?.split(' (')[0])}</dd></div>
-                  <div><dt>Letter of motivation</dt><dd>{noteText(detailNote['Letter of motivation']?.split(' (')[0])}</dd></div>
-                  <div><dt>Profile picture</dt><dd>{noteText(detailNote['Profile picture'])}</dd></div>
-                </dl>
+                <div className="mentor-application-document-grid">
+                  {[
+                    { label: 'Curriculum vitae', value: detailNote.CV },
+                    { label: 'Letter of motivation', value: detailNote['Letter of motivation'] },
+                    { label: 'Profile picture', value: detailNote['Profile picture'] },
+                  ].map((document) => (
+                    <article className="mentor-application-document" key={document.label}>
+                      <div className="mentor-application-document-icon"><FileText size={16} /></div>
+                      <div>
+                        <span>{document.label}</span>
+                        <strong>{typeof document.value === 'string'
+                          ? document.value.split(' (')[0]
+                          : 'Not provided'}</strong>
+                      </div>
+                    </article>
+                  ))}
+                </div>
                 {detailEvidence.length > 0 && (
                   <div className="mentor-application-evidence-list">
                     <h5>Uploaded evidence</h5>

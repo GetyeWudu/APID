@@ -10,6 +10,7 @@ public record TrainerProfileRequest(
         @Min(1) @Max(100) Integer maxConcurrentTrainees,
         @Min(0) Integer experienceYears,
         @Size(max = 2000) String mentoringApproach,
-        @Min(0) Integer sessionsPerWeek
+        @Min(0) Integer sessionsPerWeek,
+        @Size(max = 2000) String changeNote
 ) {
 }

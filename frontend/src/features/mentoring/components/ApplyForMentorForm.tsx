@@ -2,11 +2,25 @@ import { useEffect, useState, type FormEvent, type ReactNode } from 'react';
 import axios from 'axios';
 import { useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
-import { Check, ChevronLeft, ChevronRight, FileText, UserRound, X } from 'lucide-react';
+import {
+  Award,
+  BriefcaseBusiness,
+  CalendarDays,
+  Check,
+  ChevronLeft,
+  ChevronRight,
+  Clock3,
+  FileText,
+  GraduationCap,
+  Sparkles,
+  UserRound,
+  X,
+} from 'lucide-react';
 import { ErrorState, LoadingSkeleton, StatusPill, useToast } from '../../../shared/components/ui';
 import type { ApiErrorPayload } from '../../../shared/api/apiClient';
 import type { SkillItem } from '../../admin/skills/types/skills.types';
 import { mentorApplicationApi } from '../api/mentorApplicationApi';
+import './ApplyForMentorForm.css';
 
 const STEPS = [
   'Personal',
@@ -191,6 +205,66 @@ function formatFileSize(file: File) {
   return file.size < 1024 * 1024
     ? `${Math.max(1, Math.round(file.size / 1024))} KB`
     : `${(file.size / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+type SubmittedApplicationRecord = Record<string, unknown>;
+
+function parseSubmittedApplication(note: string) {
+  const values: Record<string, string> = {};
+  note.split(/\r?\n/).forEach((line) => {
+    const separator = line.indexOf(':');
+    if (separator > 0) values[line.slice(0, separator).trim()] = line.slice(separator + 1).trim();
+  });
+
+  const parseRecords = (value: string | undefined): SubmittedApplicationRecord[] => {
+    if (!value) return [];
+    try {
+      const parsed = JSON.parse(value);
+      return Array.isArray(parsed)
+        ? parsed.filter((item): item is SubmittedApplicationRecord =>
+          Boolean(item) && typeof item === 'object' && !Array.isArray(item))
+        : [];
+    } catch {
+      return [];
+    }
+  };
+
+  const parseList = (value: string | undefined) => {
+    if (!value) return [];
+    try {
+      const parsed = JSON.parse(value);
+      if (Array.isArray(parsed)) {
+        return parsed.filter((item): item is string => typeof item === 'string');
+      }
+    } catch {
+      // Values from older applications may use plain comma-separated text.
+    }
+    return value.split(',').map((item) => item.trim()).filter(Boolean);
+  };
+
+  let availability: SubmittedApplicationRecord | null = null;
+  try {
+    const parsed = JSON.parse(values.Availability ?? '');
+    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+      availability = parsed as SubmittedApplicationRecord;
+    }
+  } catch {
+    availability = null;
+  }
+
+  return {
+    values,
+    education: parseRecords(values['Educational background']),
+    certificates: parseRecords(values['Professional certificates']),
+    mentorship: parseRecords(values['Previous mentorship experience']),
+    career: parseRecords(values['General professional experience']),
+    skills: parseList(values['Mentoring interests / expertise']),
+    availability,
+  };
+}
+
+function submittedText(value: unknown) {
+  return typeof value === 'string' && value.trim() ? value : 'Not provided';
 }
 
 function isHttpUrl(value: string) {
@@ -386,12 +460,6 @@ function ProfessionalCertificateFields({
 
   return (
     <div className="boa-stack">
-      <div>
-        <h4 style={{ margin: 0 }}>Professional certificates (optional)</h4>
-        <p className="boa-muted" style={{ margin: '0.2rem 0 0' }}>
-          Add the certificate title, document or verification link, and skills gained. Add multiple certificates if needed.
-        </p>
-      </div>
       {entries.length === 0 ? (
         <div className="apid-card" style={{ padding: '1rem' }}>
           <p className="boa-muted" style={{ margin: 0 }}>No professional certificates added yet.</p>
@@ -572,12 +640,6 @@ function CareerExperienceFields({
 
   return (
     <div className="boa-stack">
-      <div>
-        <h4 style={{ margin: 0 }}>Professional career history (optional)</h4>
-        <p className="boa-muted" style={{ margin: '0.2rem 0 0' }}>
-          List relevant roles from your professional career.
-        </p>
-      </div>
       {entries.length === 0 ? (
         <div className="apid-card" style={{ padding: '1rem' }}>
           <p className="boa-muted" style={{ margin: 0 }}>No career experience added yet.</p>
@@ -1080,43 +1142,173 @@ export function ApplyForMentorForm({
     const applicationDetails = application?.note ?? submittedDetails;
     const status = application?.status ?? 'PENDING';
     const statusTone = status === 'APPROVED' ? 'ok' : status === 'DECLINED' ? 'err' : 'warn';
+    const submitted = applicationDetails ? parseSubmittedApplication(applicationDetails) : null;
+    const availabilityDays = Array.isArray(submitted?.availability?.days)
+      ? submitted.availability.days.filter((day): day is SubmittedApplicationRecord =>
+        Boolean(day) && typeof day === 'object' && !Array.isArray(day))
+      : [];
+    const fullName = submitted
+      ? submittedText(submitted.values['Full name'])
+      : 'Mentor applicant';
+    const capacity = submitted
+      ? submittedText(submitted.values['Maximum concurrent mentees'])
+      : 'Not provided';
+    const statusTitle = status === 'APPROVED'
+      ? 'Your mentor application was approved'
+      : status === 'DECLINED'
+        ? 'Your mentor application needs revision'
+        : 'Application submitted successfully';
+    const statusDescription = status === 'APPROVED'
+      ? 'Your mentor profile is now active and ready for mentoring activity.'
+      : status === 'DECLINED'
+        ? 'Review the feedback below and submit an updated application when ready.'
+        : 'Your application is with HR for review. We will notify you when a decision is made.';
+
     return (
-      <div className="apid-card">
-        <div className="boa-card-header">
-          <div>
-            <h3 className="boa-card-title">
-              {status === 'PENDING' ? 'Your Mentor Application Has Been Submitted!' : 'Mentor Application'}
-            </h3>
-            <p className="boa-card-subtitle">
-              {status === 'PENDING'
-                ? 'Thank you for your interest in becoming a mentor. Your application is awaiting administrator review.'
-                : 'Your application has been reviewed.'}
-            </p>
+      <section className={`mentor-application-result mentor-application-result-${status.toLowerCase().replaceAll('_', '-')}`}>
+        <div className="mentor-application-result-hero">
+          <div className="mentor-application-result-icon" aria-hidden="true">
+            {status === 'APPROVED' ? <Award size={26} /> : status === 'DECLINED' ? <X size={26} /> : <Check size={26} />}
           </div>
-          <StatusPill label={status === 'PENDING' ? 'PENDING REVIEW' : status} tone={statusTone} />
+          <div className="mentor-application-result-copy">
+            <span>Mentor application</span>
+            <h3>{statusTitle}</h3>
+            <p>{statusDescription}</p>
+          </div>
+          <StatusPill
+            label={status === 'PENDING' ? 'PENDING REVIEW' : status}
+            tone={statusTone}
+          />
         </div>
-        {application?.reviewReason && <p className="boa-muted">Review note: {application.reviewReason}</p>}
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
-          <Link to="/mentoring" className="apid-btn apid-btn-primary apid-btn-sm">Return to dashboard</Link>
+
+        {application?.reviewReason && (
+          <div className="mentor-application-review-note">
+            <strong>HR review note</strong>
+            <p>{application.reviewReason}</p>
+          </div>
+        )}
+
+        <div className="mentor-application-result-actions">
+          <Link to="/mentoring" className="mentor-application-action-primary">Return to mentoring</Link>
           {applicationDetails && (
-            <button type="button" className="apid-btn apid-btn-outline apid-btn-sm"
-              onClick={() => setShowApplicationDetails((open) => !open)}>
+            <button
+              type="button"
+              className="mentor-application-action-secondary"
+              aria-expanded={showApplicationDetails}
+              onClick={() => setShowApplicationDetails((open) => !open)}
+            >
               {showApplicationDetails ? 'Hide application details' : 'View application details'}
             </button>
           )}
           {status === 'APPROVED' && (
-            <Link to="/mentoring?view=trainer-profile" className="apid-btn apid-btn-outline apid-btn-sm">
-              View mentor profile
+            <Link to="/mentoring?view=trainer-profile" className="mentor-application-action-secondary">
+              Open mentor profile
             </Link>
           )}
         </div>
-        {showApplicationDetails && applicationDetails && (
-          <div className="apid-card" aria-label="Submitted application details"
-            style={{ marginTop: '1rem', padding: '1rem', whiteSpace: 'pre-wrap' }}>
-            {applicationDetails}
+
+        {showApplicationDetails && (
+          <div className="mentor-application-details" aria-label="Submitted application details">
+            {submitted ? (
+              <>
+                <div className="mentor-application-details-heading">
+                  <div className="mentor-application-applicant-avatar" aria-hidden="true">
+                    {fullName.split(/\s+/).slice(0, 2).map((part) => part[0]).join('').toUpperCase()}
+                  </div>
+                  <div>
+                    <span>Applicant</span>
+                    <h4>{fullName}</h4>
+                  </div>
+                </div>
+
+                <div className="mentor-application-result-summary">
+                  <div><GraduationCap size={17} /><span>Education</span><strong>{submitted.education.length}</strong></div>
+                  <div><Sparkles size={17} /><span>Skills</span><strong>{submitted.skills.length}</strong></div>
+                  <div><Award size={17} /><span>Certificates</span><strong>{submitted.certificates.length}</strong></div>
+                  <div><UserRound size={17} /><span>Capacity</span><strong>{capacity}</strong></div>
+                </div>
+
+                <div className="mentor-application-details-grid">
+                  <article className="mentor-application-detail-card">
+                    <header><Sparkles size={16} /><h4>Mentoring expertise</h4></header>
+                    {submitted.skills.length ? (
+                      <div className="mentor-application-result-tags">
+                        {submitted.skills.map((skill) => <StatusPill key={skill} label={skill} tone="neutral" />)}
+                      </div>
+                    ) : <p>No mentoring interests provided.</p>}
+                  </article>
+
+                  <article className="mentor-application-detail-card">
+                    <header><GraduationCap size={16} /><h4>Education</h4></header>
+                    {submitted.education.length ? submitted.education.map((record, index) => (
+                      <div className="mentor-application-record" key={`education-${index}`}>
+                        <strong>{submittedText(record.educationLevel)}</strong>
+                        <p>{submittedText(record.fieldOfStudy)}</p>
+                        <span>{submittedText(record.institution)}</span>
+                      </div>
+                    )) : <p>No education records provided.</p>}
+                  </article>
+
+                  <article className="mentor-application-detail-card">
+                    <header><Award size={16} /><h4>Professional certificates</h4></header>
+                    {submitted.certificates.length ? submitted.certificates.map((record, index) => (
+                      <div className="mentor-application-record" key={`certificate-${index}`}>
+                        <strong>{submittedText(record.title)}</strong>
+                        <p>{submittedText(record.document)}</p>
+                        {Array.isArray(record.skills) && record.skills.length > 0 && (
+                          <div className="mentor-application-result-tags">
+                            {record.skills.map((skill) => <StatusPill key={String(skill)} label={String(skill)} tone="neutral" />)}
+                          </div>
+                        )}
+                      </div>
+                    )) : <p>No professional certificates provided.</p>}
+                  </article>
+
+                  <article className="mentor-application-detail-card">
+                    <header><BriefcaseBusiness size={16} /><h4>Professional experience</h4></header>
+                    {submitted.career.length ? submitted.career.map((record, index) => (
+                      <div className="mentor-application-record" key={`career-${index}`}>
+                        <strong>{submittedText(record.title)}</strong>
+                        <p>{[record.organization, record.years].filter(Boolean).join(' · ')}</p>
+                        {typeof record.description === 'string' && record.description && <span>{record.description}</span>}
+                      </div>
+                    )) : <p>No career history provided.</p>}
+                  </article>
+
+                  <article className="mentor-application-detail-card">
+                    <header><CalendarDays size={16} /><h4>Availability</h4></header>
+                    {availabilityDays.length ? (
+                      <div className="mentor-application-result-availability">
+                        {availabilityDays.map((day, index) => (
+                          <div key={`${String(day.day)}-${index}`}>
+                            <strong>{submittedText(day.day)}</strong>
+                            <span>{submittedText(day.start)} - {submittedText(day.end)}</span>
+                          </div>
+                        ))}
+                      </div>
+                    ) : <p>No availability provided.</p>}
+                    {typeof submitted.availability?.timeZone === 'string' && (
+                      <span className="mentor-application-timezone">
+                        <Clock3 size={13} /> {String(submitted.availability.timeZone).replaceAll('_', ' ')}
+                      </span>
+                    )}
+                  </article>
+
+                  <article className="mentor-application-detail-card">
+                    <header><FileText size={16} /><h4>Application documents</h4></header>
+                    <div className="mentor-application-document-list">
+                      <div><span>CV</span><strong>{submittedText(submitted.values.CV?.split(' (')[0])}</strong></div>
+                      <div><span>Motivation letter</span><strong>{submittedText(submitted.values['Letter of motivation']?.split(' (')[0])}</strong></div>
+                    </div>
+                  </article>
+                </div>
+              </>
+            ) : (
+              <p className="boa-muted">Application details are not available for this submission.</p>
+            )}
           </div>
         )}
-      </div>
+      </section>
     );
   }
 

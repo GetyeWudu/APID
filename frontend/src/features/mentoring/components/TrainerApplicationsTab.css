@@ -210,6 +210,61 @@
   gap: 0.6rem;
 }
 
+.mentor-application-detail-person {
+  display: flex;
+  align-items: center;
+  gap: 0.8rem;
+  min-width: 0;
+}
+
+.mentor-application-detail-avatar {
+  width: 48px;
+  height: 48px;
+  flex: 0 0 48px;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--brand-soft-border);
+  border-radius: 50%;
+  background: linear-gradient(145deg, var(--brand-soft), #fffaf0);
+  color: var(--brand);
+  font-size: 0.9rem;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+}
+
+.mentor-application-detail-summary {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.55rem;
+  margin-top: 0.85rem;
+}
+
+.mentor-application-detail-summary > div {
+  display: grid;
+  gap: 0.18rem;
+  min-width: 0;
+  padding: 0.68rem 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface-subtle);
+}
+
+.mentor-application-detail-summary span {
+  color: var(--muted-soft);
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.mentor-application-detail-summary strong {
+  color: var(--text);
+  font-size: 0.82rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .mentor-application-detail-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -316,6 +371,53 @@
   margin-top: 0.85rem;
   padding-top: 0.7rem;
   border-top: 1px solid var(--border);
+}
+
+.mentor-application-document-grid {
+  display: grid;
+  gap: 0.45rem;
+}
+
+.mentor-application-document {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  min-width: 0;
+  padding: 0.68rem;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  background: var(--surface);
+}
+
+.mentor-application-document-icon {
+  width: 34px;
+  height: 34px;
+  flex: 0 0 34px;
+  display: grid;
+  place-items: center;
+  border-radius: 8px;
+  background: var(--brand-soft);
+  color: var(--brand);
+}
+
+.mentor-application-document > div:last-child {
+  min-width: 0;
+  display: grid;
+  gap: 0.12rem;
+}
+
+.mentor-application-document span {
+  color: var(--muted-soft);
+  font-size: 0.68rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.035em;
+}
+
+.mentor-application-document strong {
+  color: var(--text);
+  font-size: 0.78rem;
+  overflow-wrap: anywhere;
 }
 
 .mentor-application-evidence-item {
@@ -455,6 +557,10 @@
 @media (max-width: 700px) {
   .mentor-application-detail-modal {
     padding: 1rem;
+  }
+
+  .mentor-application-detail-summary {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .mentor-application-detail-grid {

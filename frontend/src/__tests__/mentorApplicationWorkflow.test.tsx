@@ -98,6 +98,52 @@ describe('mentor application workflow', () => {
     expect(screen.queryByRole('button', { name: 'Submit Application' })).not.toBeInTheDocument();
   });
 
+  it('shows and hides the submitted application details', async () => {
+    vi.spyOn(mentorApplicationApi, 'listMine').mockResolvedValue([
+      {
+        id: 13,
+        applicantUsername: 'employee',
+        applicationType: 'INITIAL',
+        status: 'PENDING',
+        skillName: 'Backend Development',
+        skillNames: ['Backend Development'],
+        catalogSkillIds: [4],
+        customSkill: null,
+        proofFileId: null,
+        proofFileName: null,
+        evidenceFiles: [],
+        note: [
+          'MENTOR APPLICATION DETAILS',
+          'Full name: Dereje Kebede',
+          'Educational background: [{"educationLevel":"Master\'s Degree","fieldOfStudy":"Computer science","institution":"Haramaya University"}]',
+          'Mentoring interests / expertise: ["Backend Development","Database Design & Management"]',
+          'Professional certificates: [{"title":"Program Certificate","document":"certificate.pdf","skills":["Backend Development"]}]',
+          'General professional experience: [{"title":"Software Engineer","organization":"Example Ltd","years":"2025–2026","description":"Software development"}]',
+          'Availability: {"days":[{"day":"Monday","start":"08:32","end":"09:33"}],"timeZone":"Africa/Addis_Ababa"}',
+          'Maximum concurrent mentees: 5',
+          'CV: resume.pdf (85 KB)',
+        ].join('\n'),
+        expertiseSummary: 'Backend Development',
+        availabilityNotes: null,
+        maxConcurrentTrainees: 5,
+        submittedAt: '2026-01-01T00:00:00Z',
+        reviewedByUsername: null,
+        reviewedAt: null,
+        reviewReason: null,
+      },
+    ]);
+
+    renderWithProviders(<ApplyForMentorForm activeSkills={activeSkills} currentUserId={7} />);
+
+    fireEvent.click(await screen.findByRole('button', { name: 'View application details' }));
+    expect(await screen.findByLabelText('Submitted application details')).toBeInTheDocument();
+    expect(screen.getByText('Dereje Kebede')).toBeInTheDocument();
+    expect(screen.getByText('Haramaya University')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Hide application details' }));
+    expect(screen.queryByLabelText('Submitted application details')).not.toBeInTheDocument();
+  });
+
   it('allows a new application after the previous initial application was declined', async () => {
     vi.spyOn(mentorApplicationApi, 'listMine').mockResolvedValue([
       {
@@ -289,7 +335,12 @@ describe('mentor application workflow', () => {
     expect(screen.getByLabelText(/Letter of motivation \(optional\)/)).toBeInTheDocument();
   });
 
-  it('submits additional skills for HR review from the mentor profile', async () => {
+  it('includes additional skills and evidence in the complete profile update', async () => {
+    const availability = {
+      days: [{ day: 'Monday', start: '08:00', end: '09:00' }],
+      timeZone: 'Africa/Addis_Ababa',
+      formats: ['One-on-One Mentorship'],
+    };
     vi.spyOn(mentoringTrainerApi, 'getProfile').mockResolvedValue({
       id: 5,
       employeeId: 10,
@@ -304,19 +355,33 @@ describe('mentor application workflow', () => {
       pendingTrainees: 0,
       maxConcurrentTrainees: 5,
       bio: null,
-      availabilityNotes: null,
+      availabilityNotes: JSON.stringify(availability),
       skills: [{ id: 4, name: 'Advanced Excel', category: 'Finance', status: 'ACTIVE' }],
+      profileApplicationDetails: [
+        'MENTOR APPLICATION DETAILS',
+        'Full name: Mentor One',
+        'Educational background: [{"educationLevel":"Master\'s Degree","fieldOfStudy":"Computer science","institution":"Old University","certificateLink":"","certificateDocument":"degree.pdf"}]',
+        'Mentoring interests / expertise: ["Advanced Excel"]',
+        'Professional certificates: [{"title":"Certificate","link":"","document":"cert.pdf","skills":["Advanced Excel"]}]',
+        'Previous mentorship experience: No',
+        'General professional experience: [{"title":"Software Engineer","organization":"Example","years":"2024–Present","description":"Builds software"}]',
+        `Availability: ${JSON.stringify(availability)}`,
+        'Mentorship formats: One-on-One Mentorship',
+        'Maximum concurrent mentees: 5',
+        'CV: resume.pdf',
+        'Letter of motivation: letter.pdf',
+      ].join('\n'),
       effectiveFrom: '2026-01-01T00:00:00Z',
       updatedAt: '2026-01-01T00:00:00Z',
     });
     vi.spyOn(mentoringTrainerApi, 'getMyBadgeRemovalRequest').mockResolvedValue(null);
     vi.spyOn(mentorApplicationApi, 'listMine').mockResolvedValue([]);
-    const requestSkillAddition = vi.spyOn(mentorApplicationApi, 'requestSkillAddition').mockResolvedValue({
+    const requestProfileUpdate = vi.spyOn(mentorApplicationApi, 'requestProfileUpdate').mockResolvedValue({
       id: 12,
-      applicationType: 'SKILL_ADDITION',
+      applicationType: 'PROFILE_UPDATE',
       status: 'PENDING',
-      catalogSkillId: 8,
-      catalogSkillIds: [8, 9],
+      catalogSkillId: null,
+      catalogSkillIds: [8],
       customSkill: null,
       submittedAt: '2026-01-02T00:00:00Z',
     });
@@ -325,27 +390,35 @@ describe('mentor application workflow', () => {
       <MentorProfileForm activeSkills={activeSkills} currentUserId={7} />
     );
 
+    fireEvent.click(await screen.findByRole('button', { name: 'Edit profile' }));
+    fireEvent.change(await screen.findByLabelText('Institution'), {
+      target: { value: 'New University' },
+    });
     const skillsSelect = await screen.findByLabelText('Catalog skills') as HTMLSelectElement;
     Array.from(skillsSelect.options).forEach((option) => {
-      option.selected = option.value === '8' || option.value === '9';
+      option.selected = option.value === 'Financial Modeling';
     });
     fireEvent.change(skillsSelect);
     const evidence = new File(['certificate'], 'cert.pdf', { type: 'application/pdf' });
-    fireEvent.change(screen.getByLabelText('Supporting evidence'), {
+    fireEvent.change(screen.getByLabelText('Supporting documents'), {
       target: { files: [evidence] },
     });
-    fireEvent.submit(screen.getByRole('button', { name: 'Request skill approval' }).closest('form')!);
+    fireEvent.click(screen.getByRole('button', { name: 'Submit complete profile for HR review' }));
 
-    await waitFor(() => expect(requestSkillAddition).toHaveBeenCalled());
-    expect(requestSkillAddition.mock.calls[0][0]).toEqual({
-      catalogSkillIds: [8, 9],
-      customSkill: undefined,
+    await waitFor(() => expect(requestProfileUpdate).toHaveBeenCalled());
+    expect(requestProfileUpdate).toHaveBeenCalledWith(expect.objectContaining({
+      catalogSkillIds: [8],
+      customSkill: 'Advanced Excel',
       supportingEvidence: [evidence],
-      note: undefined,
-    });
+      supportingEvidenceContexts: ['Professional certificate'],
+      profileDetails: expect.stringContaining(
+        'Mentoring interests / expertise: ["Advanced Excel","Financial Modeling"]'
+      ),
+    }));
+    expect(requestProfileUpdate.mock.calls[0][0].profileDetails).toContain('"institution":"New University"');
   });
 
-  it('submits mentor profile edits as an HR review request', async () => {
+  it('submits full profile changes and skills together for HR review', async () => {
     vi.spyOn(mentoringTrainerApi, 'getProfile').mockResolvedValue({
       id: 5,
       employeeId: 10,
@@ -379,19 +452,23 @@ describe('mentor application workflow', () => {
 
     renderWithProviders(<MentorProfileForm activeSkills={activeSkills} currentUserId={7} />);
 
+    fireEvent.click(await screen.findByRole('button', { name: 'Edit profile' }));
     fireEvent.change(await screen.findByLabelText('Mentoring approach'), {
       target: { value: 'A new approach' },
     });
-    fireEvent.click(screen.getByRole('button', { name: 'Request profile update' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Submit complete profile for HR review' }));
 
     await waitFor(() => expect(requestProfileUpdate).toHaveBeenCalled());
-    expect(requestProfileUpdate).toHaveBeenCalledWith({
-      bio: 'A new approach',
-      availabilityNotes: '',
+    expect(requestProfileUpdate).toHaveBeenCalledWith(expect.objectContaining({
+      availabilityNotes: JSON.stringify({ days: [], timeZone: 'UTC', formats: [] }),
       experienceYears: null,
       mentoringApproach: 'A new approach',
       sessionsPerWeek: null,
-      maxConcurrentTrainees: 5,
-    });
+      catalogSkillIds: [],
+      customSkill: 'Advanced Excel',
+      changeNote: undefined,
+      supportingEvidence: [],
+      profileDetails: expect.stringContaining('Mentoring interests / expertise: ["Advanced Excel"]'),
+    }));
   });
 });

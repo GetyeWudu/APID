@@ -18,11 +18,10 @@ import { HrAnalyticsTab } from '../components/HrAnalyticsTab';
 import { TrainerBadgeRemovalRequestsTab } from '../components/TrainerBadgeRemovalRequestsTab';
 import { HrDirectMatchingTab } from '../components/HrDirectMatchingTab';
 import { HrMatchingTab } from '../components/HrMatchingTab';
-import { HrMentorSelfService } from '../components/HrMentorSelfService';
 import { TrainerApplicationsTab } from '../components/TrainerApplicationsTab';
 import { TrainerRosterTab } from '../components/TrainerRosterTab';
 
-type HrTabKey = 'my-mentor-profile' | 'applications' | 'trainers' | 'badge-removal-requests' | 'direct-matching' | 'matching' | 'analytics';
+type HrTabKey = 'applications' | 'trainers' | 'badge-removal-requests' | 'direct-matching' | 'matching' | 'analytics';
 
 interface HrTabMeta {
   key: HrTabKey;
@@ -31,7 +30,6 @@ interface HrTabMeta {
 }
 
 const HR_TABS: HrTabMeta[] = [
-  { key: 'my-mentor-profile', label: 'My Mentor Badge', anyPermissions: HR_MODULE_PERMISSIONS },
   { key: 'applications', label: 'Trainer Applications', anyPermissions: ['TRAINER_APPLICATION_REVIEW'] },
   {
     key: 'trainers',
@@ -166,8 +164,6 @@ export function HrMentoringDashboardPage() {
         subtitle="Manage trainer applications, authorizations, HR matching, and mentoring outcomes."
         source="live"
       />
-
-      {activeTab === 'my-mentor-profile' && <HrMentorSelfService />}
 
       {activeTab === 'applications' && (
         <PermissionGate permission="TRAINER_APPLICATION_REVIEW">

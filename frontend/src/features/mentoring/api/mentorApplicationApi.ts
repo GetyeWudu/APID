@@ -154,16 +154,28 @@ export const mentorApplicationApi = {
   },
 
   async requestProfileUpdate(input: {
-    bio: string;
+    profileDetails: string;
+    changeNote?: string;
     availabilityNotes: string;
     experienceYears: number | null;
     mentoringApproach: string;
     sessionsPerWeek: number | null;
-    maxConcurrentTrainees: number;
+    catalogSkillIds: number[];
+    customSkill?: string;
+    supportingEvidenceContexts: string[];
+    supportingEvidence?: File[];
   }): Promise<SubmittedMentorApplication> {
+    const formData = new FormData();
+    const { supportingEvidence = [], ...request } = input;
+    formData.append(
+      'request',
+      new Blob([JSON.stringify(request)], { type: 'application/json' })
+    );
+    supportingEvidence.forEach((file) => formData.append('supportingEvidence', file));
     const response = await apiClient.post<ApiResponse<SubmittedMentorApplication>>(
       '/mentoring/applications/profile-updates',
-      input
+      formData,
+      { headers: { 'Content-Type': 'multipart/form-data' } }
     );
     return response.data.data;
   },

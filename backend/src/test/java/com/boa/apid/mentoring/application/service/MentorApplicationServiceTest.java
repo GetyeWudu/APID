@@ -20,11 +20,13 @@ import com.boa.apid.core.skills.repository.SkillRepository;
 import com.boa.apid.core.skills.service.SkillCacheInvalidationEvent;
 import com.boa.apid.mentoring.application.dto.MentorApplicationDto;
 import com.boa.apid.mentoring.application.dto.MentorApplicationReviewRequest;
+import com.boa.apid.mentoring.application.dto.MentorProfileUpdateRequest;
 import com.boa.apid.mentoring.application.entity.MentorApplication;
 import com.boa.apid.mentoring.application.entity.MentorApplicationStatus;
 import com.boa.apid.mentoring.application.entity.MentorApplicationType;
 import com.boa.apid.mentoring.application.repository.MentorApplicationRepository;
 import com.boa.apid.mentoring.trainer.dto.TrainerRosterDto;
+import com.boa.apid.mentoring.trainer.dto.TrainerSkillDto;
 import com.boa.apid.mentoring.trainer.entity.TrainerAuthorizationSource;
 import com.boa.apid.mentoring.trainer.entity.TrainerAuthorizationStatus;
 import com.boa.apid.mentoring.trainer.service.TrainerAuthorizationService;
@@ -459,13 +461,19 @@ class MentorApplicationServiceTest {
     void submitProfileUpdateCreatesReviewRequestWithoutEvidence() {
         ApidUserPrincipal actor = actor();
         User applicant = user(actor.getUserId(), actor.getUsername());
+        Skill skill = new Skill();
+        skill.setId(4L);
+        skill.setName("Existing skill");
         when(trainerAuthorizationService.getOwnProfile(actor)).thenReturn(new TrainerRosterDto(
                 1L, 2L, actor.getUserId(), "EMP-7", "Mentor Applicant", "Finance", "ACTIVE",
                 TrainerAuthorizationSource.APPLICATION, TrainerAuthorizationStatus.ACTIVE, true,
-                0, 0, 3, null, null, List.of(), Instant.now(), Instant.now(),
+                0, 0, 3, null, null, List.of(new TrainerSkillDto(
+                        4L, "Existing skill", "Finance", TrainerAuthorizationStatus.ACTIVE, null
+                )), Instant.now(), Instant.now(),
                 null, null, null, null, null, null, List.of()
         ));
         when(userRepository.findByIdForUpdate(actor.getUserId())).thenReturn(Optional.of(applicant));
+        when(skillRepository.findByIdAndActiveTrue(4L)).thenReturn(Optional.of(skill));
         when(applicationRepository.findAllByApplicant_IdAndApplicationTypeAndStatus(
                 actor.getUserId(),
                 MentorApplicationType.PROFILE_UPDATE,
@@ -475,10 +483,18 @@ class MentorApplicationServiceTest {
                 .thenAnswer(invocation -> invocation.getArgument(0));
 
         var result = service.submitProfileUpdate(
-                new com.boa.apid.mentoring.trainer.dto.TrainerProfileRequest(
-                        "A new mentoring approach", "Weekday evenings", 4, 8,
-                        "A new mentoring approach", 2
+                new MentorProfileUpdateRequest(
+                        "MENTOR APPLICATION DETAILS\nEducational background: []\nMentoring interests / expertise: [\"Existing skill\"]",
+                        null,
+                        "Weekday evenings",
+                        8,
+                        "A new mentoring approach",
+                        2,
+                        List.of(4L),
+                        null,
+                        List.of()
                 ),
+                List.of(),
                 actor
         );
 
@@ -491,6 +507,8 @@ class MentorApplicationServiceTest {
         assertEquals("A new mentoring approach", saved.getMentoringApproach());
         assertEquals("Weekday evenings", saved.getAvailabilityNotes());
         assertEquals(MentorApplicationType.PROFILE_UPDATE, result.applicationType());
+        assertEquals("MENTOR APPLICATION DETAILS\nEducational background: []\nMentoring interests / expertise: [\"Existing skill\"]",
+                saved.getNote());
     }
 
     @Test

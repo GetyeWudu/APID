@@ -136,13 +136,6 @@ export interface MentoringPairingReportDetail {
   }[];
 }
 
-export interface HrMentorProfile {
-  acceptingNewPairings: boolean;
-  profileSetupRequired: boolean;
-  profile: TrainerRosterItem | null;
-  activeSkills: TrainerSkill[];
-}
-
 export interface MentorBadgeRemovalRequest {
   id: number;
   authorizationId: number;
@@ -249,6 +242,14 @@ export const mentoringTrainerApi = {
     return response.data.data;
   },
 
+  async updateProfile(input: { maxConcurrentTrainees: number }): Promise<TrainerRosterItem> {
+    const response = await apiClient.patch<ApiResponse<TrainerRosterItem>>(
+      '/mentoring/trainer-profile',
+      input
+    );
+    return response.data.data;
+  },
+
   async downloadProfilePicture(fileId: number): Promise<Blob> {
     const response = await apiClient.get<Blob>(`/core/files/${fileId}/download`, {
       responseType: 'blob',
@@ -300,20 +301,4 @@ export const mentoringTrainerApi = {
     return response.data.data;
   },
 
-  async getHrMentorProfile(): Promise<HrMentorProfile> {
-    const response = await apiClient.get<ApiResponse<HrMentorProfile>>('/mentoring/hr/my-mentor-profile');
-    return response.data.data;
-  },
-
-  async updateHrMentorProfile(input: {
-    acceptingNewPairings: boolean;
-    skillIds?: number[];
-    maxConcurrentTrainees?: number;
-  }): Promise<HrMentorProfile> {
-    const response = await apiClient.patch<ApiResponse<HrMentorProfile>>(
-      '/mentoring/hr/my-mentor-profile',
-      input
-    );
-    return response.data.data;
-  },
 };

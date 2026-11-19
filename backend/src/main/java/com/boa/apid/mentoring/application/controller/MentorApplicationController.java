@@ -5,8 +5,8 @@ import com.boa.apid.core.auth.security.ApidUserPrincipal;
 import com.boa.apid.mentoring.application.dto.MentorApplicationDto;
 import com.boa.apid.mentoring.application.dto.MentorApplicationReviewRequest;
 import com.boa.apid.mentoring.application.dto.MentorApplicationSubmittedDto;
+import com.boa.apid.mentoring.application.dto.MentorProfileUpdateRequest;
 import com.boa.apid.mentoring.application.service.MentorApplicationService;
-import com.boa.apid.mentoring.trainer.dto.TrainerProfileRequest;
 import jakarta.validation.Valid;
 import org.springframework.http.MediaType;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -18,6 +18,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RequestPart;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -127,15 +128,16 @@ public class MentorApplicationController {
         );
     }
 
-    @PostMapping("/profile-updates")
+    @PostMapping(value = "/profile-updates", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     @PreAuthorize("hasAuthority('EMPLOYEE_PORTAL_ACCESS')")
     public ApiResponse<MentorApplicationSubmittedDto> requestProfileUpdate(
-            @Valid @RequestBody TrainerProfileRequest request,
+            @Valid @RequestPart("request") MentorProfileUpdateRequest request,
+            @RequestPart(value = "supportingEvidence", required = false) List<MultipartFile> supportingEvidence,
             @AuthenticationPrincipal ApidUserPrincipal actor
     ) {
         return ApiResponse.ok(
                 "Mentor profile update submitted for HR review",
-                mentorApplicationService.submitProfileUpdate(request, actor)
+                mentorApplicationService.submitProfileUpdate(request, supportingEvidence, actor)
         );
     }
 

@@ -13,10 +13,7 @@ import {
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../../../app/AuthContext';
-import {
-  EMPLOYEE_WORKSPACE_PERMISSIONS,
-  HR_MODULE_PERMISSIONS,
-} from '../../../shared/auth/workspaceResolver';
+import { EMPLOYEE_WORKSPACE_PERMISSIONS } from '../../../shared/auth/workspaceResolver';
 import {
   AvatarBadge,
   DataSourceBadge,
@@ -31,7 +28,6 @@ import { mentoringPairingApi } from '../../mentoring/api/mentoringPairingApi';
 import { mentorApplicationApi } from '../../mentoring/api/mentorApplicationApi';
 import { mentoringMatchApi } from '../../mentoring/api/mentoringMatchApi';
 import { mentoringTrainerApi } from '../../mentoring/api/mentoringTrainerApi';
-import { HrMentorSelfService } from '../../mentoring/components/HrMentorSelfService';
 import { MentoringRequestsPanel } from '../../mentoring/components/MentoringRequestsPanel';
 import { workspaceLiveApi } from '../api/workspaceDashboardApi';
 
@@ -43,7 +39,6 @@ function formatDate(value: string) {
 export function WorkspaceDashboardPage() {
   const { user, hasPermission, hasAnyPermission } = useAuth();
   const canAccessWorkspace = hasAnyPermission(EMPLOYEE_WORKSPACE_PERMISSIONS);
-  const canManageHrMentor = hasAnyPermission(HR_MODULE_PERMISSIONS);
   const canReviewMentorApplications = canAccessWorkspace && hasPermission('TRAINER_APPLICATION_REVIEW');
   const canManageMentoringMatches = canAccessWorkspace && hasPermission('MENTORING_MATCH_MANAGE');
   const canViewMentorRoster = canAccessWorkspace && hasAnyPermission([
@@ -58,13 +53,6 @@ export function WorkspaceDashboardPage() {
     queryKey: ['workspace', 'identity', user?.id],
     queryFn: workspaceLiveApi.loadMyIdentity,
     enabled: canAccessWorkspace,
-  });
-  const hrMentorProfileQuery = useQuery({
-    queryKey: ['mentoring', 'hr', 'my-mentor-profile'],
-    queryFn: mentoringTrainerApi.getHrMentorProfile,
-    enabled: canManageHrMentor,
-    refetchInterval: canManageHrMentor ? 3_000 : false,
-    refetchOnWindowFocus: true,
   });
   const hrApplicationsQuery = useQuery({
     queryKey: ['mentoring', 'applications'],
@@ -224,13 +212,6 @@ export function WorkspaceDashboardPage() {
       .map((trainer) => trainer.userId)
       .filter((userId): userId is number => userId !== null)
   );
-  if (
-    canManageHrMentor &&
-    user?.id !== undefined &&
-    hrMentorProfileQuery.data?.acceptingNewPairings
-  ) {
-    activeHrMentorUserIds.add(user.id);
-  }
   const activeHrMentorCount = activeHrMentorUserIds.size;
   const pendingHrApplications = (hrApplicationsQuery.data ?? [])
     .filter((application) => application.status === 'PENDING').length;
@@ -270,14 +251,6 @@ export function WorkspaceDashboardPage() {
               tone={linkedEmployee.employmentStatus === 'ACTIVE' ? 'ok' : 'warn'}
             />
             {(user?.roles ?? [])
-              .filter(
-                (role) =>
-                  !(
-                    canManageHrMentor &&
-                    role.trim().toLowerCase() === 'mentor' &&
-                    hrMentorProfileQuery.data?.acceptingNewPairings === false
-                  )
-              )
               .map((role) => (
                 <StatusPill key={role} label={role} tone="neutral" />
               ))}
@@ -285,8 +258,6 @@ export function WorkspaceDashboardPage() {
           </div>
         </div>
       </section>
-
-      {hasAnyPermission(HR_MODULE_PERMISSIONS) && <HrMentorSelfService />}
 
       {hasHrActivityAccess && (
         <section className="boa-stack" aria-label="HR mentoring activity">
@@ -335,7 +306,7 @@ export function WorkspaceDashboardPage() {
                   <StatCard
                     label="Approved Mentors"
                     value={activeHrMentorCount}
-                    subtext="Active mentors; includes HR admin when badge is on"
+                    subtext="Active approved mentors"
                     icon={<UserRound size={16} />}
                   />
                 )}

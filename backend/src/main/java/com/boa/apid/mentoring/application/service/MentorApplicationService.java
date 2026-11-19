@@ -25,12 +25,13 @@ import com.boa.apid.core.skills.service.SkillCacheInvalidationEvent;
 import com.boa.apid.mentoring.application.dto.MentorApplicationDto;
 import com.boa.apid.mentoring.application.dto.MentorApplicationReviewRequest;
 import com.boa.apid.mentoring.application.dto.MentorApplicationSubmittedDto;
+import com.boa.apid.mentoring.application.dto.MentorProfileUpdateRequest;
 import com.boa.apid.mentoring.application.entity.MentorApplication;
 import com.boa.apid.mentoring.application.entity.MentorApplicationStatus;
 import com.boa.apid.mentoring.application.entity.MentorApplicationType;
 import com.boa.apid.mentoring.application.repository.MentorApplicationRepository;
 import com.boa.apid.mentoring.trainer.dto.TrainerSkillDto;
-import com.boa.apid.mentoring.trainer.dto.TrainerProfileRequest;
+import com.boa.apid.mentoring.trainer.entity.TrainerAuthorizationStatus;
 import com.boa.apid.mentoring.trainer.dto.TrainerRosterDto;
 import com.boa.apid.mentoring.trainer.service.TrainerAuthorizationService;
 import org.springframework.context.ApplicationEventPublisher;
@@ -227,21 +228,15 @@ public class MentorApplicationService {
 
     @Transactional
     public MentorApplicationSubmittedDto submitProfileUpdate(
-            TrainerProfileRequest request,
+            MentorProfileUpdateRequest request,
+            List<MultipartFile> supportingEvidence,
             ApidUserPrincipal actor
     ) {
         TrainerRosterDto currentProfile = trainerAuthorizationService.getOwnProfile(actor);
         User applicant = userRepository.findByIdForUpdate(actor.getUserId())
                 .orElseThrow(() -> new ResourceNotFoundException("Mentor account not found"));
-        String approach = normalizeOptional(
-                request.mentoringApproach() == null ? request.bio() : request.mentoringApproach());
+        String approach = normalizeOptional(request.mentoringApproach());
         String availability = normalizeOptional(request.availabilityNotes());
-        if (request.maxConcurrentTrainees() == null) {
-            throw new BusinessException(
-                    "MENTOR_PROFILE_CAPACITY_REQUIRED",
-                    "Maximum concurrent trainees is required."
-            );
-        }
         if (request.experienceYears() != null && request.experienceYears() < 0) {
             throw new BusinessException("INVALID_MENTOR_EXPERIENCE", "Years of experience cannot be negative.");
         }
@@ -251,24 +246,111 @@ public class MentorApplicationService {
                     "Sessions per week cannot be negative."
             );
         }
-        if (request.maxConcurrentTrainees() < 1 || request.maxConcurrentTrainees() > 100) {
+        if (availability != null && availability.length() > 1000) {
             throw new BusinessException(
-                    "INVALID_MENTOR_CAPACITY",
-                    "Maximum concurrent trainees must be between 1 and 100."
+                    "MENTOR_APPLICATION_AVAILABILITY_TOO_LONG",
+                    "Availability details must be 1000 characters or fewer."
             );
         }
-        trainerAuthorizationService.validateProfileCapacity(
-                actor.getUserId(),
-                request.maxConcurrentTrainees()
-        );
+        if (approach != null && approach.length() > 2000) {
+            throw new BusinessException(
+                    "MENTOR_APPLICATION_APPROACH_TOO_LONG",
+                    "Mentoring approach must be 2000 characters or fewer."
+            );
+        }
+        String profileDetails = request.profileDetails().trim();
+
+        List<Long> requestedSkillIds = request.catalogSkillIds() == null
+                ? List.of()
+                : request.catalogSkillIds();
+        Set<Long> uniqueSkillIds = new LinkedHashSet<>(requestedSkillIds);
+        if (uniqueSkillIds.size() != requestedSkillIds.size()) {
+            throw new BusinessException(
+                    "DUPLICATE_MENTOR_APPLICATION_SKILL",
+                    "Choose each catalog skill only once."
+            );
+        }
+        List<Skill> requestedSkills = uniqueSkillIds.stream()
+                .map(skillId -> skillRepository.findByIdAndActiveTrue(skillId)
+                        .orElseThrow(() -> new ResourceNotFoundException("Active catalog skill not found")))
+                .toList();
+        List<String> requestedCustomSkills = normalizeCustomSkills(request.customSkill());
+        Set<Long> activeSkillIds = currentProfile.skills().stream()
+                .filter(skill -> skill.status() == TrainerAuthorizationStatus.ACTIVE)
+                .map(TrainerSkillDto::id)
+                .collect(java.util.stream.Collectors.toSet());
+        Set<String> activeSkillNames = currentProfile.skills().stream()
+                .filter(skill -> skill.status() == TrainerAuthorizationStatus.ACTIVE)
+                .map(skill -> skill.name().toLowerCase(java.util.Locale.ROOT))
+                .collect(java.util.stream.Collectors.toSet());
+        List<Skill> newSkills = requestedSkills.stream()
+                .filter(skill -> !activeSkillIds.contains(skill.getId()))
+                .toList();
+        List<String> newCustomSkills = requestedCustomSkills.stream()
+                .filter(skill -> !activeSkillNames.contains(skill.toLowerCase(java.util.Locale.ROOT)))
+                .toList();
+        if (requestedSkills.isEmpty() && requestedCustomSkills.isEmpty()) {
+            throw new BusinessException(
+                    "MENTOR_APPLICATION_SKILL_REQUIRED",
+                    "Keep at least one mentoring skill in your profile."
+            );
+        }
+        if (requestedCustomSkills.stream().anyMatch(skill -> skill.length() > 150)) {
+            throw new BusinessException(
+                    "MENTOR_APPLICATION_SKILL_TOO_LONG",
+                    "Each custom skill must be 150 characters or fewer."
+            );
+        }
+        List<MentorApplication> pendingSkillRequests =
+                applicationRepository.findAllByApplicant_IdAndApplicationTypeAndStatus(
+                        applicant.getId(),
+                        MentorApplicationType.SKILL_ADDITION,
+                        MentorApplicationStatus.PENDING
+                );
+        Set<Long> pendingSkillIds = pendingSkillRequests.stream()
+                .flatMap(pending -> pending.getCatalogSkills().stream())
+                .map(Skill::getId)
+                .collect(java.util.stream.Collectors.toSet());
+        Set<String> pendingCustomSkills = pendingSkillRequests.stream()
+                .map(MentorApplication::getCustomSkill)
+                .filter(java.util.Objects::nonNull)
+                .flatMap(skill -> normalizeCustomSkills(skill).stream())
+                .map(skill -> skill.toLowerCase(java.util.Locale.ROOT))
+                .collect(java.util.stream.Collectors.toSet());
+        if (newSkills.stream().anyMatch(skill -> pendingSkillIds.contains(skill.getId()))
+                || newCustomSkills.stream().anyMatch(skill ->
+                        pendingCustomSkills.contains(skill.toLowerCase(java.util.Locale.ROOT)))) {
+            throw new BusinessException(
+                    "MENTOR_SKILL_ALREADY_PENDING",
+                    "A requested skill is already awaiting review."
+            );
+        }
+
+        List<MultipartFile> evidenceUploads = supportingEvidence == null
+                ? List.of()
+                : supportingEvidence.stream()
+                        .filter(file -> file != null && !file.isEmpty())
+                        .toList();
+        if ((!newSkills.isEmpty() || !newCustomSkills.isEmpty()) && evidenceUploads.isEmpty()) {
+            throw new BusinessException(
+                    "MENTOR_APPLICATION_EVIDENCE_REQUIRED",
+                    "Upload supporting evidence when requesting new skills."
+            );
+        }
         String currentApproach = currentProfile.mentoringApproach() == null
                 ? currentProfile.bio()
                 : currentProfile.mentoringApproach();
+        boolean hasNewSkills = !newSkills.isEmpty() || !newCustomSkills.isEmpty();
         if (java.util.Objects.equals(currentApproach, approach)
                 && java.util.Objects.equals(currentProfile.availabilityNotes(), availability)
                 && java.util.Objects.equals(currentProfile.experienceYears(), request.experienceYears())
                 && java.util.Objects.equals(currentProfile.sessionsPerWeek(), request.sessionsPerWeek())
-                && currentProfile.maxConcurrentTrainees() == request.maxConcurrentTrainees()) {
+                && java.util.Objects.equals(
+                        normalizeOptional(currentProfile.profileApplicationDetails()),
+                        normalizeOptional(profileDetails))
+                && !hasNewSkills
+                && normalizeOptional(request.changeNote()) == null
+                && evidenceUploads.isEmpty()) {
             throw new BusinessException(
                     "MENTOR_PROFILE_UNCHANGED",
                     "Change at least one profile field before submitting a request."
@@ -288,23 +370,56 @@ public class MentorApplicationService {
             );
         }
 
+        List<StoredFile> evidenceFiles = new ArrayList<>();
+        List<String> evidenceContexts = request.supportingEvidenceContexts() == null
+                ? List.of()
+                : request.supportingEvidenceContexts();
+        for (int index = 0; index < evidenceUploads.size(); index++) {
+            MultipartFile evidenceUpload = evidenceUploads.get(index);
+            StoredFileDto uploadedFile = fileStorageService.store(
+                    evidenceUpload,
+                    FilePurpose.TRAINER_CERT,
+                    actor
+            );
+            StoredFile evidenceFile = storedFileRepository.findByIdAndDeletedFalse(uploadedFile.id())
+                    .orElseThrow(() -> new ResourceNotFoundException("Uploaded profile evidence not found"));
+            if (!actor.getUserId().equals(evidenceFile.getUploadedByUserId())
+                    || evidenceFile.getPurpose() != FilePurpose.TRAINER_CERT) {
+                throw new AccessDeniedException("Profile evidence must be uploaded by the mentor.");
+            }
+            evidenceFiles.add(evidenceFile);
+        }
+
         MentorApplication application = new MentorApplication();
         application.setApplicant(applicant);
         application.setApplicationType(MentorApplicationType.PROFILE_UPDATE);
-        application.setNote("Mentor profile update request");
+        String changeNote = normalizeOptional(request.changeNote());
+        application.setNote(changeNote == null
+                ? profileDetails
+                : profileDetails + "\nRequested changes: "
+                        + changeNote.replace('\r', ' ').replace('\n', ' '));
+        application.setProofDocument(evidenceFiles.isEmpty() ? null : evidenceFiles.get(0));
+        application.setSupportingEvidence(new LinkedHashSet<>(evidenceFiles));
+        application.setEvidenceContexts(encodeEvidenceContexts(evidenceFiles, evidenceContexts));
+        application.setCatalogSkill(newSkills.isEmpty() ? null : newSkills.get(0));
+        application.setCatalogSkills(new LinkedHashSet<>(newSkills));
+        application.setCustomSkill(newCustomSkills.isEmpty() ? null : String.join("; ", newCustomSkills));
+        application.setExpertiseSummary(java.util.stream.Stream.concat(
+                requestedSkills.stream().map(Skill::getName),
+                requestedCustomSkills.stream()
+        ).distinct().collect(java.util.stream.Collectors.joining(", ")));
         application.setAvailabilityNotes(availability);
         application.setExperienceYears(request.experienceYears());
         application.setMentoringApproach(approach);
         application.setSessionsPerWeek(request.sessionsPerWeek());
-        application.setMaxConcurrentTrainees(request.maxConcurrentTrainees());
         MentorApplication saved = applicationRepository.save(application);
         return new MentorApplicationSubmittedDto(
                 saved.getId(),
                 saved.getApplicationType(),
                 saved.getStatus(),
-                null,
-                List.of(),
-                null,
+                saved.getCatalogSkill() == null ? null : saved.getCatalogSkill().getId(),
+                newSkills.stream().map(Skill::getId).toList(),
+                saved.getCustomSkill(),
                 saved.getSubmittedAt()
         );
     }
@@ -570,6 +685,10 @@ public class MentorApplicationService {
         if (request.decision() == MentorApplicationStatus.APPROVED) {
             if (application.getApplicationType() == MentorApplicationType.PROFILE_UPDATE) {
                 trainerAuthorizationService.approveProfileUpdate(application);
+                if (!application.getCatalogSkills().isEmpty()
+                        || normalizeOptional(application.getCustomSkill()) != null) {
+                    trainerAuthorizationService.authorizeApplication(application, reviewer);
+                }
             } else {
                 approveApplicant(application, applicant, actor);
                 trainerAuthorizationService.authorizeApplication(application, reviewer);
