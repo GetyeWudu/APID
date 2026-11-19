@@ -60,17 +60,18 @@ describe('same mentor requests for different skills', () => {
     vi.restoreAllMocks();
   });
 
-  it('collects a learning goal without pretending AI recommendations are connected', async () => {
+  it('collects a learning goal before recommendations are requested', () => {
     renderWithProviders(<MentoringRecommendations />);
 
     fireEvent.change(screen.getByLabelText('What would you like to learn?'), {
       target: { value: 'I want to learn financial modeling.' },
     });
-    fireEvent.click(screen.getByRole('button', { name: 'Prepare recommendations' }));
 
-    expect(await screen.findByText('Your learning goal is ready')).toBeInTheDocument();
+    expect(screen.getByLabelText('What would you like to learn?')).toHaveValue(
+      'I want to learn financial modeling.'
+    );
     expect(screen.getByText(
-      'AI mentor recommendations will appear here when the recommendation service is connected.'
+      'Start by describing what you want to learn. We’ll compare your goal with available mentor profiles.'
     )).toBeInTheDocument();
   });
 

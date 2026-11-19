@@ -109,6 +109,7 @@ describe('MentoringHomePage Find a Mentor', () => {
       directReports: [],
       activeSkills: [skill],
     });
+    vi.spyOn(mentoringPairingApi, 'listMyRelationships').mockResolvedValue([]);
     vi.spyOn(mentoringPairingApi, 'listMyRequests').mockResolvedValue([]);
     vi.spyOn(mentoringPairingApi, 'requestMentor').mockResolvedValue({
       id: 99,
@@ -204,7 +205,7 @@ describe('MentoringHomePage Find a Mentor', () => {
     });
   });
 
-  it('shows the AI recommendation placeholder without fabricating mentor matches', async () => {
+  it('shows an empty AI recommendation state without fabricating mentor matches', async () => {
     vi.spyOn(mentorDirectoryApi, 'listMentors').mockResolvedValue([]);
 
     renderFindMentorPage();
@@ -212,9 +213,48 @@ describe('MentoringHomePage Find a Mentor', () => {
     expect(await screen.findByRole('heading', { name: 'Find a mentor with AI' })).toBeInTheDocument();
     expect(screen.getByText('Your recommendations will appear here')).toBeInTheDocument();
     expect(screen.getByText(
-      'Start by describing what you want to learn. This is a UI preview; AI matching is not connected yet.'
+      'Start by describing what you want to learn. We’ll compare your goal with available mentor profiles.'
     )).toBeInTheDocument();
     expect(screen.getByText('Mentor Directory')).toBeInTheDocument();
     expect(screen.getByText('No Mentors Found')).toBeInTheDocument();
+  });
+
+  it('submits the learning goal and allows a recommendation request', async () => {
+    const mentor = {
+      ...buildMentor(30, 2, otherSkill),
+      experienceYears: 5,
+      sessionsPerWeek: 3,
+    };
+    vi.spyOn(mentorDirectoryApi, 'listMentors').mockResolvedValue([]);
+    vi.spyOn(mentorDirectoryApi, 'recommendMentors').mockResolvedValue([{
+      rank: 1,
+      reason: 'Their Excel experience matches your goal.',
+      skillId: otherSkill.id,
+      skillName: otherSkill.name,
+      mentor,
+    }]);
+
+    renderFindMentorPage();
+
+    fireEvent.change(await screen.findByLabelText('What would you like to learn?'), {
+      target: { value: 'I want to improve my financial modeling skills.' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Find mentors' }));
+
+    expect(await screen.findByText('Mentor 30')).toBeInTheDocument();
+    expect(screen.getByText('Their Excel experience matches your goal.')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Request mentorship' }));
+
+    await waitFor(() => {
+      expect(mentorDirectoryApi.recommendMentors).toHaveBeenCalledWith(
+        'I want to improve my financial modeling skills.',
+        expect.anything()
+      );
+      expect(mentoringPairingApi.requestMentor).toHaveBeenCalledWith({
+        mentorUserId: 30,
+        skillId: otherSkill.id,
+        message: 'I want to improve my financial modeling skills.',
+      }, expect.anything());
+    });
   });
 });

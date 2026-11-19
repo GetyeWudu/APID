@@ -1127,12 +1127,6 @@ public class TrainerAuthorizationService {
             return contexts;
         }
 
-        private String encodeEvidenceContexts(Map<Long, String> contexts) {
-            return contexts.entrySet().stream()
-                    .map(entry -> entry.getKey() + "\t" + entry.getValue()
-                            .replaceAll("[\\t\\r\\n]", " ").trim())
-                    .collect(java.util.stream.Collectors.joining("\n"));
-        }
         for (String line : serialized.split("\\r?\\n")) {
             int separator = line.indexOf('\t');
             if (separator <= 0) {
@@ -1145,6 +1139,13 @@ public class TrainerAuthorizationService {
             }
         }
         return contexts;
+    }
+
+    private String encodeEvidenceContexts(Map<Long, String> contexts) {
+        return contexts.entrySet().stream()
+                .map(entry -> entry.getKey() + "\t" + entry.getValue()
+                        .replaceAll("[\\t\\r\\n]", " ").trim())
+                .collect(java.util.stream.Collectors.joining("\n"));
     }
 
     private MentorBadgeRemovalRequestDto toBadgeRemovalRequestDto(MentorBadgeRemovalRequest request) {
