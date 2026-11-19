@@ -2,7 +2,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ReactNode } from 'react';
-import { mentorDirectoryApi, type MentorDirectoryItem } from '../features/mentoring/api/mentorDirectoryApi';
+import type { MentorDirectoryItem } from '../features/mentoring/api/mentorDirectoryApi';
 import { mentoringPairingApi, type MentoringPairing } from '../features/mentoring/api/mentoringPairingApi';
 import { MentorDirectory } from '../features/mentoring/components/MentorDirectory';
 import { MentoringRecommendations } from '../features/mentoring/components/MentoringRecommendations';
@@ -60,25 +60,18 @@ describe('same mentor requests for different skills', () => {
     vi.restoreAllMocks();
   });
 
-  it('lets a trainee request a recommendation for a skill with no existing pairing', async () => {
-    vi.spyOn(mentorDirectoryApi, 'listMentors').mockResolvedValue([mentor]);
-    const requestMentor = vi.spyOn(mentoringPairingApi, 'requestMentor').mockResolvedValue(existingPairing);
+  it('collects a learning goal without pretending AI recommendations are connected', async () => {
+    renderWithProviders(<MentoringRecommendations />);
 
-    renderWithProviders(
-      <MentoringRecommendations
-        skills={[{ id: 8, name: 'Financial Modeling' }]}
-        currentUserId={7}
-        requests={[existingPairing]}
-      />
-    );
-
-    fireEvent.click(await screen.findByRole('button', { name: 'Request mentorship' }));
-
-    await waitFor(() => expect(requestMentor).toHaveBeenCalled());
-    expect(requestMentor.mock.calls[0][0]).toEqual({
-      mentorUserId: 20,
-      skillId: 8,
+    fireEvent.change(screen.getByLabelText('What would you like to learn?'), {
+      target: { value: 'I want to learn financial modeling.' },
     });
+    fireEvent.click(screen.getByRole('button', { name: 'Prepare recommendations' }));
+
+    expect(await screen.findByText('Your learning goal is ready')).toBeInTheDocument();
+    expect(screen.getByText(
+      'AI mentor recommendations will appear here when the recommendation service is connected.'
+    )).toBeInTheDocument();
   });
 
   it('lets a trainee select another skill in the mentor directory when one skill is active', async () => {

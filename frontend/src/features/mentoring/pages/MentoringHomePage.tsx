@@ -153,16 +153,10 @@ export function MentoringHomePage() {
       <div className="boa-stack">
         <PageHeader
           title="Find a Mentor"
-          subtitle="Find active mentors with available capacity for a skill, or ask HR to match you."
+          subtitle="Describe what you want to learn to prepare for AI-powered recommendations, or browse the mentor directory."
           source="live"
         />
-        {user?.id && (
-          <MentoringRecommendations
-            skills={activeSkills.map((skill) => ({ id: skill.id, name: skill.name }))}
-            currentUserId={user.id}
-            requests={pairingRequestsQuery.data ?? []}
-          />
-        )}
+        <MentoringRecommendations />
         <MentoringMatchRequestForm skills={activeSkills} />
         <MentorDirectory
           mentors={mentorsQuery.data ?? []}

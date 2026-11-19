@@ -131,7 +131,7 @@ describe('MentoringHomePage Find a Mentor', () => {
     vi.spyOn(mentoringMatchApi, 'listMine').mockResolvedValue([]);
   });
 
-  it('lists every skill match and lets the trainee manually request another available mentor', async () => {
+  it('shows the AI prompt and lets the trainee request a mentor through the directory', async () => {
     const matchingMentors = [
       ...Array.from({ length: 6 }, (_, index) => buildMentor(index + 10, 2)),
       buildMentor(20, 0),
@@ -144,16 +144,10 @@ describe('MentoringHomePage Find a Mentor', () => {
     renderFindMentorPage();
 
     expect(await screen.findByText('Mentor 30')).toBeInTheDocument();
-    const recommendations = screen.getByRole('heading', { name: 'Recommended Mentors' }).closest('section');
-    if (!recommendations) throw new Error('Mentor recommendations were not rendered.');
-    await waitFor(() => {
-      expect(within(recommendations).getByText('Mentor 10')).toBeInTheDocument();
-    });
-    for (let userId = 10; userId <= 15; userId += 1) {
-      expect(within(recommendations).getByText(`Mentor ${userId}`)).toBeInTheDocument();
-    }
-    expect(within(recommendations).queryByText('Mentor 20')).not.toBeInTheDocument();
-    expect(within(recommendations).queryByText('Trainee Seven')).not.toBeInTheDocument();
+    const recommendations = screen.getByRole('heading', { name: 'Find a mentor with AI' }).closest('section');
+    if (!recommendations) throw new Error('AI mentor prompt was not rendered.');
+    expect(within(recommendations).getByLabelText('What would you like to learn?')).toBeInTheDocument();
+    expect(within(recommendations).queryByText('Mentor 30')).not.toBeInTheDocument();
     expect(screen.getByText('Mentor Directory')).toBeInTheDocument();
     expect(screen.getByText('Mentor 30')).toBeInTheDocument();
 
@@ -194,7 +188,7 @@ describe('MentoringHomePage Find a Mentor', () => {
 
     expect(await screen.findByText('Ask HR to find a mentor')).toBeInTheDocument();
 
-    fireEvent.change(screen.getAllByLabelText('Skill you want to learn')[1], {
+    fireEvent.change(screen.getByLabelText('Skill you want to learn'), {
       target: { value: String(skill.id) },
     });
     fireEvent.change(screen.getByLabelText('What would you like help with? (optional)'), {
@@ -210,13 +204,16 @@ describe('MentoringHomePage Find a Mentor', () => {
     });
   });
 
-  it('shows a no-match message without listing unrelated mentors', async () => {
+  it('shows the AI recommendation placeholder without fabricating mentor matches', async () => {
     vi.spyOn(mentorDirectoryApi, 'listMentors').mockResolvedValue([]);
 
     renderFindMentorPage();
 
-    expect(await screen.findByText('No matching mentors')).toBeInTheDocument();
-    expect(screen.getByText('No available mentors currently offer this skill.')).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'Find a mentor with AI' })).toBeInTheDocument();
+    expect(screen.getByText('Your recommendations will appear here')).toBeInTheDocument();
+    expect(screen.getByText(
+      'Start by describing what you want to learn. This is a UI preview; AI matching is not connected yet.'
+    )).toBeInTheDocument();
     expect(screen.getByText('Mentor Directory')).toBeInTheDocument();
     expect(screen.getByText('No Mentors Found')).toBeInTheDocument();
   });

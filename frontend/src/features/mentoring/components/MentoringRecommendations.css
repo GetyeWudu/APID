@@ -1,0 +1,220 @@
+.ai-mentor-recommendations {
+  display: grid;
+  gap: 1.1rem;
+  padding: clamp(1rem, 2.5vw, 1.5rem);
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  background:
+    radial-gradient(ellipse at 100% 0, rgba(245, 183, 0, 0.1), transparent 38%),
+    var(--surface);
+  box-shadow: var(--shadow-card);
+}
+
+.ai-mentor-header {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.8rem;
+}
+
+.ai-mentor-icon {
+  width: 42px;
+  height: 42px;
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  border: 1px solid var(--brand-soft-border);
+  border-radius: 12px;
+  color: var(--brand);
+  background: var(--brand-soft);
+}
+
+.ai-mentor-header h2 {
+  margin: 0;
+  color: var(--text);
+  font-size: 1.08rem;
+  letter-spacing: -0.02em;
+}
+
+.ai-mentor-header p {
+  max-width: 650px;
+  margin: 0.3rem 0 0;
+  color: var(--muted);
+  font-size: 0.8rem;
+  line-height: 1.5;
+}
+
+.ai-mentor-title-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.55rem;
+}
+
+.ai-mentor-preview-badge {
+  padding: 0.2rem 0.48rem;
+  border: 1px solid var(--brand-soft-border);
+  border-radius: 999px;
+  color: var(--brand);
+  background: var(--brand-soft);
+  font-size: 0.63rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.ai-mentor-prompt {
+  display: grid;
+  gap: 0.5rem;
+  padding: 0.9rem;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface);
+}
+
+.ai-mentor-prompt > label {
+  color: var(--text);
+  font-size: 0.78rem;
+  font-weight: 800;
+}
+
+.ai-mentor-prompt textarea {
+  width: 100%;
+  min-height: 104px;
+  resize: vertical;
+  padding: 0.75rem;
+  border: 1px solid var(--border-strong);
+  border-radius: 9px;
+  color: var(--text);
+  background: var(--surface);
+  font: inherit;
+  font-size: 0.82rem;
+  line-height: 1.5;
+}
+
+.ai-mentor-prompt textarea::placeholder {
+  color: var(--muted-soft);
+}
+
+.ai-mentor-prompt-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.8rem;
+}
+
+.ai-mentor-prompt-footer > span {
+  color: var(--muted-soft);
+  font-size: 0.68rem;
+}
+
+.ai-mentor-prompt-footer button {
+  min-height: 38px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.45rem;
+  padding: 0.55rem 0.8rem;
+  border: 1px solid var(--brand-primary);
+  border-radius: 8px;
+  color: #fff;
+  background: var(--brand-primary);
+  font-size: 0.75rem;
+  font-weight: 800;
+  cursor: pointer;
+  transition: filter 120ms ease, transform 120ms ease;
+}
+
+.ai-mentor-prompt-footer button:not(:disabled):hover {
+  filter: brightness(0.96);
+  transform: translateY(-1px);
+}
+
+.ai-mentor-prompt-footer button:disabled {
+  border-color: var(--border);
+  color: var(--muted-soft);
+  background: var(--surface-subtle);
+  cursor: not-allowed;
+}
+
+.ai-mentor-examples {
+  display: grid;
+  gap: 0.45rem;
+}
+
+.ai-mentor-examples > span {
+  color: var(--muted);
+  font-size: 0.69rem;
+  font-weight: 800;
+}
+
+.ai-mentor-examples > div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.ai-mentor-examples button {
+  min-height: 31px;
+  padding: 0.38rem 0.6rem;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  color: var(--text);
+  background: var(--surface-subtle);
+  font-size: 0.68rem;
+  text-align: left;
+  cursor: pointer;
+}
+
+.ai-mentor-examples button:hover {
+  border-color: var(--brand-soft-border);
+  background: var(--brand-soft);
+}
+
+.ai-mentor-results-placeholder {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.65rem;
+  padding: 0.85rem;
+  border: 1px dashed var(--border-strong);
+  border-radius: 11px;
+  color: var(--brand);
+  background: var(--surface-subtle);
+}
+
+.ai-mentor-results-placeholder > svg {
+  flex: 0 0 auto;
+  margin-top: 0.05rem;
+}
+
+.ai-mentor-results-placeholder strong {
+  color: var(--text);
+  font-size: 0.76rem;
+}
+
+.ai-mentor-results-placeholder p {
+  margin: 0.18rem 0 0;
+  color: var(--muted);
+  font-size: 0.72rem;
+  line-height: 1.45;
+}
+
+@media (max-width: 560px) {
+  .ai-mentor-header {
+    gap: 0.6rem;
+  }
+
+  .ai-mentor-icon {
+    width: 36px;
+    height: 36px;
+  }
+
+  .ai-mentor-prompt-footer {
+    align-items: flex-start;
+    flex-direction: column-reverse;
+  }
+
+  .ai-mentor-prompt-footer button {
+    width: 100%;
+  }
+}
