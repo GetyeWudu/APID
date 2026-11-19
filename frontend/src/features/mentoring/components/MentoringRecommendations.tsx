@@ -1,7 +1,8 @@
 import { useState, type FormEvent } from 'react';
+import axios from 'axios';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { ArrowRight, LoaderCircle, Send, Sparkles, Star, Users } from 'lucide-react';
-import { extractApiErrorMessage } from '../../../shared/api/apiClient';
+import { extractApiErrorMessage, type ApiErrorPayload } from '../../../shared/api/apiClient';
 import { useToast } from '../../../shared/components/ui';
 import { mentorDirectoryApi, type MentorRecommendation } from '../api/mentorDirectoryApi';
 import { mentoringPairingApi, type MentoringPairing } from '../api/mentoringPairingApi';
@@ -12,6 +13,11 @@ const LEARNING_GOAL_EXAMPLES = [
   'I want to become more confident presenting my ideas.',
   'I want to grow into a technical leadership role.',
 ];
+
+function getRecommendationErrorCode(error: unknown) {
+  if (!axios.isAxiosError<ApiErrorPayload>(error)) return null;
+  return error.response?.data?.error?.code ?? error.response?.data?.errorCode ?? null;
+}
 
 export function MentoringRecommendations({
   currentUserId,
@@ -56,10 +62,24 @@ export function MentoringRecommendations({
     recommendationMutation.mutate(goal);
   };
 
-  const errorMessage = recommendationMutation.error
-    ? extractApiErrorMessage(recommendationMutation.error, 'Unable to get mentor recommendations. Please try again.')
+  const recommendationErrorCode = recommendationMutation.error
+    ? getRecommendationErrorCode(recommendationMutation.error)
+    : null;
+  const noMentorsFoundError = recommendationErrorCode === 'MENTOR_RECOMMENDATION_EMPTY_RESPONSE';
+  const serviceUnavailable = recommendationErrorCode === 'MENTOR_RECOMMENDATION_SERVICE_UNAVAILABLE'
+    || recommendationErrorCode === 'MENTOR_RECOMMENDATION_INVALID_RESPONSE'
+    || (axios.isAxiosError(recommendationMutation.error) && !recommendationMutation.error.response);
+  const errorMessage = recommendationMutation.error && !noMentorsFoundError
+    ? serviceUnavailable
+      ? 'AI recommendations are not available right now. Please try again later.'
+      : extractApiErrorMessage(
+        recommendationMutation.error,
+        'Unable to get mentor recommendations. Please try again.'
+      )
     : null;
   const recommendations = recommendationMutation.data ?? [];
+  const noMentorsFound = noMentorsFoundError
+    || (recommendationMutation.isSuccess && recommendations.length === 0);
   const clearRecommendations = () => {
     setSubmittedGoal('');
     recommendationMutation.reset();
@@ -136,6 +156,14 @@ export function MentoringRecommendations({
               </div>
             </div>
           </div>
+        ) : noMentorsFound ? (
+          <div className="ai-mentor-results-placeholder">
+            <Sparkles size={20} />
+            <div>
+              <strong>No mentor was found for you</strong>
+              <p>No available mentor has a strong match for that goal. Try describing a different or more specific learning goal.</p>
+            </div>
+          </div>
         ) : errorMessage ? (
           <div className="ai-mentor-results-placeholder ai-mentor-results-error">
             <Sparkles size={20} />
@@ -197,11 +225,6 @@ export function MentoringRecommendations({
               })}
             </div>
           </>
-        ) : recommendationMutation.isSuccess ? (
-          <div className="ai-mentor-results-placeholder">
-            <Sparkles size={20} />
-            <div><strong>No suitable mentors found</strong><p>Try adding more detail about the skills or guidance you need.</p></div>
-          </div>
         ) : (
           <div className="ai-mentor-results-placeholder">
             <Sparkles size={20} />

@@ -16,6 +16,20 @@ public record TrainerDirectoryDto(
         List<TrainerSkillDto> skills,
         Integer experienceYears,
         String mentoringApproach,
-        Integer sessionsPerWeek
+        Integer sessionsPerWeek,
+        List<EducationProfile> education,
+        List<ProfessionalCertificate> professionalCertificates
 ) {
+    public record EducationProfile(
+            String educationLevel,
+            String fieldOfStudy,
+            String institution
+    ) {
+    }
+
+    public record ProfessionalCertificate(
+            String title,
+            List<String> skills
+    ) {
+    }
 }

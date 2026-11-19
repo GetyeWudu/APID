@@ -70,6 +70,7 @@ class TrainerAuthorizationServiceApplicationTest {
     @Mock private NotificationService notificationService;
     @Mock private AuditService auditService;
     @Mock private ApplicationEventPublisher eventPublisher;
+    @Mock private TrainerDirectoryProfileDetailsMapper profileDetailsMapper;
 
     @InjectMocks
     private TrainerAuthorizationService service;

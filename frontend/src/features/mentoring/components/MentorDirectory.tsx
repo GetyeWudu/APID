@@ -1,10 +1,76 @@
 import { useMemo, useState, type FormEvent } from 'react';
 import axios from 'axios';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { Eye, X } from 'lucide-react';
 import type { ApiErrorPayload } from '../../../shared/api/apiClient';
-import { DataSourceBadge, EmptyState, StatusPill, useToast } from '../../../shared/components/ui';
+import {
+  DataSourceBadge,
+  DataTable,
+  EmptyState,
+  Pagination,
+  StatusPill,
+  useToast,
+  type DataTableColumn,
+} from '../../../shared/components/ui';
 import { mentoringPairingApi, type MentoringPairing } from '../api/mentoringPairingApi';
 import type { MentorDirectoryItem } from '../api/mentorDirectoryApi';
+import './MentorDirectory.css';
+
+const MENTORS_PER_PAGE = 10;
+
+type AvailabilityProfile = {
+  days: Array<{ day: string; start: string; end: string }>;
+  timeZone: string;
+  formats: string[];
+};
+
+function parseAvailability(value: string | null | undefined): AvailabilityProfile | null {
+  if (!value) return null;
+  try {
+    const parsed: unknown = JSON.parse(value);
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return null;
+    const availability = parsed as Record<string, unknown>;
+    const days = Array.isArray(availability.days)
+      ? availability.days
+        .filter((entry): entry is Record<string, unknown> =>
+          Boolean(entry) && typeof entry === 'object' && !Array.isArray(entry))
+        .map((entry) => ({
+          day: typeof entry.day === 'string' ? entry.day : '',
+          start: typeof entry.start === 'string' ? entry.start : '',
+          end: typeof entry.end === 'string' ? entry.end : '',
+        }))
+        .filter((entry) => entry.day)
+      : [];
+    return {
+      days,
+      timeZone: typeof availability.timeZone === 'string' ? availability.timeZone : '',
+      formats: Array.isArray(availability.formats)
+        ? availability.formats.filter((format): format is string => typeof format === 'string')
+        : [],
+    };
+  } catch {
+    return null;
+  }
+}
+
+function formatAvailability(value: string | null | undefined) {
+  const availability = parseAvailability(value);
+  if (!availability) {
+    return value?.trim().startsWith('{') ? null : value;
+  }
+  const schedule = availability.days.map(({ day, start, end }) =>
+    `${day}${start && end ? ` ${start}–${end}` : ''}`
+  );
+  return [
+    schedule.join(', '),
+    availability.timeZone.replace(/_/g, ' '),
+    availability.formats.join(', '),
+  ].filter(Boolean).join(' · ') || null;
+}
+
+function normalizeProfileText(value: string) {
+  return value.trim().replace(/\s+/g, ' ').toLowerCase();
+}
 
 export function MentorDirectory({
   mentors,
@@ -20,7 +86,9 @@ export function MentorDirectory({
   const [skillFilter, setSkillFilter] = useState('ALL');
   const [departmentFilter, setDepartmentFilter] = useState('');
   const [availableOnly, setAvailableOnly] = useState(true);
+  const [page, setPage] = useState(0);
   const [selectedMentor, setSelectedMentor] = useState<MentorDirectoryItem | null>(null);
+  const [profileMentor, setProfileMentor] = useState<MentorDirectoryItem | null>(null);
   const [selectedSkillId, setSelectedSkillId] = useState('');
   const [message, setMessage] = useState('');
   const otherMentors = useMemo(
@@ -76,6 +144,12 @@ export function MentorDirectory({
         mentor.departmentName?.toLowerCase().includes(departmentFilter.trim().toLowerCase())) &&
       (!availableOnly || mentor.remainingCapacity === undefined || mentor.remainingCapacity > 0)
   );
+  const totalPages = Math.ceil(filteredMentors.length / MENTORS_PER_PAGE);
+  const currentPage = Math.min(page, Math.max(totalPages - 1, 0));
+  const paginatedMentors = filteredMentors.slice(
+    currentPage * MENTORS_PER_PAGE,
+    (currentPage + 1) * MENTORS_PER_PAGE
+  );
   const onlyOwnMentorProfile = mentors.length > 0 && otherMentors.length === 0;
   const selectedSkillValue = selectedSkillId ? Number(selectedSkillId) : null;
   const selectedMentorRequest = selectedMentor
@@ -96,6 +170,156 @@ export function MentorDirectory({
           (request.status === 'PENDING' || request.status === 'ACCEPTED')
       )
     : undefined;
+  const profileAvailability = profileMentor
+    ? parseAvailability(profileMentor.availabilityNotes)
+    : null;
+  const profileSkillsSummary = profileMentor?.skills.map((skill) => skill.name).join(', ') ?? '';
+  const profileApproach = profileMentor?.mentoringApproach?.trim() || '';
+  const profileBio = profileMentor?.bio?.trim() || '';
+  const showProfileApproach = Boolean(profileApproach)
+    && normalizeProfileText(profileApproach) !== normalizeProfileText(profileSkillsSummary);
+  const showProfileBio = Boolean(profileBio)
+    && ![profileSkillsSummary, profileApproach].some((value) =>
+      value && normalizeProfileText(profileBio) === normalizeProfileText(value)
+    );
+  const columns: DataTableColumn<MentorDirectoryItem>[] = [
+    {
+      key: 'mentor',
+      header: 'Mentor',
+      render: (mentor) => (
+        <div className="boa-stack" style={{ gap: '0.15rem' }}>
+          <strong>{mentor.fullName}</strong>
+          <span className="boa-muted" style={{ fontSize: '0.75rem' }}>
+            {[mentor.employeeNumber, mentor.departmentName].filter(Boolean).join(' · ') || mentor.username}
+          </span>
+        </div>
+      ),
+    },
+    {
+      key: 'skills',
+      header: 'Skills',
+      render: (mentor) => (
+        <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '0.3rem' }}>
+          {mentor.skills.length > 0 ? (
+            <>
+              {mentor.skills.slice(0, 4).map((skill) => (
+                <StatusPill key={skill.id} label={skill.name} tone="neutral" />
+              ))}
+              {mentor.skills.length > 4 && (
+                <span
+                  className="boa-muted"
+                  title={mentor.skills.slice(4).map((skill) => skill.name).join(', ')}
+                >
+                  +{mentor.skills.length - 4} more
+                </span>
+              )}
+            </>
+          ) : (
+            <span className="boa-muted">No skills linked</span>
+          )}
+        </div>
+      ),
+    },
+    {
+      key: 'experience',
+      header: 'Experience',
+      render: (mentor) => mentor.experienceYears == null
+        ? <span className="boa-muted">Not provided</span>
+        : `${mentor.experienceYears} year${mentor.experienceYears === 1 ? '' : 's'}`,
+    },
+    {
+      key: 'availability',
+      header: 'Availability',
+      render: (mentor) => {
+        const availability = formatAvailability(mentor.availabilityNotes);
+        return (
+          <div className="mentor-directory-availability">
+            <strong>
+              {mentor.remainingCapacity === undefined
+                ? 'Capacity not available'
+                : `${mentor.remainingCapacity} slot${mentor.remainingCapacity === 1 ? '' : 's'}`}
+            </strong>
+            {mentor.sessionsPerWeek != null && (
+              <span>{mentor.sessionsPerWeek} sessions/week</span>
+            )}
+            {availability && <span title={availability}>{availability}</span>}
+            {mentor.sessionsPerWeek == null && !availability && (
+              <span className="boa-muted">Schedule not provided</span>
+            )}
+          </div>
+        );
+      },
+    },
+    {
+      key: 'approach',
+      header: 'Mentoring approach',
+      render: (mentor) => {
+        const approach = mentor.mentoringApproach || mentor.bio;
+        const matchesSkills = approach && normalizeProfileText(approach) === normalizeProfileText(
+          mentor.skills.map((skill) => skill.name).join(', ')
+        );
+        return approach && !matchesSkills
+          ? <span title={approach}>{approach}</span>
+          : <span className="boa-muted">View profile for details</span>;
+      },
+    },
+    {
+      key: 'actions',
+      header: 'Actions',
+      render: (mentor: MentorDirectoryItem) => {
+        const mentorRequests = requests.filter(
+          (request) =>
+            request.mentorUserId === mentor.userId &&
+            request.traineeUserId === currentUserId &&
+            (request.status === 'PENDING' || request.status === 'ACCEPTED')
+        );
+        const availableSkills = mentor.skills.filter(
+          (skill) => !mentorRequests.some((request) => request.skillId === skill.id)
+        );
+        const generalRequest = mentorRequests.find((request) => request.skillId === null);
+        const hasRequestablePairing = mentor.skills.length === 0
+          ? !generalRequest
+          : availableSkills.length > 0 || !generalRequest;
+        const hasExistingRequest = mentorRequests.length > 0;
+        const buttonLabel = !hasRequestablePairing
+          ? mentorRequests.some((request) => request.status === 'PENDING')
+            ? 'Request pending'
+            : 'Mentorship active'
+          : hasExistingRequest
+            ? availableSkills.length > 0
+              ? 'Request another skill'
+              : 'Send another request'
+            : 'Request mentorship';
+
+        return (
+          <div className="mentor-directory-actions">
+            <button
+              type="button"
+              className="apid-btn apid-btn-outline apid-btn-sm"
+              aria-label={`View profile for ${mentor.fullName}`}
+              onClick={() => setProfileMentor(mentor)}
+            >
+              <Eye size={14} /> View
+            </button>
+            {currentUserId && (
+              <button
+                type="button"
+                className="apid-btn apid-btn-primary apid-btn-sm"
+                disabled={!hasRequestablePairing || mentor.remainingCapacity === 0}
+                onClick={() => {
+                  setSelectedMentor(mentor);
+                  setSelectedSkillId(availableSkills[0] ? String(availableSkills[0].id) : '');
+                  setMessage('');
+                }}
+              >
+                {mentor.remainingCapacity === 0 ? 'At capacity' : buttonLabel}
+              </button>
+            )}
+          </div>
+        );
+      },
+    },
+  ];
 
   return (
     <div className="apid-card">
@@ -110,7 +334,10 @@ export function MentorDirectory({
               className="apid-input"
               aria-label="Filter mentors by skill"
               value={skillFilter}
-              onChange={(event) => setSkillFilter(event.target.value)}
+              onChange={(event) => {
+                setSkillFilter(event.target.value);
+                setPage(0);
+              }}
             >
               <option value="ALL">All Skills</option>
               {skills.map((skill) => (
@@ -124,13 +351,19 @@ export function MentorDirectory({
               aria-label="Filter mentors by department"
               placeholder="Department"
               value={departmentFilter}
-              onChange={(event) => setDepartmentFilter(event.target.value)}
+              onChange={(event) => {
+                setDepartmentFilter(event.target.value);
+                setPage(0);
+              }}
             />
             <label style={{ display: 'flex', gap: '0.35rem', alignItems: 'center', fontSize: '0.82rem' }}>
               <input
                 type="checkbox"
                 checked={availableOnly}
-                onChange={(event) => setAvailableOnly(event.target.checked)}
+                onChange={(event) => {
+                  setAvailableOnly(event.target.checked);
+                  setPage(0);
+                }}
               />
               Available capacity only
             </label>
@@ -157,95 +390,155 @@ export function MentorDirectory({
           }
         />
       ) : (
-        <div className="boa-grid-2" style={{ marginBottom: 0 }}>
-          {filteredMentors.map((mentor) => {
-            const mentorRequests = requests.filter(
-              (request) =>
-                request.mentorUserId === mentor.userId &&
-                request.traineeUserId === currentUserId &&
-                (request.status === 'PENDING' || request.status === 'ACCEPTED')
-            );
-            const availableSkills = mentor.skills.filter(
-              (skill) => !mentorRequests.some((request) => request.skillId === skill.id)
-            );
-            const generalRequest = mentorRequests.find((request) => request.skillId === null);
-            const hasRequestablePairing = mentor.skills.length === 0
-              ? !generalRequest
-              : availableSkills.length > 0 || !generalRequest;
-            const hasExistingRequest = mentorRequests.length > 0;
-            const buttonLabel = !hasRequestablePairing
-              ? mentorRequests.some((request) => request.status === 'PENDING')
-                ? 'Request pending'
-                : 'Mentorship active'
-              : hasExistingRequest
-                ? availableSkills.length > 0
-                  ? 'Request another skill'
-                  : 'Send another request'
-                : 'Request mentorship';
-
-            return (
-              <article
-                key={mentor.userId}
-                className="apid-card"
-                style={{ border: '1px solid var(--border)', marginBottom: 0 }}
+        <>
+          <div className="mentor-directory-table">
+            <DataTable
+              columns={columns}
+              rows={paginatedMentors}
+              rowKey={(mentor) => mentor.userId}
+            />
+          </div>
+          <Pagination
+            page={currentPage}
+            totalPages={totalPages}
+            totalElements={filteredMentors.length}
+            itemLabel="mentors"
+            onPageChange={setPage}
+          />
+        </>
+      )}
+      {profileMentor && (
+        <div
+          className="apid-modal-backdrop"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget) setProfileMentor(null);
+          }}
+        >
+          <div
+            className="apid-card apid-modal mentor-directory-profile-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-label={`Mentor profile for ${profileMentor.fullName}`}
+          >
+            <header className="mentor-directory-profile-header">
+              <div>
+                <span>Mentor profile</span>
+                <h3>{profileMentor.fullName}</h3>
+                <p>
+                  {[profileMentor.employeeNumber, profileMentor.departmentName]
+                    .filter(Boolean).join(' · ') || profileMentor.username}
+                </p>
+              </div>
+              <button
+                type="button"
+                className="apid-btn apid-btn-outline apid-btn-sm"
+                aria-label="Close mentor profile"
+                onClick={() => setProfileMentor(null)}
               >
-                <div style={{ fontWeight: 700 }}>{mentor.fullName}</div>
-                <div className="boa-muted" style={{ fontSize: '0.8rem' }}>
-                  {[mentor.employeeNumber, mentor.departmentName].filter(Boolean).join(' · ') || mentor.username}
+                <X size={16} />
+              </button>
+            </header>
+            <div className="mentor-directory-profile-facts">
+              <div><span>Experience</span><strong>
+                {profileMentor.experienceYears == null
+                  ? 'Not provided'
+                  : `${profileMentor.experienceYears} year${profileMentor.experienceYears === 1 ? '' : 's'}`}
+              </strong></div>
+              <div><span>Availability</span><strong>
+                {profileMentor.remainingCapacity} open slot{profileMentor.remainingCapacity === 1 ? '' : 's'}
+              </strong></div>
+              <div><span>Sessions per week</span><strong>
+                {profileMentor.sessionsPerWeek ?? 'Not provided'}
+              </strong></div>
+              <div><span>Average rating</span><strong>
+                {profileMentor.averageRating > 0 ? profileMentor.averageRating.toFixed(1) : 'Not rated yet'}
+              </strong></div>
+            </div>
+            <section className="mentor-directory-profile-section">
+              <h4>Skills</h4>
+              {profileMentor.skills.length > 0 ? (
+                <div className="mentor-directory-profile-skills">
+                  {profileMentor.skills.map((skill) => (
+                    <StatusPill key={skill.id} label={skill.name} tone="neutral" />
+                  ))}
                 </div>
-                <div className="boa-muted" style={{ fontSize: '0.8rem', marginTop: '0.35rem' }}>
-                  {mentor.remainingCapacity === undefined
-                    ? 'Capacity not available'
-                    : `${mentor.remainingCapacity} trainee slot${mentor.remainingCapacity === 1 ? '' : 's'} available`}
-                </div>
-                <div className="boa-stack" style={{ gap: '0.3rem', marginTop: '0.4rem' }}>
-                  <span className="boa-muted" style={{ fontSize: '0.84rem' }}>
-                    Experience: {mentor.experienceYears == null
-                      ? 'Not provided'
-                      : `${mentor.experienceYears} year${mentor.experienceYears === 1 ? '' : 's'}`}
-                  </span>
-                  <span className="boa-muted" style={{ fontSize: '0.84rem' }}>
-                    {mentor.sessionsPerWeek == null
-                      ? mentor.availabilityNotes
-                        ? `Previous availability note: ${mentor.availabilityNotes}`
-                        : 'Sessions per week: Not provided'
-                      : `Sessions per week: ${mentor.sessionsPerWeek}`}
-                  </span>
-                  <span className="boa-muted" style={{ fontSize: '0.84rem' }}>
-                    Mentoring approach: {mentor.mentoringApproach || mentor.bio || 'Not provided'}
-                  </span>
-                </div>
-                <div style={{ display: 'flex', gap: '0.3rem', flexWrap: 'wrap', marginTop: '0.45rem' }}>
-                  {mentor.skills.length > 0 ? (
-                    mentor.skills.map((skill) => (
-                      <StatusPill key={skill.id} label={skill.name} tone="neutral" />
-                    ))
-                  ) : (
-                    <span className="boa-muted" style={{ fontSize: '0.8rem' }}>
-                      No skills linked yet
+              ) : <p className="boa-muted">No skills linked.</p>}
+            </section>
+            <section className="mentor-directory-profile-section">
+              <h4>Education</h4>
+              {profileMentor.education?.length ? (
+                profileMentor.education.map((education, index) => (
+                  <article className="mentor-directory-profile-record" key={`education-${index}`}>
+                    <strong>{education.educationLevel || 'Education'}</strong>
+                    <span>
+                      {[education.fieldOfStudy, education.institution].filter(Boolean).join(' · ')
+                        || 'Additional details not provided'}
                     </span>
+                  </article>
+                ))
+              ) : <p>No education details provided.</p>}
+            </section>
+            <section className="mentor-directory-profile-section">
+              <h4>Professional certificates</h4>
+              {profileMentor.professionalCertificates?.length ? (
+                profileMentor.professionalCertificates.map((certificate, index) => (
+                  <article className="mentor-directory-profile-record" key={`certificate-${index}`}>
+                    <strong>{certificate.title || 'Certificate'}</strong>
+                    {certificate.skills?.length ? (
+                      <span>Related skills: {certificate.skills.join(', ')}</span>
+                    ) : null}
+                  </article>
+                ))
+              ) : <p>No professional certificates provided.</p>}
+            </section>
+            {showProfileApproach && (
+              <section className="mentor-directory-profile-section">
+                <h4>Mentoring approach</h4>
+                <p>{profileApproach}</p>
+              </section>
+            )}
+            {showProfileBio && (
+              <section className="mentor-directory-profile-section">
+                <h4>About</h4>
+                <p>{profileBio}</p>
+              </section>
+            )}
+            <section className="mentor-directory-profile-section">
+              <h4>Availability details</h4>
+              {!profileAvailability ? (
+                <p>{formatAvailability(profileMentor.availabilityNotes) || 'No schedule provided.'}</p>
+              ) : (
+                <>
+                  {profileAvailability.days.length > 0 ? (
+                    <ul>
+                      {profileAvailability.days.map((day, index) => (
+                        <li key={`${day.day}-${index}`}>
+                          <strong>{day.day}</strong>
+                          {' '}
+                          {day.start && day.end ? `${day.start}–${day.end}` : 'Time not specified'}
+                        </li>
+                      ))}
+                    </ul>
+                  ) : <p>No preferred days provided.</p>}
+                  {profileAvailability.timeZone && (
+                    <p>Time zone: {profileAvailability.timeZone.replace(/_/g, ' ')}</p>
                   )}
-                </div>
-                {currentUserId && (
-                  <button
-                    type="button"
-                    className="apid-btn apid-btn-primary apid-btn-sm"
-                    style={{ marginTop: '0.75rem' }}
-                    disabled={!hasRequestablePairing || mentor.remainingCapacity === 0}
-                    onClick={() => {
-                      setSelectedMentor(mentor);
-                      setSelectedSkillId(
-                        availableSkills[0] ? String(availableSkills[0].id) : ''
-                      );
-                      setMessage('');
-                    }}
-                  >
-                    {mentor.remainingCapacity === 0 ? 'At capacity' : buttonLabel}
-                  </button>
-                )}
-              </article>
-            );
-          })}
+                  {profileAvailability.formats.length > 0 && (
+                    <p>Format: {profileAvailability.formats.join(', ')}</p>
+                  )}
+                </>
+              )}
+            </section>
+            <div className="apid-modal-actions">
+              <button
+                type="button"
+                className="apid-btn apid-btn-outline"
+                onClick={() => setProfileMentor(null)}
+              >
+                Close
+              </button>
+            </div>
+          </div>
         </div>
       )}
       {selectedMentor && (

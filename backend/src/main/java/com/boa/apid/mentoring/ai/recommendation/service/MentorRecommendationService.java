@@ -5,6 +5,7 @@ import com.boa.apid.mentoring.ai.client.MentoringAiClient;
 import com.boa.apid.mentoring.ai.recommendation.dto.MentorRecommendationDto;
 import com.boa.apid.mentoring.ai.recommendation.dto.MentorRecommendationRequest;
 import com.boa.apid.mentoring.ai.recommendation.dto.MentorRecommendationResponse;
+import com.boa.apid.mentoring.ai.recommendation.service.MentorRecommendationContextService.MentorCandidateContext;
 import com.boa.apid.mentoring.trainer.dto.TrainerDirectoryDto;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;

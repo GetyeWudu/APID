@@ -1,0 +1,147 @@
+.mentor-directory-table {
+  margin-bottom: 0.75rem;
+}
+
+.mentor-directory-table .apid-table {
+  min-width: 980px;
+}
+
+.mentor-directory-availability {
+  display: grid;
+  min-width: 150px;
+  max-width: 230px;
+  gap: 0.2rem;
+}
+
+.mentor-directory-availability strong {
+  color: var(--text);
+  font-size: 0.78rem;
+}
+
+.mentor-directory-availability span {
+  color: var(--muted);
+  font-size: 0.72rem;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+
+.mentor-directory-availability span:last-child {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.mentor-directory-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  min-width: 190px;
+}
+
+.apid-modal.mentor-directory-profile-modal {
+  max-width: 700px;
+}
+
+.mentor-directory-profile-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.mentor-directory-profile-header > div > span,
+.mentor-directory-profile-facts span {
+  color: var(--muted);
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.mentor-directory-profile-header h3 {
+  margin: 0.2rem 0;
+  color: var(--text);
+}
+
+.mentor-directory-profile-header p,
+.mentor-directory-profile-section p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.82rem;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+.mentor-directory-profile-facts {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.65rem;
+  margin: 1rem 0;
+}
+
+.mentor-directory-profile-facts > div {
+  display: grid;
+  gap: 0.25rem;
+  padding: 0.7rem;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  background: var(--surface-subtle);
+}
+
+.mentor-directory-profile-facts strong {
+  color: var(--text);
+  font-size: 0.84rem;
+}
+
+.mentor-directory-profile-section {
+  display: grid;
+  gap: 0.45rem;
+  padding: 0.85rem 0;
+  border-top: 1px solid var(--border);
+}
+
+.mentor-directory-profile-section h4 {
+  margin: 0;
+  color: var(--text);
+  font-size: 0.84rem;
+}
+
+.mentor-directory-profile-section ul {
+  display: grid;
+  gap: 0.35rem;
+  margin: 0;
+  padding-left: 1.2rem;
+  color: var(--text);
+  font-size: 0.8rem;
+}
+
+.mentor-directory-profile-record {
+  display: grid;
+  gap: 0.2rem;
+  padding: 0.55rem 0.65rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface-subtle);
+}
+
+.mentor-directory-profile-record strong {
+  color: var(--text);
+  font-size: 0.8rem;
+}
+
+.mentor-directory-profile-record span {
+  color: var(--muted);
+  font-size: 0.74rem;
+}
+
+.mentor-directory-profile-skills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
+@media (max-width: 600px) {
+  .mentor-directory-profile-facts {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}

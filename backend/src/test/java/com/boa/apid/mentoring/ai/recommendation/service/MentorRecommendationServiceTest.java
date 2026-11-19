@@ -17,6 +17,7 @@ import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.when;
@@ -84,6 +85,19 @@ class MentorRecommendationServiceTest {
         );
     }
 
+    @Test
+    void returnsAnEmptyModelResponseWithoutFallbackRecommendations() {
+        when(contextService.loadCandidates(7L)).thenReturn(List.of(
+                new MentorRecommendationContextService.MentorCandidateContext(mentor(), "profile")
+        ));
+        when(ollamaClient.recommend(anyString(), anyList(), anyList()))
+                .thenReturn("{\"recommendations\":[]}");
+
+        var result = service.recommend(new MentorRecommendationRequest("Learn marine biology"), 7L);
+
+        assertTrue(result.recommendations().isEmpty());
+    }
+
     private TrainerDirectoryDto mentor() {
         return new TrainerDirectoryDto(
                 20L,
@@ -101,7 +115,9 @@ class MentorRecommendationServiceTest {
                 )),
                 5,
                 "Hands-on",
-                2
+                2,
+                List.of(),
+                List.of()
         );
     }
 }

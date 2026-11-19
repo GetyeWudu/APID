@@ -63,6 +63,15 @@ export interface TrainerDirectoryItem {
   remainingCapacity: number;
   averageRating: number;
   skills: TrainerSkill[];
+  education?: Array<{
+    educationLevel: string | null;
+    fieldOfStudy: string | null;
+    institution: string | null;
+  }>;
+  professionalCertificates?: Array<{
+    title: string | null;
+    skills: string[] | null;
+  }>;
 }
 
 export interface TrainerEmployeeCandidate {

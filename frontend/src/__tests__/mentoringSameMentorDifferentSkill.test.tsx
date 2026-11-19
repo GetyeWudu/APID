@@ -1,8 +1,9 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ReactNode } from 'react';
 import type { MentorDirectoryItem } from '../features/mentoring/api/mentorDirectoryApi';
+import { mentorDirectoryApi } from '../features/mentoring/api/mentorDirectoryApi';
 import { mentoringPairingApi, type MentoringPairing } from '../features/mentoring/api/mentoringPairingApi';
 import { MentorDirectory } from '../features/mentoring/components/MentorDirectory';
 import { MentoringRecommendations } from '../features/mentoring/components/MentoringRecommendations';
@@ -75,6 +76,45 @@ describe('same mentor requests for different skills', () => {
     )).toBeInTheDocument();
   });
 
+  it('shows a friendly no-match message when no mentors are recommended', async () => {
+    vi.spyOn(mentorDirectoryApi, 'recommendMentors').mockResolvedValue([]);
+    renderWithProviders(<MentoringRecommendations />);
+
+    fireEvent.change(screen.getByLabelText('What would you like to learn?'), {
+      target: { value: 'I want to learn marine biology.' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: /find mentors/i }));
+
+    expect(await screen.findByText('No mentor was found for you')).toBeInTheDocument();
+  });
+
+  it('shows a friendly unavailable message when the AI service is unreachable', async () => {
+    const error = Object.assign(new Error('request failed'), {
+      isAxiosError: true,
+      response: {
+        status: 502,
+        data: {
+          error: {
+            code: 'MENTOR_RECOMMENDATION_SERVICE_UNAVAILABLE',
+            message: 'The mentor recommendation service is unavailable.',
+          },
+        },
+      },
+    });
+    vi.spyOn(mentorDirectoryApi, 'recommendMentors').mockRejectedValue(error);
+    renderWithProviders(<MentoringRecommendations />);
+
+    fireEvent.change(screen.getByLabelText('What would you like to learn?'), {
+      target: { value: 'I want to learn financial modeling.' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: /find mentors/i }));
+
+    expect(await screen.findByText(
+      'AI recommendations are not available right now. Please try again later.'
+    )).toBeInTheDocument();
+    expect(screen.queryByText('The mentor recommendation service is unavailable.')).not.toBeInTheDocument();
+  });
+
   it('lets a trainee select another skill in the mentor directory when one skill is active', async () => {
     const requestMentor = vi.spyOn(mentoringPairingApi, 'requestMentor').mockResolvedValue(existingPairing);
 
@@ -94,6 +134,56 @@ describe('same mentor requests for different skills', () => {
       mentorUserId: 20,
       skillId: 8,
       message: undefined,
+    });
+  });
+
+  describe('mentor directory pagination', () => {
+    it('shows mentors in a paginated table', () => {
+      const mentors = Array.from({ length: 12 }, (_, index) => ({
+        ...mentor,
+        userId: 20 + index,
+        username: `mentor${index + 1}`,
+        employeeNumber: `EMP-${index + 1}`,
+        fullName: `Mentor ${index + 1}`,
+      }));
+
+      renderWithProviders(<MentorDirectory mentors={mentors} currentUserId={7} />);
+
+      expect(screen.getByText('Mentor 1')).toBeInTheDocument();
+      expect(screen.getByText('Mentor 10')).toBeInTheDocument();
+      expect(screen.queryByText('Mentor 11')).not.toBeInTheDocument();
+      expect(screen.getByText('Page 1 of 2 (12 mentors)')).toBeInTheDocument();
+
+      fireEvent.click(screen.getByRole('button', { name: 'Next' }));
+
+      expect(screen.getByText('Mentor 11')).toBeInTheDocument();
+      expect(screen.getByText('Mentor 12')).toBeInTheDocument();
+      expect(screen.queryByText('Mentor 1')).not.toBeInTheDocument();
+      expect(screen.getByText('Page 2 of 2 (12 mentors)')).toBeInTheDocument();
+    });
+
+    it('opens the selected mentor profile in a modal with readable availability', () => {
+      const availabilityNotes = JSON.stringify({
+        days: [{ day: 'Tuesday', start: '10:00', end: '12:00' }],
+        timeZone: 'Africa/Addis_Ababa',
+        formats: ['Both'],
+      });
+      renderWithProviders(
+        <MentorDirectory
+          mentors={[{ ...mentor, availabilityNotes }]}
+          currentUserId={7}
+        />
+      );
+
+      expect(screen.queryByText(availabilityNotes)).not.toBeInTheDocument();
+      fireEvent.click(screen.getByRole('button', { name: 'View profile for Mentor One' }));
+
+      const profileDialog = screen.getByRole('dialog', { name: 'Mentor profile for Mentor One' });
+      expect(within(profileDialog).getByText('Tuesday')).toBeInTheDocument();
+      expect(within(profileDialog).getByText('10:00–12:00')).toBeInTheDocument();
+      expect(within(profileDialog).getByText('Africa/Addis Ababa')).toBeInTheDocument();
+      fireEvent.click(within(profileDialog).getByRole('button', { name: 'Close mentor profile' }));
+      expect(screen.queryByRole('dialog', { name: 'Mentor profile for Mentor One' })).not.toBeInTheDocument();
     });
   });
 });

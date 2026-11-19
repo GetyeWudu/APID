@@ -112,6 +112,7 @@ public class TrainerAuthorizationService {
     private final NotificationService notificationService;
     private final AuditService auditService;
     private final ApplicationEventPublisher eventPublisher;
+    private final TrainerDirectoryProfileDetailsMapper profileDetailsMapper;
 
     public TrainerAuthorizationService(
             TrainerAuthorizationRepository authorizationRepository,
@@ -136,7 +137,8 @@ public class TrainerAuthorizationService {
             CoreConfigService configService,
             NotificationService notificationService,
             AuditService auditService,
-            ApplicationEventPublisher eventPublisher
+            ApplicationEventPublisher eventPublisher,
+            TrainerDirectoryProfileDetailsMapper profileDetailsMapper
     ) {
         this.authorizationRepository = authorizationRepository;
         this.storedFileRepository = storedFileRepository;
@@ -161,6 +163,7 @@ public class TrainerAuthorizationService {
         this.notificationService = notificationService;
         this.auditService = auditService;
         this.eventPublisher = eventPublisher;
+        this.profileDetailsMapper = profileDetailsMapper;
     }
 
     @Transactional(readOnly = true)
@@ -1176,6 +1179,15 @@ public class TrainerAuthorizationService {
         int pending = (int) recipientRepository.countByMentorAndStatus(
                 user.getId(), MentoringRequestRecipientStatus.PENDING);
         Double averageRating = feedbackRepository.averageRatingByMentorUserId(user.getId());
+        MentorApplication sourceApplication = authorization.getSourceApplication();
+        if (sourceApplication != null
+                && sourceApplication.getApplicationType() != MentorApplicationType.INITIAL) {
+            sourceApplication = null;
+        }
+        TrainerDirectoryProfileDetailsMapper.ProfileDetails profileDetails = profileDetailsMapper.map(
+                sourceApplication == null ? null : sourceApplication.getNote(),
+                user.getId()
+        );
         return new TrainerDirectoryDto(
                 user.getId(),
                 user.getUsername(),
@@ -1190,7 +1202,9 @@ public class TrainerAuthorizationService {
                 skills(authorization, true),
                 authorization.getExperienceYears(),
                 authorization.getMentoringApproach(),
-                authorization.getSessionsPerWeek()
+                authorization.getSessionsPerWeek(),
+                profileDetails.education(),
+                profileDetails.professionalCertificates()
         );
     }
 
