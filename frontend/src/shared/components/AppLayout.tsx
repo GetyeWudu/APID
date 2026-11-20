@@ -394,18 +394,11 @@ export function AppLayout({ children }: { children: ReactNode }) {
               matchSearch: '?tab=applications',
             },
             {
-              to: '/mentoring/hr?tab=trainers',
-              label: 'Approved Trainers',
-              icon: <Award size={17} />,
-              requiredAnyPermissions: ['TRAINER_DIRECT_APPOINT', 'TRAINER_STATUS_MANAGE'],
-              matchSearch: '?tab=trainers',
-            },
-            {
-              to: '/mentoring/hr?tab=badge-removal-requests',
-              label: 'Mentor Badge Management',
+              to: '/mentoring/hr?tab=mentor-management',
+              label: 'Mentor Management',
               icon: <ShieldCheck size={17} />,
-              requiredAnyPermissions: ['TRAINER_STATUS_MANAGE'],
-              matchSearch: '?tab=badge-removal-requests',
+              requiredAnyPermissions: ['TRAINER_STATUS_MANAGE', 'TRAINER_APPLICATION_REVIEW'],
+              matchSearch: '?tab=mentor-management',
             },
             {
               to: '/mentoring/hr?tab=direct-matching',

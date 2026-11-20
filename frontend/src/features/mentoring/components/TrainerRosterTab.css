@@ -320,27 +320,6 @@
   margin: 0.65rem 0 0;
 }
 
-.trainer-roster-availability {
-  margin-top: 0.65rem;
-  padding: 0.7rem;
-  border: 1px solid var(--border);
-  border-radius: 9px;
-  background: var(--surface-subtle);
-}
-
-.trainer-roster-availability strong {
-  color: var(--muted-soft);
-  font-size: 0.68rem;
-  text-transform: uppercase;
-}
-
-.trainer-roster-availability p {
-  margin: 0.25rem 0 0;
-  color: var(--text);
-  font-size: 0.76rem;
-  overflow-wrap: anywhere;
-}
-
 .trainer-roster-modal-skills {
   display: grid;
   gap: 0.45rem;

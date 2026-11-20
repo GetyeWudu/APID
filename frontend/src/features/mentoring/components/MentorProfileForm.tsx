@@ -1,12 +1,10 @@
-import { useEffect, useState, type FormEvent } from 'react';
+import { useEffect, useRef, useState, type FormEvent } from 'react';
 import axios from 'axios';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   Award,
   BriefcaseBusiness,
-  CalendarDays,
   Camera,
-  Clock3,
   Download,
   FileText,
   GraduationCap,
@@ -24,12 +22,10 @@ import { mentoringTrainerApi } from '../api/mentoringTrainerApi';
 import { ErrorState, LoadingSkeleton, StatusPill, useToast } from '../../../shared/components/ui';
 import './MentorProfileForm.css';
 
-type ProfileRecord = Record<string, unknown>;
-type AvailabilityDay = { day: string; start: string; end: string };
-type ProfileAvailability = {
-  days: AvailabilityDay[];
-  timeZone: string;
-  formats: string[];
+type ProfileRecord = Record<string, unknown> & {
+  _draftId?: string;
+  _isNew?: boolean;
+  _evidenceFile?: File;
 };
 type ProfileDraft = {
   education: ProfileRecord[];
@@ -37,21 +33,25 @@ type ProfileDraft = {
   mentorship: ProfileRecord[];
   career: ProfileRecord[];
   skills: string[];
-  availability: ProfileAvailability;
   cv: string;
   motivationLetter: string;
 };
 type ProfileRecordSection = 'education' | 'certificates' | 'mentorship' | 'career';
 
-const PROFILE_DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
-const MENTORING_FORMATS = ['One-on-One Mentorship', 'Group Mentorship', 'Both'];
+const EDUCATION_LEVEL_SUGGESTIONS = [
+  'High School',
+  'Diploma',
+  "Bachelor's Degree",
+  "Master's Degree",
+  'PhD',
+  'Other',
+];
 const EMPTY_PROFILE_DRAFT: ProfileDraft = {
   education: [],
   certificates: [],
   mentorship: [],
   career: [],
   skills: [],
-  availability: { days: [], timeZone: 'UTC', formats: [] },
   cv: '',
   motivationLetter: '',
 };
@@ -98,34 +98,6 @@ function parseList(value: string | undefined) {
   return value.split(',').map((item) => item.trim()).filter(Boolean);
 }
 
-function parseAvailability(value: string | null | undefined) {
-  if (!value) return null;
-  try {
-    const parsed: unknown = JSON.parse(value);
-    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return null;
-    const availability = parsed as ProfileRecord;
-    const days = Array.isArray(availability.days)
-      ? availability.days.filter((entry): entry is ProfileRecord =>
-        Boolean(entry) && typeof entry === 'object' && !Array.isArray(entry))
-        .map((entry) => ({
-          day: typeof entry.day === 'string' ? entry.day : '',
-          start: typeof entry.start === 'string' ? entry.start : '',
-          end: typeof entry.end === 'string' ? entry.end : '',
-        }))
-        .filter((entry) => entry.day)
-      : [];
-    return {
-      days,
-      timeZone: typeof availability.timeZone === 'string' ? availability.timeZone : '',
-      formats: Array.isArray(availability.formats)
-        ? availability.formats.filter((format): format is string => typeof format === 'string')
-        : [],
-    };
-  } catch {
-    return null;
-  }
-}
-
 function display(value: unknown, fallback = 'Not provided') {
   return typeof value === 'string' && value.trim() ? value : fallback;
 }
@@ -133,6 +105,26 @@ function display(value: unknown, fallback = 'Not provided') {
 function recordText(record: ProfileRecord, key: string) {
   const value = record[key];
   return typeof value === 'string' || typeof value === 'number' ? String(value) : '';
+}
+
+function recordEvidenceFile(record: ProfileRecord) {
+  return typeof File !== 'undefined' && record._evidenceFile instanceof File
+    ? record._evidenceFile
+    : undefined;
+}
+
+function isProfileRecordBlank(record: ProfileRecord) {
+  return Object.entries(record).every(([key, value]) => {
+    if (key.startsWith('_')) return true;
+    if (typeof value === 'string') return value.trim().length === 0;
+    if (Array.isArray(value)) return value.length === 0;
+    return value == null;
+  }) && !recordEvidenceFile(record);
+}
+
+function withoutProfileDraftFields(record: ProfileRecord) {
+  const { _draftId: _draftId, _isNew: _isNew, _evidenceFile: _evidenceFile, ...values } = record;
+  return values;
 }
 
 function safeUrl(value: unknown) {
@@ -167,10 +159,13 @@ export function MentorProfileForm({
   const [mentoringApproach, setMentoringApproach] = useState('');
   const [sessionsPerWeek, setSessionsPerWeek] = useState('');
   const [otherSkills, setOtherSkills] = useState('');
+  const [cvFile, setCvFile] = useState<File | null>(null);
+  const [motivationLetterFile, setMotivationLetterFile] = useState<File | null>(null);
   const [profileEvidence, setProfileEvidence] = useState<File[]>([]);
   const [isProfileUpdateModalOpen, setProfileUpdateModalOpen] = useState(false);
   const [badgeRemovalReason, setBadgeRemovalReason] = useState('');
   const [downloadingFileId, setDownloadingFileId] = useState<number | null>(null);
+  const draftRecordSequence = useRef(0);
 
   const profileQuery = useQuery({
     queryKey: ['mentoring', 'trainer-profile'],
@@ -198,8 +193,6 @@ export function MentorProfileForm({
     setMentoringApproach(profile.mentoringApproach ?? profile.bio ?? '');
     setSessionsPerWeek(profile.sessionsPerWeek?.toString() ?? '');
     const applicationNote = parseNote(profile.profileApplicationDetails);
-    const availability = parseAvailability(profile.availabilityNotes)
-      ?? parseAvailability(applicationNote.Availability);
     const skillNames = [...new Set([
       ...parseList(applicationNote['Mentoring interests / expertise']),
       ...profile.skills.filter((skill) => skill.status === 'ACTIVE').map((skill) => skill.name),
@@ -214,7 +207,6 @@ export function MentorProfileForm({
       mentorship: parseRecords(applicationNote['Previous mentorship experience']),
       career: parseRecords(applicationNote['General professional experience']),
       skills: skillNames,
-      availability: availability ?? EMPTY_PROFILE_DRAFT.availability,
       cv: applicationNote.CV?.split(' (')[0] ?? '',
       motivationLetter: applicationNote['Letter of motivation']?.split(' (')[0] ?? '',
     });
@@ -280,6 +272,8 @@ export function MentorProfileForm({
     onSuccess: async () => {
       await refreshProfile();
       setChangeNote('');
+      setCvFile(null);
+      setMotivationLetterFile(null);
       setProfileEvidence([]);
       setProfileUpdateModalOpen(false);
       pushToast({
@@ -326,11 +320,10 @@ export function MentorProfileForm({
   const mentorshipHistory = parseRecords(applicationNote['Previous mentorship experience']);
   const careerHistory = parseRecords(applicationNote['General professional experience']);
   const applicationSkills = parseList(applicationNote['Mentoring interests / expertise']);
-  const availability = parseAvailability(profile?.availabilityNotes)
-    ?? parseAvailability(applicationNote.Availability);
-  const mentorshipFormats = availability?.formats.length
-    ? availability.formats
-    : parseList(applicationNote['Mentorship formats']);
+  const approvedSkillNames = new Set((profile?.skills ?? []).map((skill) => skill.name.trim().toLowerCase()));
+  const additionalApplicationSkills = applicationSkills.filter(
+    (skill) => !approvedSkillNames.has(skill.trim().toLowerCase())
+  );
   const committed = profile ? profile.activeTrainees + profile.pendingTrainees : 0;
   const availableCapacity = profile ? Math.max(0, capacity - committed) : 0;
   const capacityPercent = profile && capacity > 0
@@ -366,6 +359,117 @@ export function MentorProfileForm({
 
   const requestProfileUpdate = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    if (experienceYears !== '' && (!/^\d+$/.test(experienceYears) || Number(experienceYears) > 80)) {
+      pushToast({
+        title: 'Invalid experience years',
+        message: 'Enter a whole number from 0 to 80.',
+        tone: 'err',
+      });
+      return;
+    }
+    if (sessionsPerWeek !== '' && (!/^\d+$/.test(sessionsPerWeek) || Number(sessionsPerWeek) > 100)) {
+      pushToast({
+        title: 'Invalid weekly sessions',
+        message: 'Enter a whole number from 0 to 100.',
+        tone: 'err',
+      });
+      return;
+    }
+    const newEducation = profileDraft.education.filter((record) => record._isNew && !isProfileRecordBlank(record));
+    const newCertificates = profileDraft.certificates.filter((record) => record._isNew && !isProfileRecordBlank(record));
+    const newCareer = profileDraft.career.filter((record) => record._isNew && !isProfileRecordBlank(record));
+    const newMentorship = profileDraft.mentorship.filter((record) => record._isNew && !isProfileRecordBlank(record));
+
+    if (newEducation.some((record) =>
+      !recordText(record, 'educationLevel').trim()
+      || !recordText(record, 'fieldOfStudy').trim()
+      || !recordText(record, 'institution').trim()
+      || (!recordEvidenceFile(record) && !recordText(record, 'certificateLink').trim())
+    )) {
+      pushToast({
+        title: 'Complete education details',
+        message: 'Each new education record needs a level, field, institution, and uploaded document or certificate link.',
+        tone: 'err',
+      });
+      return;
+    }
+    if (newCertificates.some((record) =>
+      !recordText(record, 'title').trim()
+      || (!recordEvidenceFile(record) && !recordText(record, 'link').trim())
+    )) {
+      pushToast({
+        title: 'Complete certificate details',
+        message: 'Each new professional certificate needs a title and an uploaded document or verification link.',
+        tone: 'err',
+      });
+      return;
+    }
+    if (newCareer.some((record) =>
+      !recordText(record, 'title').trim()
+      || !recordText(record, 'organization').trim()
+      || !recordText(record, 'years').trim()
+    )) {
+      pushToast({
+        title: 'Complete professional experience',
+        message: 'Each new professional experience needs a role, organization, and years.',
+        tone: 'err',
+      });
+      return;
+    }
+    if (newMentorship.some((record) =>
+      !recordText(record, 'role').trim()
+      || !recordText(record, 'organization').trim()
+      || !recordText(record, 'years').trim()
+    )) {
+      pushToast({
+        title: 'Complete mentorship experience',
+        message: 'Each new mentorship experience needs a role, organization, and years.',
+        tone: 'err',
+      });
+      return;
+    }
+
+    const certificateLinks = [
+      ...newEducation.map((record) => recordText(record, 'certificateLink')),
+      ...newCertificates.map((record) => recordText(record, 'link')),
+      ...newCareer.map((record) => recordText(record, 'proofLink')),
+      ...newMentorship.map((record) => recordText(record, 'proofLink')),
+    ];
+    if (certificateLinks.some((link) => link.trim() && !safeUrl(link))) {
+      pushToast({
+        title: 'Invalid verification link',
+        message: 'Use a valid HTTP or HTTPS link for each new record.',
+        tone: 'err',
+      });
+      return;
+    }
+
+    const recordEvidence = [
+      ...newEducation.map((record) => ({ record, section: 'Education certificate' })),
+      ...newCertificates.map((record) => ({ record, section: 'Professional certificate' })),
+      ...newCareer.map((record) => ({ record, section: 'Professional experience' })),
+      ...newMentorship.map((record) => ({ record, section: 'Mentorship experience evidence' })),
+    ].flatMap(({ record, section }) => {
+      const file = recordEvidenceFile(record);
+      return file ? [{ file, context: `${section}: ${recordText(record, 'title') || recordText(record, 'role') || recordText(record, 'educationLevel')}` }] : [];
+    });
+    const additionalEvidence = [
+      ...(cvFile ? [{ file: cvFile, context: 'Curriculum vitae' }] : []),
+      ...(motivationLetterFile ? [{ file: motivationLetterFile, context: 'Letter of motivation' }] : []),
+      ...profileEvidence.map((file) => ({ file, context: '' })),
+    ];
+    const evidenceUploads = [...additionalEvidence.map((item) => item.file), ...recordEvidence.map((item) => item.file)];
+
+    if (evidenceUploads.some((file) => !/\.(pdf|doc|docx|png|jpe?g)$/i.test(file.name)
+      || file.size > 10 * 1024 * 1024)) {
+      pushToast({
+        title: 'Invalid supporting document',
+        message: 'Choose PDF, DOC, DOCX, PNG, or JPG files up to 10 MB.',
+        tone: 'err',
+      });
+      return;
+    }
+
     const activeSkillNames = new Set(
       profile.skills.filter((skill) => skill.status === 'ACTIVE').map((skill) => skill.name.toLowerCase())
     );
@@ -388,7 +492,7 @@ export function MentorProfileForm({
       pushToast({ title: 'Select a skill', message: 'Keep at least one mentoring skill in your profile.', tone: 'info' });
       return;
     }
-    if (requestsNewSkills && profileEvidence.length === 0) {
+    if (requestsNewSkills && evidenceUploads.length === 0) {
       pushToast({
         title: 'Supporting evidence required',
         message: 'Upload evidence when requesting new mentoring skills.',
@@ -396,35 +500,57 @@ export function MentorProfileForm({
       });
       return;
     }
-    const availabilityDetails = {
-      days: profileDraft.availability.days,
-      timeZone: profileDraft.availability.timeZone,
-      formats: profileDraft.availability.formats,
-    };
-    const certificates = profileDraft.certificates.map((record) => ({
-      ...record,
-      skills: Array.isArray(record.skills)
-        ? record.skills.map(String)
-        : recordText(record, 'skills').split(',').map((skill) => skill.trim()).filter(Boolean),
-    }));
+    const education = profileDraft.education
+      .filter((record) => !record._isNew || !isProfileRecordBlank(record))
+      .map((record) => ({
+        ...withoutProfileDraftFields(record),
+        educationLevel: recordText(record, 'educationLevel').trim(),
+        fieldOfStudy: recordText(record, 'fieldOfStudy').trim(),
+        institution: recordText(record, 'institution').trim(),
+        certificateDocument: recordText(record, 'certificateDocument').trim()
+          || recordEvidenceFile(record)?.name || '',
+        certificateLink: recordText(record, 'certificateLink').trim(),
+      }));
+    const certificates = profileDraft.certificates
+      .filter((record) => !record._isNew || !isProfileRecordBlank(record))
+      .map((record) => ({
+        ...withoutProfileDraftFields(record),
+        title: recordText(record, 'title').trim(),
+        document: recordText(record, 'document').trim() || recordEvidenceFile(record)?.name || '',
+        link: recordText(record, 'link').trim(),
+        skills: Array.isArray(record.skills)
+          ? record.skills.map(String)
+          : recordText(record, 'skills').split(',').map((skill) => skill.trim()).filter(Boolean),
+      }));
+    const career = profileDraft.career
+      .filter((record) => !record._isNew || !isProfileRecordBlank(record))
+      .map((record) => ({
+        ...withoutProfileDraftFields(record),
+        proofDocument: recordText(record, 'proofDocument').trim() || recordEvidenceFile(record)?.name || '',
+      }));
+    const mentorship = profileDraft.mentorship
+      .filter((record) => !record._isNew || !isProfileRecordBlank(record))
+      .map((record) => ({
+        ...withoutProfileDraftFields(record),
+        proofDocument: recordText(record, 'proofDocument').trim() || recordEvidenceFile(record)?.name || '',
+      }));
     const profileDetails = [
       'MENTOR APPLICATION DETAILS',
       `Full name: ${profile.fullName}`,
       `Profile picture: ${profile.profilePictureFileName ?? applicationNote['Profile picture'] ?? 'Not provided'}`,
-      `Educational background: ${JSON.stringify(profileDraft.education)}`,
+      `Educational background: ${JSON.stringify(education)}`,
       `Mentoring interests / expertise: ${JSON.stringify(selectedSkillNames)}`,
       `Professional certificates: ${JSON.stringify(certificates)}`,
-      `Previous mentorship experience: ${profileDraft.mentorship.length
-        ? JSON.stringify(profileDraft.mentorship)
+      `Previous mentorship experience: ${mentorship.length
+        ? JSON.stringify(mentorship)
         : 'No'}`,
-      `General professional experience: ${JSON.stringify(profileDraft.career)}`,
-      `Availability: ${JSON.stringify(availabilityDetails)}`,
-      `Mentorship formats: ${profileDraft.availability.formats.join(', ')}`,
+      `General professional experience: ${JSON.stringify(career)}`,
       `Maximum concurrent mentees: ${profile.maxConcurrentTrainees}`,
-      `CV: ${profileDraft.cv}`,
-      `Letter of motivation: ${profileDraft.motivationLetter}`,
+      `CV: ${cvFile?.name ?? profileDraft.cv}`,
+      `Letter of motivation: ${motivationLetterFile?.name ?? profileDraft.motivationLetter}`,
     ].join('\n');
-    const supportingEvidenceContexts = profileEvidence.map((file) => {
+    const additionalEvidenceContexts = additionalEvidence.map(({ file, context }) => {
+      if (context) return context;
       const fileName = file.name.toLowerCase();
       if (profileDraft.cv && fileName === profileDraft.cv.toLowerCase()) return 'Curriculum vitae';
       if (profileDraft.motivationLetter && fileName === profileDraft.motivationLetter.toLowerCase()) {
@@ -438,9 +564,9 @@ export function MentorProfileForm({
         recordText(record, 'proofDocument').toLowerCase() === fileName)) return 'Mentorship experience evidence';
       return 'Updated profile document';
     });
+    const supportingEvidenceContexts = [...additionalEvidenceContexts, ...recordEvidence.map((item) => item.context)];
     profileUpdateMutation.mutate({
       profileDetails,
-      availabilityNotes: JSON.stringify(availabilityDetails),
       experienceYears: experienceYears === '' ? null : Number(experienceYears),
       mentoringApproach: mentoringApproach.trim(),
       sessionsPerWeek: sessionsPerWeek === '' ? null : Number(sessionsPerWeek),
@@ -448,51 +574,39 @@ export function MentorProfileForm({
       catalogSkillIds: selectedCatalogSkills.map((skill) => skill.id),
       customSkill: selectedCustomSkills.join('; ') || undefined,
       supportingEvidenceContexts,
-      supportingEvidence: profileEvidence,
+      supportingEvidence: evidenceUploads,
     });
   };
 
-  const updateRecord = (section: ProfileRecordSection, index: number, key: string, value: string) => {
+  const updateRecord = (
+    section: ProfileRecordSection,
+    index: number,
+    key: string,
+    value: string | File | undefined
+  ) => {
     setProfileDraft((current) => ({
       ...current,
       [section]: current[section].map((record, recordIndex) =>
-        recordIndex === index ? { ...record, [key]: value } : record
+        recordIndex === index && record._isNew ? { ...record, [key]: value } : record
       ),
     }));
   };
 
   const addRecord = (section: ProfileRecordSection, record: ProfileRecord) => {
-    setProfileDraft((current) => ({ ...current, [section]: [...current[section], record] }));
+    setProfileDraft((current) => ({
+      ...current,
+      [section]: [...current[section], {
+        ...record,
+        _draftId: `new-${draftRecordSequence.current++}`,
+        _isNew: true,
+      }],
+    }));
   };
 
   const removeRecord = (section: ProfileRecordSection, index: number) => {
     setProfileDraft((current) => ({
       ...current,
       [section]: current[section].filter((_, recordIndex) => recordIndex !== index),
-    }));
-  };
-
-  const updateAvailabilityDay = (dayName: string, checked: boolean) => {
-    setProfileDraft((current) => {
-      const days = current.availability.days.filter((day) => day.day !== dayName);
-      if (checked) days.push({ day: dayName, start: '', end: '' });
-      return {
-        ...current,
-        availability: {
-          ...current.availability,
-          days: days.sort((left, right) => PROFILE_DAYS.indexOf(left.day) - PROFILE_DAYS.indexOf(right.day)),
-        },
-      };
-    });
-  };
-
-  const updateAvailabilityTime = (dayName: string, key: 'start' | 'end', value: string) => {
-    setProfileDraft((current) => ({
-      ...current,
-      availability: {
-        ...current.availability,
-        days: current.availability.days.map((day) => day.day === dayName ? { ...day, [key]: value } : day),
-      },
     }));
   };
 
@@ -647,8 +761,8 @@ export function MentorProfileForm({
             )) : applicationSkills.map((skill) => <StatusPill key={skill} label={skill} tone="neutral" />)}
             {!profile.skills.length && !applicationSkills.length && <span className="mentor-profile-empty">No skills listed.</span>}
           </div>
-          {applicationSkills.length > 0 && profile.skills.length > 0 && (
-            <p className="mentor-profile-supporting-skills">Application interests: {applicationSkills.join(' · ')}</p>
+          {additionalApplicationSkills.length > 0 && profile.skills.length > 0 && (
+            <p className="mentor-profile-supporting-skills">Other application interests: {additionalApplicationSkills.join(' · ')}</p>
           )}
         </article>
 
@@ -712,24 +826,16 @@ export function MentorProfileForm({
         </article>
 
         <article className="mentor-profile-panel">
-          <header><CalendarDays size={18} /><div><h3>Availability</h3><p>Preferred schedule and mentoring format.</p></div></header>
-          {availability?.days.length ? (
-            <div className="mentor-profile-availability">
-              {availability.days.map((day, index) => (
-                <div key={`${day.day}-${index}`}>
-                  <strong>{day.day}</strong>
-                  <span>{day.start && day.end ? `${day.start}–${day.end}` : 'Time not specified'}</span>
-                </div>
-              ))}
-              {availability.timeZone && <small><Clock3 size={13} />{availability.timeZone.replace(/_/g, ' ')}</small>}
-            </div>
-          ) : <p className="mentor-profile-empty">No availability provided.</p>}
-          {(mentorshipFormats.length > 0 || profile.sessionsPerWeek != null) && (
-            <div className="mentor-profile-tags">
-              {mentorshipFormats.map((format) => <StatusPill key={format} label={format} tone="neutral" />)}
-              {profile.sessionsPerWeek != null && <StatusPill label={`${profile.sessionsPerWeek} sessions / week`} tone="neutral" />}
-            </div>
-          )}
+          <header><HeartHandshake size={18} /><div><h3>Mentorship preferences</h3><p>Your experience and mentoring approach.</p></div></header>
+          <div className="mentor-profile-record">
+            <strong>{profile.experienceYears == null
+              ? 'Years of professional experience not provided'
+              : `${profile.experienceYears} year${profile.experienceYears === 1 ? '' : 's'} of professional experience`}</strong>
+            <span>{profile.sessionsPerWeek == null
+              ? 'Sessions per week not provided'
+              : `${profile.sessionsPerWeek} sessions per week`}</span>
+            {profile.mentoringApproach && <p>{profile.mentoringApproach}</p>}
+          </div>
         </article>
 
         <article className="mentor-profile-panel">
@@ -862,24 +968,66 @@ export function MentorProfileForm({
 
             <section className="mentor-profile-editor-section">
               <h4>Education</h4>
-              {profileDraft.education.map((record, index) => (
-                <fieldset className="mentor-profile-edit-record" key={`education-edit-${index}`}>
-                  <legend>Education {index + 1}</legend>
-                  {[
-                    ['educationLevel', 'Education level'],
-                    ['fieldOfStudy', 'Field of study'],
-                    ['institution', 'Institution'],
-                    ['certificateDocument', 'Document name'],
-                    ['certificateLink', 'Certificate link'],
-                  ].map(([key, label]) => (
-                    <label key={key}>{label}<input value={recordText(record, key)}
-                      onChange={(event) => updateRecord('education', index, key, event.target.value)}
-                      disabled={profileUpdateMutation.isPending} /></label>
-                  ))}
-                  <button type="button" onClick={() => removeRecord('education', index)}
-                    disabled={profileUpdateMutation.isPending}>Remove</button>
-                </fieldset>
-              ))}
+              <p className="boa-muted">
+                Existing education, certificate, career, and mentorship records are read-only. Remove one and add a replacement to update it.
+              </p>
+              {profileDraft.education.map((record, index) => {
+                const isNew = record._isNew === true;
+                return (
+                  <fieldset className="mentor-profile-edit-record" key={record._draftId ?? `education-edit-${index}`}>
+                    <legend>{isNew ? 'New education' : `Education ${index + 1}`}</legend>
+                    {isNew ? (
+                      <>
+                        <label>Education level
+                          <select
+                            value={recordText(record, 'educationLevel')}
+                            onChange={(event) => updateRecord('education', index, 'educationLevel', event.target.value)}
+                            disabled={profileUpdateMutation.isPending}>
+                            <option value="">Select education level</option>
+                            {EDUCATION_LEVEL_SUGGESTIONS.map((level) => <option key={level} value={level}>{level}</option>)}
+                          </select>
+                        </label>
+                        <label>Field of study
+                          <input type="text" maxLength={200} value={recordText(record, 'fieldOfStudy')}
+                            onChange={(event) => updateRecord('education', index, 'fieldOfStudy', event.target.value)}
+                            disabled={profileUpdateMutation.isPending} />
+                        </label>
+                        <label>Institution
+                          <input type="text" maxLength={200} value={recordText(record, 'institution')}
+                            onChange={(event) => updateRecord('education', index, 'institution', event.target.value)}
+                            disabled={profileUpdateMutation.isPending} />
+                        </label>
+                        <label>Upload education document
+                          <input type="file" accept=".pdf,.doc,.docx,.png,.jpg,.jpeg"
+                            onChange={(event) => {
+                              const file = event.target.files?.[0];
+                              updateRecord('education', index, '_evidenceFile', file);
+                              if (file) updateRecord('education', index, 'certificateDocument', file.name);
+                            }}
+                            disabled={profileUpdateMutation.isPending} />
+                        </label>
+                        <label>Certificate link (optional)
+                          <input type="url" maxLength={1000} placeholder="https://"
+                            value={recordText(record, 'certificateLink')}
+                            onChange={(event) => updateRecord('education', index, 'certificateLink', event.target.value)}
+                            disabled={profileUpdateMutation.isPending} />
+                        </label>
+                      </>
+                    ) : (
+                      <div className="mentor-profile-record">
+                        <strong>{recordText(record, 'educationLevel')}</strong>
+                        <span>{recordText(record, 'fieldOfStudy')}</span>
+                        <small>{recordText(record, 'institution')}</small>
+                        {recordText(record, 'certificateDocument') && <small>{recordText(record, 'certificateDocument')}</small>}
+                        {recordText(record, 'certificateLink') && <a href={safeUrl(record.certificateLink) ?? undefined}
+                          target="_blank" rel="noreferrer">Open certificate link</a>}
+                      </div>
+                    )}
+                    <button type="button" onClick={() => removeRecord('education', index)}
+                      disabled={profileUpdateMutation.isPending}>Remove</button>
+                  </fieldset>
+                );
+              })}
               <button type="button" className="mentor-profile-add-record"
                 onClick={() => addRecord('education', {
                   educationLevel: '', fieldOfStudy: '', institution: '', certificateDocument: '', certificateLink: '',
@@ -888,28 +1036,59 @@ export function MentorProfileForm({
 
             <section className="mentor-profile-editor-section">
               <h4>Professional certificates</h4>
-              {profileDraft.certificates.map((record, index) => (
-                <fieldset className="mentor-profile-edit-record" key={`certificate-edit-${index}`}>
-                  <legend>Certificate {index + 1}</legend>
-                  {[
-                    ['title', 'Certificate title'],
-                    ['document', 'Document name'],
-                    ['link', 'Verification link'],
-                  ].map(([key, label]) => (
-                    <label key={key}>{label}<input value={recordText(record, key)}
-                      onChange={(event) => updateRecord('certificates', index, key, event.target.value)}
-                      disabled={profileUpdateMutation.isPending} /></label>
-                  ))}
-                  <label>Skills demonstrated
-                    <input
-                      value={Array.isArray(record.skills) ? record.skills.map(String).join(', ') : recordText(record, 'skills')}
-                      onChange={(event) => updateRecord('certificates', index, 'skills', event.target.value)}
-                      disabled={profileUpdateMutation.isPending} />
-                  </label>
-                  <button type="button" onClick={() => removeRecord('certificates', index)}
-                    disabled={profileUpdateMutation.isPending}>Remove</button>
-                </fieldset>
-              ))}
+              {profileDraft.certificates.map((record, index) => {
+                const isNew = record._isNew === true;
+                return (
+                  <fieldset className="mentor-profile-edit-record" key={record._draftId ?? `certificate-edit-${index}`}>
+                    <legend>{isNew ? 'New professional certificate' : `Certificate ${index + 1}`}</legend>
+                    {isNew ? (
+                      <>
+                        <label>Certificate title
+                          <input type="text" maxLength={200} value={recordText(record, 'title')}
+                            onChange={(event) => updateRecord('certificates', index, 'title', event.target.value)}
+                            disabled={profileUpdateMutation.isPending} />
+                        </label>
+                        <label>Upload certificate document
+                          <input type="file" accept=".pdf,.doc,.docx,.png,.jpg,.jpeg"
+                            onChange={(event) => {
+                              const file = event.target.files?.[0];
+                              updateRecord('certificates', index, '_evidenceFile', file);
+                              if (file) updateRecord('certificates', index, 'document', file.name);
+                            }}
+                            disabled={profileUpdateMutation.isPending} />
+                        </label>
+                        <label>Verification link (optional)
+                          <input type="url" maxLength={1000} placeholder="https://"
+                            value={recordText(record, 'link')}
+                            onChange={(event) => updateRecord('certificates', index, 'link', event.target.value)}
+                            disabled={profileUpdateMutation.isPending} />
+                        </label>
+                        <label>Skills demonstrated
+                          <input value={Array.isArray(record.skills) ? record.skills.map(String).join(', ') : recordText(record, 'skills')}
+                            onChange={(event) => updateRecord('certificates', index, 'skills', event.target.value)}
+                            disabled={profileUpdateMutation.isPending} />
+                        </label>
+                      </>
+                    ) : (
+                      <div className="mentor-profile-record">
+                        <strong>{recordText(record, 'title')}</strong>
+                        {recordText(record, 'document') && <small>{recordText(record, 'document')}</small>}
+                        {recordText(record, 'link') && <a href={safeUrl(record.link) ?? undefined}
+                          target="_blank" rel="noreferrer">Open verification link</a>}
+                        {Array.isArray(record.skills) && record.skills.length > 0 && (
+                          <div className="mentor-profile-tags">
+                            {record.skills.map((skill) => (
+                              <StatusPill key={String(skill)} label={String(skill)} tone="neutral" />
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    )}
+                    <button type="button" onClick={() => removeRecord('certificates', index)}
+                      disabled={profileUpdateMutation.isPending}>Remove</button>
+                  </fieldset>
+                );
+              })}
               <button type="button" className="mentor-profile-add-record"
                 onClick={() => addRecord('certificates', { title: '', document: '', link: '', skills: [] })}
                 disabled={profileUpdateMutation.isPending}>Add certificate</button>
@@ -917,27 +1096,52 @@ export function MentorProfileForm({
 
             <section className="mentor-profile-editor-section">
               <h4>Professional career history</h4>
-              {profileDraft.career.map((record, index) => (
-                <fieldset className="mentor-profile-edit-record" key={`career-edit-${index}`}>
-                  <legend>Role {index + 1}</legend>
-                  {[
-                    ['title', 'Job title'],
-                    ['organization', 'Organization'],
-                    ['years', 'Years'],
-                  ].map(([key, label]) => (
-                    <label key={key}>{label}<input value={recordText(record, key)}
-                      onChange={(event) => updateRecord('career', index, key, event.target.value)}
-                      disabled={profileUpdateMutation.isPending} /></label>
-                  ))}
-                  <label>Responsibilities
-                    <textarea rows={2} value={recordText(record, 'description')}
-                      onChange={(event) => updateRecord('career', index, 'description', event.target.value)}
-                      disabled={profileUpdateMutation.isPending} />
-                  </label>
-                  <button type="button" onClick={() => removeRecord('career', index)}
-                    disabled={profileUpdateMutation.isPending}>Remove</button>
-                </fieldset>
-              ))}
+              {profileDraft.career.map((record, index) => {
+                const isNew = record._isNew === true;
+                return (
+                  <fieldset className="mentor-profile-edit-record" key={record._draftId ?? `career-edit-${index}`}>
+                    <legend>{isNew ? 'New professional experience' : `Role ${index + 1}`}</legend>
+                    {isNew ? (
+                      <>
+                        {[
+                          ['title', 'Job title'],
+                          ['organization', 'Organization'],
+                          ['years', 'Years'],
+                        ].map(([key, label]) => (
+                          <label key={key}>{label}<input type="text" maxLength={200}
+                            value={recordText(record, key)}
+                            onChange={(event) => updateRecord('career', index, key, event.target.value)}
+                            disabled={profileUpdateMutation.isPending} /></label>
+                        ))}
+                        <label>Responsibilities
+                          <textarea rows={2} maxLength={1000} value={recordText(record, 'description')}
+                            onChange={(event) => updateRecord('career', index, 'description', event.target.value)}
+                            disabled={profileUpdateMutation.isPending} />
+                        </label>
+                        <label>Upload experience proof (optional)
+                          <input type="file" accept=".pdf,.doc,.docx,.png,.jpg,.jpeg"
+                            onChange={(event) => {
+                              const file = event.target.files?.[0];
+                              updateRecord('career', index, '_evidenceFile', file);
+                              if (file) updateRecord('career', index, 'proofDocument', file.name);
+                            }}
+                            disabled={profileUpdateMutation.isPending} />
+                        </label>
+                      </>
+                    ) : (
+                      <div className="mentor-profile-record">
+                        <strong>{recordText(record, 'title')}</strong>
+                        <span>{recordText(record, 'organization')}</span>
+                        <small>{recordText(record, 'years')}</small>
+                        {recordText(record, 'description') && <small>{recordText(record, 'description')}</small>}
+                        {recordText(record, 'proofDocument') && <small>{recordText(record, 'proofDocument')}</small>}
+                      </div>
+                    )}
+                    <button type="button" onClick={() => removeRecord('career', index)}
+                      disabled={profileUpdateMutation.isPending}>Remove</button>
+                  </fieldset>
+                );
+              })}
               <button type="button" className="mentor-profile-add-record"
                 onClick={() => addRecord('career', { title: '', organization: '', years: '', description: '' })}
                 disabled={profileUpdateMutation.isPending}>Add career role</button>
@@ -945,29 +1149,60 @@ export function MentorProfileForm({
 
             <section className="mentor-profile-editor-section">
               <h4>Mentorship experience</h4>
-              {profileDraft.mentorship.map((record, index) => (
-                <fieldset className="mentor-profile-edit-record" key={`mentorship-edit-${index}`}>
-                  <legend>Experience {index + 1}</legend>
-                  {[
-                    ['role', 'Role'],
-                    ['organization', 'Organization'],
-                    ['years', 'Years'],
-                    ['proofDocument', 'Evidence document name'],
-                    ['proofLink', 'Verification link'],
-                  ].map(([key, label]) => (
-                    <label key={key}>{label}<input value={recordText(record, key)}
-                      onChange={(event) => updateRecord('mentorship', index, key, event.target.value)}
-                      disabled={profileUpdateMutation.isPending} /></label>
-                  ))}
-                  <label>Description
-                    <textarea rows={2} value={recordText(record, 'description')}
-                      onChange={(event) => updateRecord('mentorship', index, 'description', event.target.value)}
-                      disabled={profileUpdateMutation.isPending} />
-                  </label>
-                  <button type="button" onClick={() => removeRecord('mentorship', index)}
-                    disabled={profileUpdateMutation.isPending}>Remove</button>
-                </fieldset>
-              ))}
+              {profileDraft.mentorship.map((record, index) => {
+                const isNew = record._isNew === true;
+                return (
+                  <fieldset className="mentor-profile-edit-record" key={record._draftId ?? `mentorship-edit-${index}`}>
+                    <legend>{isNew ? 'New mentorship experience' : `Experience ${index + 1}`}</legend>
+                    {isNew ? (
+                      <>
+                        {[
+                          ['role', 'Role'],
+                          ['organization', 'Organization'],
+                          ['years', 'Years'],
+                        ].map(([key, label]) => (
+                          <label key={key}>{label}<input type="text" maxLength={200}
+                            value={recordText(record, key)}
+                            onChange={(event) => updateRecord('mentorship', index, key, event.target.value)}
+                            disabled={profileUpdateMutation.isPending} /></label>
+                        ))}
+                        <label>Description
+                          <textarea rows={2} maxLength={1000} value={recordText(record, 'description')}
+                            onChange={(event) => updateRecord('mentorship', index, 'description', event.target.value)}
+                            disabled={profileUpdateMutation.isPending} />
+                        </label>
+                        <label>Upload mentorship proof (optional)
+                          <input type="file" accept=".pdf,.doc,.docx,.png,.jpg,.jpeg"
+                            onChange={(event) => {
+                              const file = event.target.files?.[0];
+                              updateRecord('mentorship', index, '_evidenceFile', file);
+                              if (file) updateRecord('mentorship', index, 'proofDocument', file.name);
+                            }}
+                            disabled={profileUpdateMutation.isPending} />
+                        </label>
+                        <label>Verification link (optional)
+                          <input type="url" maxLength={1000} placeholder="https://"
+                            value={recordText(record, 'proofLink')}
+                            onChange={(event) => updateRecord('mentorship', index, 'proofLink', event.target.value)}
+                            disabled={profileUpdateMutation.isPending} />
+                        </label>
+                      </>
+                    ) : (
+                      <div className="mentor-profile-record">
+                        <strong>{recordText(record, 'role')}</strong>
+                        <span>{recordText(record, 'organization')}</span>
+                        <small>{recordText(record, 'years')}</small>
+                        {recordText(record, 'description') && <small>{recordText(record, 'description')}</small>}
+                        {recordText(record, 'proofDocument') && <small>{recordText(record, 'proofDocument')}</small>}
+                        {recordText(record, 'proofLink') && <a href={safeUrl(record.proofLink) ?? undefined}
+                          target="_blank" rel="noreferrer">Open verification link</a>}
+                      </div>
+                    )}
+                    <button type="button" onClick={() => removeRecord('mentorship', index)}
+                      disabled={profileUpdateMutation.isPending}>Remove</button>
+                  </fieldset>
+                );
+              })}
               <button type="button" className="mentor-profile-add-record"
                 onClick={() => addRecord('mentorship', {
                   role: '', organization: '', years: '', description: '', proofDocument: '', proofLink: '',
@@ -975,63 +1210,15 @@ export function MentorProfileForm({
             </section>
 
             <section className="mentor-profile-editor-section">
-              <h4>Availability and mentoring format</h4>
-              <div className="mentor-profile-check-grid">
-                {PROFILE_DAYS.map((dayName) => {
-                  const day = profileDraft.availability.days.find((item) => item.day === dayName);
-                  return (
-                    <div className="mentor-profile-day-editor" key={dayName}>
-                      <label><input type="checkbox" checked={Boolean(day)}
-                        onChange={(event) => updateAvailabilityDay(dayName, event.target.checked)}
-                        disabled={profileUpdateMutation.isPending} />{dayName}</label>
-                      {day && (
-                        <>
-                          <input type="time" aria-label={`${dayName} start time`} value={day.start}
-                            onChange={(event) => updateAvailabilityTime(dayName, 'start', event.target.value)}
-                            disabled={profileUpdateMutation.isPending} />
-                          <input type="time" aria-label={`${dayName} end time`} value={day.end}
-                            onChange={(event) => updateAvailabilityTime(dayName, 'end', event.target.value)}
-                            disabled={profileUpdateMutation.isPending} />
-                        </>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-              <label>Time zone
-                <input value={profileDraft.availability.timeZone}
-                  onChange={(event) => setProfileDraft((current) => ({
-                    ...current,
-                    availability: { ...current.availability, timeZone: event.target.value },
-                  }))} disabled={profileUpdateMutation.isPending} />
-              </label>
-              <div className="mentor-profile-check-grid">
-                {MENTORING_FORMATS.map((format) => (
-                  <label key={format}><input type="checkbox"
-                    checked={profileDraft.availability.formats.includes(format)}
-                    onChange={(event) => setProfileDraft((current) => ({
-                      ...current,
-                      availability: {
-                        ...current.availability,
-                        formats: event.target.checked
-                          ? [...new Set([...current.availability.formats, format])]
-                          : current.availability.formats.filter((item) => item !== format),
-                      },
-                    }))} disabled={profileUpdateMutation.isPending} />{format}</label>
-                ))}
-              </div>
-            </section>
-
-            <section className="mentor-profile-editor-section">
               <h4>Mentorship preferences</h4>
               <div className="mentor-profile-form-grid">
                 <label>Years of professional experience
-                  <input type="number" min={0} value={experienceYears}
+                  <input type="number" min={0} max={80} step={1} value={experienceYears}
                     onChange={(event) => setExperienceYears(event.target.value)}
                     disabled={profileUpdateMutation.isPending} />
                 </label>
                 <label>Sessions per week
-                  <input type="number" min={0} value={sessionsPerWeek}
+                  <input type="number" min={0} max={100} step={1} value={sessionsPerWeek}
                     onChange={(event) => setSessionsPerWeek(event.target.value)}
                     disabled={profileUpdateMutation.isPending} />
                 </label>
@@ -1046,23 +1233,23 @@ export function MentorProfileForm({
             <section className="mentor-profile-editor-section">
               <h4>CV and motivation letter</h4>
               <div className="mentor-profile-form-grid">
-                <label>CV document name
-                  <input value={profileDraft.cv}
-                    onChange={(event) => setProfileDraft((current) => ({ ...current, cv: event.target.value }))}
+                <label>CV document
+                  <small>{profileDraft.cv || 'No CV uploaded yet.'}</small>
+                  <input type="file" accept=".pdf,.doc,.docx,.png,.jpg,.jpeg"
+                    onChange={(event) => setCvFile(event.target.files?.[0] ?? null)}
                     disabled={profileUpdateMutation.isPending} />
                 </label>
-                <label>Motivation letter name
-                  <input value={profileDraft.motivationLetter}
-                    onChange={(event) => setProfileDraft((current) => ({
-                      ...current,
-                      motivationLetter: event.target.value,
-                    }))} disabled={profileUpdateMutation.isPending} />
+                <label>Motivation letter document
+                  <small>{profileDraft.motivationLetter || 'No motivation letter uploaded yet.'}</small>
+                  <input type="file" accept=".pdf,.doc,.docx,.png,.jpg,.jpeg"
+                    onChange={(event) => setMotivationLetterFile(event.target.files?.[0] ?? null)}
+                    disabled={profileUpdateMutation.isPending} />
                 </label>
                 <label className="is-wide">Supporting documents
                   <input type="file" accept=".pdf,.doc,.docx,.png,.jpg,.jpeg" multiple
                     onChange={(event) => setProfileEvidence(Array.from(event.target.files ?? []))}
                     disabled={profileUpdateMutation.isPending} />
-                  <small>Upload evidence for profile changes and any new mentoring skills.</small>
+                  <small>Upload supporting evidence for profile changes or new mentoring skills. Uploaded file names are used automatically.</small>
                 </label>
               </div>
             </section>

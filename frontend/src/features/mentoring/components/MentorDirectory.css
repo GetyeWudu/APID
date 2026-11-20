@@ -6,30 +6,23 @@
   min-width: 980px;
 }
 
-.mentor-directory-availability {
+.mentor-directory-capacity {
   display: grid;
   min-width: 150px;
   max-width: 230px;
   gap: 0.2rem;
 }
 
-.mentor-directory-availability strong {
+.mentor-directory-capacity strong {
   color: var(--text);
   font-size: 0.78rem;
 }
 
-.mentor-directory-availability span {
+.mentor-directory-capacity span {
   color: var(--muted);
   font-size: 0.72rem;
   line-height: 1.4;
   overflow-wrap: anywhere;
-}
-
-.mentor-directory-availability span:last-child {
-  display: -webkit-box;
-  overflow: hidden;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
 }
 
 .mentor-directory-actions {

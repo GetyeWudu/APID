@@ -262,39 +262,6 @@
   margin-top: 0.45rem;
 }
 
-.mentor-application-result-availability {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 0.4rem;
-}
-
-.mentor-application-result-availability > div {
-  display: grid;
-  gap: 0.12rem;
-  padding: 0.5rem;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  background: var(--surface-subtle);
-}
-
-.mentor-application-result-availability strong {
-  color: var(--text);
-  font-size: 0.75rem;
-}
-
-.mentor-application-result-availability span,
-.mentor-application-timezone {
-  color: var(--muted);
-  font-size: 0.72rem;
-}
-
-.mentor-application-timezone {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.3rem;
-  margin-top: 0.55rem;
-}
-
 .mentor-application-document-list {
   display: grid;
   gap: 0.45rem;

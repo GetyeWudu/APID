@@ -14,7 +14,6 @@ export interface SubmitMentorApplicationPayload {
   mentoringApproach?: string;
   sessionsPerWeek?: number;
   expertiseSummary?: string;
-  availabilityNotes?: string;
   maxConcurrentTrainees?: number;
 }
 
@@ -47,7 +46,6 @@ export interface MentorApplication {
   evidenceFiles: Array<{ fileId: number; fileName: string; context?: string }>;
   note: string | null;
   expertiseSummary: string | null;
-  availabilityNotes: string | null;
   experienceYears?: number | null;
   mentoringApproach?: string | null;
   sessionsPerWeek?: number | null;
@@ -103,9 +101,6 @@ function buildApplicationFormData(payload: Partial<SubmitMentorApplicationPayloa
   }
   if (payload.expertiseSummary) {
     formData.append('expertiseSummary', payload.expertiseSummary);
-  }
-  if (payload.availabilityNotes) {
-    formData.append('availabilityNotes', payload.availabilityNotes);
   }
   if (payload.maxConcurrentTrainees !== undefined) {
     formData.append('maxConcurrentTrainees', String(payload.maxConcurrentTrainees));
@@ -194,7 +189,6 @@ export const mentorApplicationApi = {
   async requestProfileUpdate(input: {
     profileDetails: string;
     changeNote?: string;
-    availabilityNotes: string;
     experienceYears: number | null;
     mentoringApproach: string;
     sessionsPerWeek: number | null;

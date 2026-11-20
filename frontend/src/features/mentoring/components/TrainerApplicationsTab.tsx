@@ -24,6 +24,7 @@ import './TrainerApplicationsTab.css';
 
 type ApplicationNoteRecord = Record<string, unknown>;
 type ApplicationStatusFilter = 'ALL' | MentorApplication['status'];
+type ProfileChangeRow = { label: string; requested: string; previous: string };
 
 function parseApplicationNote(note: string | null) {
   const values: Record<string, string> = {};
@@ -47,61 +48,6 @@ function parseNoteRecords(value: string | undefined): ApplicationNoteRecord[] {
   } catch {
     return [];
   }
-}
-
-function parseAvailability(value: string | undefined) {
-  if (!value) return null;
-  try {
-    const parsed: unknown = JSON.parse(value);
-    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
-      const availability = parsed as Record<string, unknown>;
-      const days = Array.isArray(availability.days)
-        ? availability.days.filter((entry): entry is ApplicationNoteRecord =>
-          Boolean(entry) && typeof entry === 'object' && !Array.isArray(entry))
-          .map((entry) => ({
-            day: typeof entry.day === 'string' ? entry.day : '',
-            start: typeof entry.start === 'string' ? entry.start : '',
-            end: typeof entry.end === 'string' ? entry.end : '',
-          }))
-          .filter((entry) => entry.day)
-        : [];
-      return {
-        days,
-        timeZone: typeof availability.timeZone === 'string' ? availability.timeZone : '',
-        formats: Array.isArray(availability.formats)
-          ? availability.formats.filter((format): format is string => typeof format === 'string')
-          : [],
-      };
-    }
-  } catch {
-    // Older applications store availability as a display string.
-  }
-
-  const formatsMatch = value.match(/;\s*Formats:\s*(.*)$/i);
-  const formatsEnd = formatsMatch?.index ?? value.length;
-  const availabilityText = formatsMatch ? value.slice(0, formatsEnd).trim() : value;
-  const timeZoneMatch = availabilityText.match(/\(([^()]*)\)\s*$/);
-  const scheduleEnd = timeZoneMatch?.index ?? availabilityText.length;
-  const schedule = availabilityText.slice(0, scheduleEnd).trim();
-  const days = schedule.split(/,\s*/).flatMap((entry) => {
-    const separator = entry.indexOf(':');
-    if (separator < 0) return [];
-    const day = entry.slice(0, separator).trim();
-    const range = entry.slice(separator + 1).trim();
-    const rangeMatch = range.match(/^(.*?)\s*[–-]\s*(.*?)$/);
-    const normalizeTime = (time: string | undefined) =>
-      time && !['undefined', 'null'].includes(time.trim().toLowerCase()) ? time.trim() : '';
-    return [{
-      day,
-      start: normalizeTime(rangeMatch?.[1]),
-      end: normalizeTime(rangeMatch?.[2]),
-    }];
-  });
-  return {
-    days,
-    timeZone: timeZoneMatch?.[1] ?? '',
-    formats: splitCommaSeparated(formatsMatch?.[1]),
-  };
 }
 
 function documentName(value: string | undefined) {
@@ -185,6 +131,161 @@ function getInitials(value: string) {
   return initials || 'M';
 }
 
+function evidenceForApplication(application: MentorApplication) {
+  const evidence = [...(application.evidenceFiles ?? [])];
+  if (application.proofFileId !== null
+    && application.proofFileName
+    && !evidence.some((file) => file.fileId === application.proofFileId)) {
+    evidence.push({
+      fileId: application.proofFileId,
+      fileName: application.proofFileName,
+      context: 'Proof document',
+    });
+  }
+  return evidence;
+}
+
+function formatProfileRecord(record: ApplicationNoteRecord, fields: Array<[string, string]>) {
+  const values = fields.flatMap(([key, label]) => {
+    const value = record[key];
+    return (typeof value === 'string' || typeof value === 'number') && String(value).trim()
+      ? [`${label}: ${String(value)}`]
+      : [];
+  });
+  if (Array.isArray(record.skills) && record.skills.length > 0) {
+    values.push(`Skills: ${record.skills.map(String).join(', ')}`);
+  }
+  return values.join(' · ');
+}
+
+const PROFILE_RECORD_FIELDS: Record<string, Array<[string, string]>> = {
+  'Educational background': [
+    ['educationLevel', 'Level'],
+    ['fieldOfStudy', 'Field'],
+    ['institution', 'Institution'],
+    ['certificateDocument', 'Document'],
+    ['certificateLink', 'Certificate link'],
+  ],
+  'Professional certificates': [
+    ['title', 'Certificate'],
+    ['document', 'Document'],
+    ['link', 'Verification link'],
+  ],
+  'Previous mentorship experience': [
+    ['role', 'Role'],
+    ['organization', 'Organization'],
+    ['years', 'Years'],
+    ['description', 'Description'],
+    ['proofDocument', 'Evidence'],
+    ['proofLink', 'Evidence link'],
+  ],
+  'General professional experience': [
+    ['title', 'Role'],
+    ['organization', 'Organization'],
+    ['years', 'Years'],
+    ['description', 'Responsibilities'],
+    ['proofDocument', 'Evidence'],
+    ['proofLink', 'Evidence link'],
+  ],
+};
+
+function profileRecordValues(key: string, value: string | undefined) {
+  if (!value?.trim() || value.trim() === 'No') return [];
+  const fields = PROFILE_RECORD_FIELDS[key];
+  if (!fields) return [value.trim()];
+  try {
+    const parsed: unknown = JSON.parse(value);
+    if (Array.isArray(parsed)) {
+      return parsed
+        .filter((record): record is ApplicationNoteRecord =>
+          Boolean(record) && typeof record === 'object' && !Array.isArray(record))
+        .map((record) => formatProfileRecord(record, fields))
+        .filter(Boolean);
+    }
+  } catch {
+    return [value.trim()];
+  }
+  return [value.trim()];
+}
+
+function listDifference(requested: string[], previous: string[], key = (value: string) => value) {
+  const unmatchedPrevious = [...previous];
+  const added: string[] = [];
+  requested.forEach((value) => {
+    const matchIndex = unmatchedPrevious.findIndex((previousValue) => key(previousValue) === key(value));
+    if (matchIndex === -1) added.push(value);
+    else unmatchedPrevious.splice(matchIndex, 1);
+  });
+  return { added, removed: unmatchedPrevious };
+}
+
+function profileUpdateChanges(current: MentorApplication, previous: MentorApplication) {
+  const currentNote = parseApplicationNote(current.note);
+  const previousNote = parseApplicationNote(previous.note);
+  const rows: ProfileChangeRow[] = [];
+  Object.keys(PROFILE_RECORD_FIELDS).forEach((key) => {
+    const difference = listDifference(
+      profileRecordValues(key, currentNote[key]),
+      profileRecordValues(key, previousNote[key])
+    );
+    if (difference.added.length || difference.removed.length) {
+      rows.push({
+        label: key,
+        requested: difference.added.join('\n') || 'No new records',
+        previous: difference.removed.join('\n') || 'No removed records',
+      });
+    }
+  });
+
+  const skillDifference = listDifference(
+    splitCommaSeparated(currentNote['Mentoring interests / expertise']),
+    splitCommaSeparated(previousNote['Mentoring interests / expertise']),
+    (skill) => skill.trim().toLocaleLowerCase()
+  );
+  if (skillDifference.added.length || skillDifference.removed.length) {
+    rows.push({
+      label: 'Mentoring interests / expertise',
+      requested: skillDifference.added.join(', ') || 'No added skills',
+      previous: skillDifference.removed.join(', ') || 'No removed skills',
+    });
+  }
+
+  const scalarFields: Array<[string, string, boolean]> = [
+    ['CV', 'Curriculum vitae', true],
+    ['Letter of motivation', 'Letter of motivation', true],
+    ['Maximum concurrent mentees', 'Maximum concurrent mentees', false],
+  ];
+  scalarFields.forEach(([key, label, isDocument]) => {
+    const format = (value: string | undefined) => isDocument
+      ? documentName(value) || 'Not provided'
+      : value?.trim() || 'Not provided';
+    const requested = format(currentNote[key]);
+    const oldValue = format(previousNote[key]);
+    if (requested !== oldValue) rows.push({ label, requested, previous: oldValue });
+  });
+
+  [
+    {
+      label: 'Years of professional experience',
+      requested: current.experienceYears == null ? 'Not provided' : String(current.experienceYears),
+      previous: previous.experienceYears == null ? 'Not provided' : String(previous.experienceYears),
+    },
+    {
+      label: 'Sessions per week',
+      requested: current.sessionsPerWeek == null ? 'Not provided' : String(current.sessionsPerWeek),
+      previous: previous.sessionsPerWeek == null ? 'Not provided' : String(previous.sessionsPerWeek),
+    },
+    {
+      label: 'Mentoring approach',
+      requested: current.mentoringApproach?.trim() || 'Not provided',
+      previous: previous.mentoringApproach?.trim() || 'Not provided',
+    },
+  ].forEach((row) => {
+    if (row.requested !== row.previous) rows.push(row);
+  });
+  return rows;
+}
+
 function externalLink(value: unknown, label: string): ReactNode {
   if (typeof value !== 'string' || !value.trim()) return 'Not provided';
   try {
@@ -204,13 +305,15 @@ function ApplicationDetailSection({
   icon,
   title,
   children,
+  className,
 }: {
   icon: ReactNode;
   title: string;
   children: ReactNode;
+  className?: string;
 }) {
   return (
-    <section className="mentor-application-detail-section">
+    <section className={`mentor-application-detail-section${className ? ` ${className}` : ''}`}>
       <h4>{icon}{title}</h4>
       {children}
     </section>
@@ -219,8 +322,10 @@ function ApplicationDetailSection({
 
 export function TrainerApplicationsTab({
   applications,
+  mode = 'applications',
 }: {
   applications: MentorApplication[];
+  mode?: 'applications' | 'profile-updates';
 }) {
   const queryClient = useQueryClient();
   const { pushToast } = useToast();
@@ -250,6 +355,7 @@ export function TrainerApplicationsTab({
     fileId: number;
     message: string;
   } | null>(null);
+  const isProfileUpdateQueue = mode === 'profile-updates';
 
   useEffect(() => () => {
     if (previewTarget) URL.revokeObjectURL(previewTarget.objectUrl);
@@ -417,27 +523,136 @@ export function TrainerApplicationsTab({
   const professionalCertificates = parseNoteRecords(detailNote['Professional certificates']);
   const mentorshipHistory = parseNoteRecords(detailNote['Previous mentorship experience']);
   const careerHistory = parseNoteRecords(detailNote['General professional experience']);
-  const availability = parseAvailability(detailNote.Availability ?? detailTarget?.availabilityNotes ?? undefined);
   const mentoringSkills = splitCommaSeparated(detailNote['Mentoring interests / expertise']);
-  const mentorshipFormats = splitCommaSeparated(
-    detailNote['Mentorship formats'] || availability?.formats.join(', ')
-  );
-  const detailEvidence = detailTarget
-    ? [
-      ...(detailTarget.evidenceFiles ?? []),
-      ...(detailTarget.proofFileName
-        && detailTarget.proofFileId !== null
-        && !detailTarget.evidenceFiles?.some((evidence) => evidence.fileId === detailTarget.proofFileId)
-        ? [{
-          fileId: detailTarget.proofFileId,
-          fileName: detailTarget.proofFileName,
-          context: 'Proof document',
-        }]
-        : []),
-    ]
+  const detailEvidence = detailTarget ? evidenceForApplication(detailTarget) : [];
+  const profileUpdateTarget = detailTarget?.applicationType === 'PROFILE_UPDATE' ? detailTarget : null;
+  const previousProfileApplication = profileUpdateTarget
+    ? applications
+      .filter((application) =>
+        application.id !== profileUpdateTarget.id
+        && application.applicantUsername === profileUpdateTarget.applicantUsername
+        && application.status === 'APPROVED'
+        && (application.applicationType === 'INITIAL' || application.applicationType === 'PROFILE_UPDATE')
+        && Date.parse(application.submittedAt) <= Date.parse(profileUpdateTarget.submittedAt))
+      .sort((left, right) => Date.parse(right.submittedAt) - Date.parse(left.submittedAt))[0] ?? null
+    : null;
+  const profileChanges = profileUpdateTarget && previousProfileApplication
+    ? profileUpdateChanges(profileUpdateTarget, previousProfileApplication)
     : [];
+  const renderEvidenceList = () => {
+    const application = detailTarget;
+    if (!application || detailEvidence.length === 0) return null;
+    return (
+    <div className="mentor-application-evidence-list">
+      <h5>Uploaded evidence</h5>
+      {detailEvidence.map((evidence) => (
+        <div className="mentor-application-evidence-entry" key={evidence.fileId}>
+          <div className="mentor-application-evidence-item">
+            <div className="mentor-application-evidence-description">
+              <span className="mentor-application-evidence-context">
+                {evidence.context && evidence.context !== 'Supporting evidence'
+                  ? evidence.context
+                  : evidenceContextFromNote(application.note, evidence.fileName)}
+              </span>
+              <span className="mentor-application-evidence-name">
+                <FileText size={14} />{evidence.fileName}
+              </span>
+            </div>
+            <button
+              type="button"
+              className="apid-btn apid-btn-outline apid-btn-sm"
+              disabled={summarizingId !== null || !supportsAiSummary(evidence.fileName)}
+              title={!supportsAiSummary(evidence.fileName)
+                ? 'AI summaries support PDF, DOC, and DOCX files.'
+                : undefined}
+              onClick={() => void handleSummarizeEvidence(application.id, evidence.fileId)}
+            >
+              {summarizingId === evidence.fileId
+                ? <><LoaderCircle className="mentor-document-summary-spinner" size={13} /> Summarizing…</>
+                : <><Sparkles size={13} /> AI summary</>}
+            </button>
+            <button
+              type="button"
+              className="apid-btn apid-btn-outline apid-btn-sm"
+              disabled={viewingId !== null}
+              onClick={() => void handleViewEvidence(evidence.fileId, evidence.fileName)}
+            >
+              <Eye size={13} />{viewingId === evidence.fileId ? 'Opening…' : 'View'}
+            </button>
+            <button
+              type="button"
+              className="apid-btn apid-btn-outline apid-btn-sm"
+              disabled={downloadingId !== null}
+              onClick={() => void handleDownloadEvidence(evidence.fileId, evidence.fileName)}
+            >
+              <Download size={13} />{downloadingId === evidence.fileId ? 'Downloading…' : 'Download'}
+            </button>
+          </div>
+          {documentSummary?.applicationId === application.id
+            && documentSummary.fileId === evidence.fileId && (
+              <div className="mentor-document-summary" aria-live="polite">
+                <div><Sparkles size={15} /><strong>AI document summary</strong></div>
+                <p>{documentSummary.summary}</p>
+                {documentSummary.sourceTruncated && (
+                  <span>The document was longer than the summary limit; only its beginning was analyzed.</span>
+                )}
+              </div>
+            )}
+          {summaryError?.applicationId === application.id
+            && summaryError.fileId === evidence.fileId && (
+              <p className="mentor-document-summary-error" role="alert">
+                Summary failed: {summaryError.message}
+              </p>
+            )}
+        </div>
+      ))}
+    </div>
+    );
+  };
+  const renderComparisonValue = (value: string, label: string, application: MentorApplication) => {
+    const contextPattern = label === 'Curriculum vitae'
+      ? /curriculum vitae/i
+      : label === 'Letter of motivation'
+        ? /letter of motivation/i
+        : null;
+    const referencedFiles = evidenceForApplication(application)
+      .filter((evidence) => {
+        if (value.includes(evidence.fileName)) return true;
+        const context = evidence.context ?? '';
+        return contextPattern?.test(context) ?? false;
+      });
+    return (
+      <>
+        <span>{value}</span>
+        {referencedFiles.map((evidence) => (
+          <div className="mentor-profile-change-file" key={evidence.fileId}>
+            <span><FileText size={14} />{evidence.fileName}</span>
+            <button
+              type="button"
+              className="apid-btn apid-btn-outline apid-btn-sm"
+              disabled={viewingId !== null}
+              onClick={() => void handleViewEvidence(evidence.fileId, evidence.fileName)}
+            >
+              <Eye size={13} />{viewingId === evidence.fileId ? 'Opening…' : 'View file'}
+            </button>
+            <button
+              type="button"
+              className="apid-btn apid-btn-outline apid-btn-sm"
+              disabled={downloadingId !== null}
+              onClick={() => void handleDownloadEvidence(evidence.fileId, evidence.fileName)}
+            >
+              <Download size={13} />{downloadingId === evidence.fileId ? 'Downloading…' : 'Download'}
+            </button>
+          </div>
+        ))}
+      </>
+    );
+  };
+  const visibleApplications = isProfileUpdateQueue
+    ? applications.filter((application) => application.applicationType === 'PROFILE_UPDATE')
+    : applications;
   const normalizedSearch = searchQuery.trim().toLowerCase();
-  const filteredApplications = applications.filter((application) => {
+  const filteredApplications = visibleApplications.filter((application) => {
     if (statusFilter !== 'ALL' && application.status !== statusFilter) return false;
     if (!normalizedSearch) return true;
     const searchableText = [
@@ -446,34 +661,39 @@ export function TrainerApplicationsTab({
       application.expertiseSummary,
       application.note,
       application.mentoringApproach,
-      application.availabilityNotes,
       ...(application.skillNames ?? []),
     ].filter(Boolean).join(' ').toLowerCase();
     return searchableText.includes(normalizedSearch);
   });
   const statusCounts = {
-    ALL: applications.length,
-    PENDING: applications.filter((application) => application.status === 'PENDING').length,
-    APPROVED: applications.filter((application) => application.status === 'APPROVED').length,
-    DECLINED: applications.filter((application) => application.status === 'DECLINED').length,
+    ALL: visibleApplications.length,
+    PENDING: visibleApplications.filter((application) => application.status === 'PENDING').length,
+    APPROVED: visibleApplications.filter((application) => application.status === 'APPROVED').length,
+    DECLINED: visibleApplications.filter((application) => application.status === 'DECLINED').length,
   };
 
   return (
     <div className="apid-card">
       <div className="boa-card-header">
         <div>
-          <h3 className="boa-card-title">Mentor Applications</h3>
+          <h3 className="boa-card-title">
+            {isProfileUpdateQueue ? 'Mentor Profile Update Requests' : 'Mentor Applications'}
+          </h3>
           <p className="boa-card-subtitle">
-            Scan applicants and status here; open an application to review qualifications and evidence.
+            {isProfileUpdateQueue
+              ? 'Review requested mentor profile changes and supporting evidence.'
+              : 'Scan applicants and status here; open an application to review qualifications and evidence.'}
           </p>
         </div>
         <DataSourceBadge source="live" />
       </div>
 
-      {applications.length === 0 ? (
+      {visibleApplications.length === 0 ? (
         <EmptyState
-          title="No Mentor Applications"
-          description="No mentor applications have been submitted."
+          title={isProfileUpdateQueue ? 'No profile update requests' : 'No Mentor Applications'}
+          description={isProfileUpdateQueue
+            ? 'Mentor profile update requests awaiting HR review will appear here.'
+            : 'No mentor applications have been submitted.'}
         />
       ) : (
         <div className="mentor-application-list">
@@ -642,7 +862,7 @@ export function TrainerApplicationsTab({
               </div>
             </header>
 
-            {detailTarget.applicationType !== 'SKILL_ADDITION' && (
+            {detailTarget.applicationType === 'INITIAL' && (
               <div className="mentor-application-detail-summary" aria-label="Application summary">
                 <div>
                   <span>Expertise</span>
@@ -665,15 +885,39 @@ export function TrainerApplicationsTab({
 
             <div className="mentor-application-detail-grid">
               {detailTarget.applicationType === 'PROFILE_UPDATE' && (
-                <ApplicationDetailSection icon={<BriefcaseBusiness size={17} />} title="Requested profile changes">
-                  <dl>
-                    <div><dt>Requested changes</dt><dd>{noteText(detailNote['Requested changes'])}</dd></div>
-                    <div><dt>Years of experience</dt><dd>{detailTarget.experienceYears ?? 'Not provided'}</dd></div>
-                    <div><dt>Mentoring approach</dt><dd>{noteText(detailTarget.mentoringApproach)}</dd></div>
-                    <div><dt>Availability notes</dt><dd>{noteText(detailTarget.availabilityNotes)}</dd></div>
-                    <div><dt>Sessions per week</dt><dd>{detailTarget.sessionsPerWeek ?? 'Not provided'}</dd></div>
-                    <div><dt>Maximum concurrent trainees</dt><dd>{noteText(detailNote['Maximum concurrent mentees'])}</dd></div>
-                  </dl>
+                <ApplicationDetailSection
+                  icon={<BriefcaseBusiness size={17} />}
+                  title="Profile change comparison"
+                  className="mentor-profile-change-section"
+                >
+                  {previousProfileApplication ? (
+                    profileChanges.length > 0 ? (
+                      <div className="mentor-profile-change-comparison">
+                        <div className="mentor-profile-change-comparison-headings">
+                          <strong>Changed</strong>
+                          <strong>Previously on file</strong>
+                        </div>
+                        {profileChanges.map((change) => (
+                          <div className="mentor-profile-change-comparison-row" key={change.label}>
+                            <strong className="mentor-profile-change-label">{change.label}</strong>
+                            <div>{renderComparisonValue(change.requested, change.label, detailTarget)}</div>
+                            <div>{renderComparisonValue(change.previous, change.label, previousProfileApplication)}</div>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="boa-muted">No profile differences were detected.</p>
+                    )
+                  ) : (
+                    <p className="boa-muted">
+                      No previous approved profile was found, so this request cannot be compared.
+                    </p>
+                  )}
+                  {detailNote['Requested changes'] && (
+                    <p className="mentor-profile-change-note">
+                      <strong>Mentor’s note:</strong> {detailNote['Requested changes']}
+                    </p>
+                  )}
                 </ApplicationDetailSection>
               )}
               {detailTarget.applicationType === 'SKILL_ADDITION' ? (
@@ -684,6 +928,8 @@ export function TrainerApplicationsTab({
                       .map((skill) => <StatusPill key={skill} label={skill} tone="neutral" />)}
                   </div>
                 </ApplicationDetailSection>
+              ) : detailTarget.applicationType === 'PROFILE_UPDATE' ? (
+                renderEvidenceList()
               ) : (
                 <>
               <ApplicationDetailSection icon={<GraduationCap size={17} />} title="Educational background">
@@ -763,45 +1009,18 @@ export function TrainerApplicationsTab({
                       </div>
                     ) : <span className="boa-muted">Not provided</span>}
                   </div>
-
-                  <div className="mentor-preference-block">
-                    <span className="mentor-preference-label">Availability</span>
-                    {availability?.days.length ? (
-                      <div className="mentor-availability-list">
-                        {availability.days.map((day, index) => {
-                          const timeRange = day.start && day.end
-                            ? `${day.start}–${day.end}`
-                            : day.start
-                              ? `${day.start}–End time not set`
-                              : day.end
-                                ? `Start time not set–${day.end}`
-                                : 'Time not specified';
-                          return (
-                            <div className="mentor-availability-item" key={`${day.day}-${index}`}>
-                              <strong>{day.day}</strong>
-                              <span>{timeRange}</span>
-                            </div>
-                          );
-                        })}
-                        {availability.timeZone && (
-                          <span className="mentor-availability-timezone">
-                            Time zone: {availability.timeZone.replace(/_/g, ' ')}
-                          </span>
-                        )}
-                      </div>
-                    ) : <span className="boa-muted">Not provided</span>}
-                  </div>
-
                   <div className="mentor-preference-bottom-grid">
                     <div className="mentor-preference-block">
-                      <span className="mentor-preference-label">Mentorship formats</span>
-                      {mentorshipFormats.length > 0 ? (
-                        <div className="mentor-preference-tags">
-                          {mentorshipFormats.map((format) => (
-                            <span className="mentor-preference-format" key={format}>{format}</span>
-                          ))}
-                        </div>
-                      ) : <span className="boa-muted">Not provided</span>}
+                      <span className="mentor-preference-label">Years of professional experience</span>
+                      <strong>{detailTarget.experienceYears ?? 'Not provided'}</strong>
+                    </div>
+                    <div className="mentor-preference-block">
+                      <span className="mentor-preference-label">Sessions per week</span>
+                      <strong>{detailTarget.sessionsPerWeek ?? 'Not provided'}</strong>
+                    </div>
+                    <div className="mentor-preference-block">
+                      <span className="mentor-preference-label">Mentoring approach</span>
+                      <span>{noteText(detailTarget.mentoringApproach)}</span>
                     </div>
                     <div className="mentor-capacity-card">
                       <span className="mentor-preference-label">Maximum mentees</span>
@@ -830,72 +1049,7 @@ export function TrainerApplicationsTab({
                     </article>
                   ))}
                 </div>
-                {detailEvidence.length > 0 && (
-                  <div className="mentor-application-evidence-list">
-                    <h5>Uploaded evidence</h5>
-                    {detailEvidence.map((evidence) => (
-                      <div className="mentor-application-evidence-entry" key={evidence.fileId}>
-                        <div className="mentor-application-evidence-item">
-                          <div className="mentor-application-evidence-description">
-                            <span className="mentor-application-evidence-context">
-                              {evidence.context && evidence.context !== 'Supporting evidence'
-                                ? evidence.context
-                                : evidenceContextFromNote(detailTarget.note, evidence.fileName)}
-                            </span>
-                            <span className="mentor-application-evidence-name">
-                              <FileText size={14} />{evidence.fileName}
-                            </span>
-                          </div>
-                          <button
-                            type="button"
-                            className="apid-btn apid-btn-outline apid-btn-sm"
-                            disabled={summarizingId !== null || !supportsAiSummary(evidence.fileName)}
-                            title={!supportsAiSummary(evidence.fileName)
-                              ? 'AI summaries support PDF, DOC, and DOCX files.'
-                              : undefined}
-                            onClick={() => void handleSummarizeEvidence(detailTarget.id, evidence.fileId)}
-                          >
-                            {summarizingId === evidence.fileId
-                              ? <><LoaderCircle className="mentor-document-summary-spinner" size={13} /> Summarizing…</>
-                              : <><Sparkles size={13} /> AI summary</>}
-                          </button>
-                          <button
-                            type="button"
-                            className="apid-btn apid-btn-outline apid-btn-sm"
-                            disabled={viewingId !== null}
-                            onClick={() => void handleViewEvidence(evidence.fileId, evidence.fileName)}
-                          >
-                            <Eye size={13} />{viewingId === evidence.fileId ? 'Opening…' : 'View'}
-                          </button>
-                          <button
-                            type="button"
-                            className="apid-btn apid-btn-outline apid-btn-sm"
-                            disabled={downloadingId !== null}
-                            onClick={() => void handleDownloadEvidence(evidence.fileId, evidence.fileName)}
-                          >
-                            <Download size={13} />{downloadingId === evidence.fileId ? 'Downloading…' : 'Download'}
-                          </button>
-                        </div>
-                        {documentSummary?.applicationId === detailTarget.id
-                          && documentSummary.fileId === evidence.fileId && (
-                            <div className="mentor-document-summary" aria-live="polite">
-                              <div><Sparkles size={15} /><strong>AI document summary</strong></div>
-                              <p>{documentSummary.summary}</p>
-                              {documentSummary.sourceTruncated && (
-                                <span>The document was longer than the summary limit; only its beginning was analyzed.</span>
-                              )}
-                            </div>
-                          )}
-                        {summaryError?.applicationId === detailTarget.id
-                          && summaryError.fileId === evidence.fileId && (
-                            <p className="mentor-document-summary-error" role="alert">
-                              Summary failed: {summaryError.message}
-                            </p>
-                          )}
-                      </div>
-                    ))}
-                  </div>
-                )}
+                {renderEvidenceList()}
               </ApplicationDetailSection>
                 </>
               )}

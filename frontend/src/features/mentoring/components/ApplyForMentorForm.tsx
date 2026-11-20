@@ -5,15 +5,12 @@ import { Link } from 'react-router-dom';
 import {
   Award,
   BriefcaseBusiness,
-  CalendarDays,
   Check,
   ChevronLeft,
   ChevronRight,
-  Clock3,
   FileText,
   GraduationCap,
   Sparkles,
-  UserRound,
   X,
 } from 'lucide-react';
 import { ErrorState, LoadingSkeleton, StatusPill, useToast } from '../../../shared/components/ui';
@@ -29,11 +26,10 @@ const STEPS = [
   'Professional Certificates',
   'Mentoring Experience',
   'Career Experience',
-  'Availability',
+  'Mentorship Preferences',
   'CV & Motivation',
   'Review',
 ] as const;
-const DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
 const EDUCATION_LEVELS = [
   'High School',
   'Diploma',
@@ -42,39 +38,6 @@ const EDUCATION_LEVELS = [
   'PhD',
   'Other',
 ];
-const FORMATS = [
-  {
-    value: 'One-on-One Mentorship',
-    description: 'Individual guidance tailored to one mentee.',
-    icon: UserRound,
-  },
-  {
-    value: 'Group Mentorship',
-    description: 'Facilitate learning and discussion in a group.',
-    icon: UserRound,
-  },
-  {
-    value: 'Both',
-    description: 'Offer individual and group mentoring.',
-    icon: Check,
-  },
-];
-const TIME_ZONES = [
-  'Africa/Addis_Ababa',
-  'Africa/Cairo',
-  'Africa/Johannesburg',
-  'Africa/Nairobi',
-  'America/Los_Angeles',
-  'America/New_York',
-  'Asia/Dubai',
-  'Asia/Kolkata',
-  'Asia/Singapore',
-  'Australia/Sydney',
-  'Europe/London',
-  'Europe/Paris',
-  'UTC',
-];
-const DEFAULT_TIME_ZONE = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
 const MENTORING_SKILL_GROUPS: Record<string, string[]> = {
   'Software Engineering & IT': [
     'Frontend Development',
@@ -162,6 +125,8 @@ type CareerExperience = {
   endYear: string;
   current: boolean;
   description: string;
+  proofLink: string;
+  proofFile?: File;
 };
 
 type ApplicationForm = {
@@ -174,11 +139,9 @@ type ApplicationForm = {
   careerExperiences: CareerExperience[];
   skillIds: string[];
   customSkill: string;
-  selectedDays: string[];
-  dayTimes: Record<string, { start: string; end: string }>;
-  timeZone: string;
-  maxMentees: string;
-  formats: string[];
+  experienceYears: string;
+  sessionsPerWeek: string;
+  mentoringApproach: string;
   cv?: File;
   motivationLetter?: File;
 };
@@ -192,11 +155,9 @@ const EMPTY_FORM: ApplicationForm = {
   careerExperiences: [],
   skillIds: [],
   customSkill: '',
-  selectedDays: [],
-  dayTimes: {},
-  timeZone: DEFAULT_TIME_ZONE,
-  maxMentees: '',
-  formats: [],
+  experienceYears: '',
+  sessionsPerWeek: '',
+  mentoringApproach: '',
 };
 
 function formatFileSize(file: File) {
@@ -240,16 +201,6 @@ function parseSubmittedApplication(note: string) {
     return value.split(',').map((item) => item.trim()).filter(Boolean);
   };
 
-  let availability: SubmittedApplicationRecord | null = null;
-  try {
-    const parsed = JSON.parse(values.Availability ?? '');
-    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
-      availability = parsed as SubmittedApplicationRecord;
-    }
-  } catch {
-    availability = null;
-  }
-
   return {
     values,
     education: parseRecords(values['Educational background']),
@@ -257,7 +208,6 @@ function parseSubmittedApplication(note: string) {
     mentorship: parseRecords(values['Previous mentorship experience']),
     career: parseRecords(values['General professional experience']),
     skills: parseList(values['Mentoring interests / expertise']),
-    availability,
   };
 }
 
@@ -315,11 +265,12 @@ function EducationBackgroundFields({
           <div className="apid-form" style={{ marginTop: '0.75rem' }}>
             <div className="apid-field">
               <label htmlFor={`education-${index}-level`}>Education level</label>
-              <select id={`education-${index}-level`} className="apid-input" value={entry.educationLevel}
+              <select id={`education-${index}-level`} className="apid-input"
+                value={entry.educationLevel}
                 onChange={(event) => update(index, { educationLevel: event.target.value })}
                 disabled={disabled}>
                 <option value="">Select education level</option>
-                {EDUCATION_LEVELS.map((level) => <option key={level}>{level}</option>)}
+                {EDUCATION_LEVELS.map((level) => <option key={level} value={level}>{level}</option>)}
               </select>
             </div>
             <div className="apid-field">
@@ -698,6 +649,22 @@ function CareerExperienceFields({
                 onChange={(event) => update(index, { description: event.target.value })}
                 disabled={disabled} />
             </div>
+            <div className="apid-field">
+              <label htmlFor={`career-${index}-proof`}>Proof of experience (optional)</label>
+              <input id={`career-${index}-proof`} className="apid-input" type="file"
+                accept=".pdf,.doc,.docx,.png,.jpg,.jpeg"
+                onClick={(event) => { event.currentTarget.value = ''; }}
+                onChange={(event) => update(index, { proofFile: event.target.files?.[0] })}
+                disabled={disabled} />
+              <small>PDF, DOC, DOCX, PNG, or JPG up to 10 MB.</small>
+            </div>
+            <div className="apid-field">
+              <label htmlFor={`career-${index}-proof-link`}>Proof link (optional)</label>
+              <input id={`career-${index}-proof-link`} className="apid-input" type="url"
+                value={entry.proofLink} placeholder="https://"
+                onChange={(event) => update(index, { proofLink: event.target.value })}
+                disabled={disabled} />
+            </div>
           </div>
         </fieldset>
       ))}
@@ -709,6 +676,7 @@ function CareerExperienceFields({
           endYear: '',
           current: false,
           description: '',
+          proofLink: '',
         }])} disabled={disabled}>
         Add Career Experience
       </button>
@@ -775,9 +743,37 @@ export function ApplyForMentorForm({
       const saved = window.localStorage.getItem(draftKey);
       if (saved) {
         const draft = JSON.parse(saved) as Partial<ApplicationForm>;
+        const draftWithoutAvailability = Object.fromEntries(
+          Object.entries(draft).filter(([key]) =>
+            !['selectedDays', 'dayTimes', 'timeZone', 'formats', 'maxMentees'].includes(key)
+          )
+        ) as Partial<ApplicationForm>;
         setForm((current) => ({
           ...current,
-          ...draft,
+          ...draftWithoutAvailability,
+          educationalBackgrounds: (draft.educationalBackgrounds ?? current.educationalBackgrounds).map((entry) => ({
+            educationLevel: entry.educationLevel ?? '',
+            fieldOfStudy: entry.fieldOfStudy ?? '',
+            institution: entry.institution ?? '',
+            link: entry.link ?? '',
+            file: undefined,
+          })),
+          professionalCertificates: (draft.professionalCertificates ?? current.professionalCertificates).map((entry) => ({
+            name: entry.name ?? '',
+            link: entry.link ?? '',
+            skillIds: entry.skillIds ?? [],
+            customSkill: entry.customSkill ?? '',
+            file: undefined,
+          })),
+          careerExperiences: (draft.careerExperiences ?? current.careerExperiences).map((entry) => ({
+            ...entry,
+            proofLink: entry.proofLink ?? '',
+            proofFile: undefined,
+          })),
+          mentorshipExperiences: (draft.mentorshipExperiences ?? current.mentorshipExperiences).map((entry) => ({
+            ...entry,
+            proofFile: undefined,
+          })),
           fullName: defaultFullName,
           photo: undefined,
           cv: undefined,
@@ -835,7 +831,7 @@ export function ApplyForMentorForm({
         return 'Add at least one education background.';
       }
       if (form.educationalBackgrounds.some((education) =>
-        !education.educationLevel
+        !education.educationLevel.trim()
         || !education.fieldOfStudy.trim()
         || !education.institution.trim()
         || (!education.file && !education.link.trim())
@@ -900,17 +896,31 @@ export function ApplyForMentorForm({
           || (experience.current && experience.endYear);
       });
       if (invalidCareerDates) return 'Check the start and end years on your career experience entries.';
+      if (form.careerExperiences.some((experience) =>
+        experience.proofLink.trim() && !isHttpUrl(experience.proofLink.trim())
+      )) return 'Enter a valid HTTP or HTTPS link for each professional experience proof.';
+      if (form.careerExperiences.some((experience) =>
+        experience.proofFile
+        && !hasFileExtension(experience.proofFile, ['pdf', 'doc', 'docx', 'png', 'jpg', 'jpeg'])
+      )) return 'Professional experience proof files must be PDF, DOC, DOCX, PNG, or JPG.';
+      if (form.careerExperiences.some((experience) =>
+        experience.proofFile && experience.proofFile.size > 10 * 1024 * 1024
+      )) return 'Professional experience proof files must be 10 MB or smaller.';
     }
     if (currentStep === 6) {
-      if (form.maxMentees && !/^[1-9]\d*$/.test(form.maxMentees)) {
-        return 'Mentee capacity must be a positive whole number.';
+      if (form.experienceYears && !/^\d+$/.test(form.experienceYears)) {
+        return 'Years of professional experience must be a non-negative whole number.';
       }
-      if (form.maxMentees && Number(form.maxMentees) > 100) return 'Mentee capacity cannot exceed 100.';
-      const incompleteDay = form.selectedDays.find((day) => {
-        const range = form.dayTimes[day];
-        return range?.start && range.end && range.start >= range.end;
-      });
-      if (incompleteDay) return `End time must be after start time for ${incompleteDay}.`;
+      if (form.experienceYears && Number(form.experienceYears) > 80) {
+        return 'Years of professional experience cannot exceed 80.';
+      }
+      if (form.sessionsPerWeek && !/^\d+$/.test(form.sessionsPerWeek)) {
+        return 'Sessions per week must be a non-negative whole number.';
+      }
+      if (form.sessionsPerWeek && Number(form.sessionsPerWeek) > 100) {
+        return 'Sessions per week cannot exceed 100.';
+      }
+      if (form.mentoringApproach.length > 2000) return 'Mentoring approach must be 2000 characters or fewer.';
     }
     if (currentStep === 7) {
       if (form.cv && form.cv.size > 10 * 1024 * 1024) return 'Your CV must be 10 MB or smaller.';
@@ -983,12 +993,19 @@ export function ApplyForMentorForm({
         `Mentorship experience ${index + 1} proof${role ? `: ${role}` : ''}`
       );
     });
+    form.careerExperiences.forEach((experience, index) => {
+      const role = [experience.title.trim(), experience.organization.trim()].filter(Boolean).join(' · ');
+      addEvidence(
+        experience.proofFile,
+        `Professional experience ${index + 1} proof${role ? `: ${role}` : ''}`
+      );
+    });
     return { files, contexts };
   };
 
   const applicationDetails = () => {
     const education = form.educationalBackgrounds.map((entry) => ({
-      educationLevel: entry.educationLevel,
+      educationLevel: entry.educationLevel.trim(),
       fieldOfStudy: entry.fieldOfStudy.trim(),
       institution: entry.institution.trim(),
       certificateLink: entry.link.trim(),
@@ -1021,15 +1038,9 @@ export function ApplyForMentorForm({
         ? `${experience.startYear}–Present`
         : `${experience.startYear}${experience.endYear ? `–${experience.endYear}` : ''}`,
       description: experience.description.trim(),
+      proofLink: experience.proofLink.trim(),
+      proofDocument: experience.proofFile?.name ?? '',
     }));
-    const availability = {
-      days: form.selectedDays.map((day) => ({
-        day,
-        start: form.dayTimes[day]?.start ?? '',
-        end: form.dayTimes[day]?.end ?? '',
-      })),
-      timeZone: form.timeZone,
-    };
 
     return [
       'MENTOR APPLICATION DETAILS',
@@ -1054,9 +1065,9 @@ export function ApplyForMentorForm({
         })))
         : form.hasMentorshipExperience === 'no' ? 'No' : 'Not specified'}`,
       `General professional experience: ${JSON.stringify(careerHistory)}`,
-      `Availability: ${JSON.stringify(availability)}`,
-      `Mentorship formats: ${form.formats.join(', ')}`,
-      `Maximum concurrent mentees: ${form.maxMentees}`,
+      `Years of professional experience: ${form.experienceYears}`,
+      `Sessions per week: ${form.sessionsPerWeek}`,
+      `Mentoring approach: ${form.mentoringApproach.trim().replace(/\r?\n/g, ' ')}`,
       `CV: ${form.cv?.name ?? ''} (${form.cv ? formatFileSize(form.cv) : ''})`,
       `Letter of motivation: ${form.motivationLetter?.name ?? ''} (${form.motivationLetter ? formatFileSize(form.motivationLetter) : ''})`,
     ].filter(Boolean).join('\n');
@@ -1097,16 +1108,9 @@ export function ApplyForMentorForm({
             .map((skill) => skill.name),
           ...customSkills,
         ].filter(Boolean).join(', '),
-        availabilityNotes: JSON.stringify({
-          days: form.selectedDays.map((day) => ({
-            day,
-            start: form.dayTimes[day]?.start ?? '',
-            end: form.dayTimes[day]?.end ?? '',
-          })),
-          timeZone: form.timeZone,
-          formats: form.formats,
-        }),
-        maxConcurrentTrainees: form.maxMentees ? Number(form.maxMentees) : undefined,
+        experienceYears: form.experienceYears === '' ? undefined : Number(form.experienceYears),
+        sessionsPerWeek: form.sessionsPerWeek === '' ? undefined : Number(form.sessionsPerWeek),
+        mentoringApproach: form.mentoringApproach.trim() || undefined,
       });
       await applicationsQuery.refetch();
       try {
@@ -1159,16 +1163,9 @@ export function ApplyForMentorForm({
     const status = application?.status ?? 'PENDING';
     const statusTone = status === 'APPROVED' ? 'ok' : status === 'DECLINED' ? 'err' : 'warn';
     const submitted = applicationDetails ? parseSubmittedApplication(applicationDetails) : null;
-    const availabilityDays = Array.isArray(submitted?.availability?.days)
-      ? submitted.availability.days.filter((day): day is SubmittedApplicationRecord =>
-        Boolean(day) && typeof day === 'object' && !Array.isArray(day))
-      : [];
     const fullName = submitted
       ? submittedText(submitted.values['Full name'])
       : 'Mentor applicant';
-    const capacity = submitted
-      ? submittedText(submitted.values['Maximum concurrent mentees'])
-      : 'Not provided';
     const statusTitle = status === 'APPROVED'
       ? 'Your mentor application was approved'
       : status === 'DECLINED'
@@ -1241,7 +1238,6 @@ export function ApplyForMentorForm({
                   <div><GraduationCap size={17} /><span>Education</span><strong>{submitted.education.length}</strong></div>
                   <div><Sparkles size={17} /><span>Skills</span><strong>{submitted.skills.length}</strong></div>
                   <div><Award size={17} /><span>Certificates</span><strong>{submitted.certificates.length}</strong></div>
-                  <div><UserRound size={17} /><span>Capacity</span><strong>{capacity}</strong></div>
                 </div>
 
                 <div className="mentor-application-details-grid">
@@ -1287,27 +1283,20 @@ export function ApplyForMentorForm({
                         <strong>{submittedText(record.title)}</strong>
                         <p>{[record.organization, record.years].filter(Boolean).join(' · ')}</p>
                         {typeof record.description === 'string' && record.description && <span>{record.description}</span>}
+                        {typeof record.proofDocument === 'string' && record.proofDocument
+                          && <span>Proof: {record.proofDocument}</span>}
+                        {typeof record.proofLink === 'string' && record.proofLink
+                          && <a href={isHttpUrl(record.proofLink) ? record.proofLink : undefined}
+                            target="_blank" rel="noreferrer">Open proof link</a>}
                       </div>
                     )) : <p>No career history provided.</p>}
                   </article>
 
                   <article className="mentor-application-detail-card">
-                    <header><CalendarDays size={16} /><h4>Availability</h4></header>
-                    {availabilityDays.length ? (
-                      <div className="mentor-application-result-availability">
-                        {availabilityDays.map((day, index) => (
-                          <div key={`${String(day.day)}-${index}`}>
-                            <strong>{submittedText(day.day)}</strong>
-                            <span>{submittedText(day.start)} - {submittedText(day.end)}</span>
-                          </div>
-                        ))}
-                      </div>
-                    ) : <p>No availability provided.</p>}
-                    {typeof submitted.availability?.timeZone === 'string' && (
-                      <span className="mentor-application-timezone">
-                        <Clock3 size={13} /> {String(submitted.availability.timeZone).replaceAll('_', ' ')}
-                      </span>
-                    )}
+                    <header><Sparkles size={16} /><h4>Mentorship preferences</h4></header>
+                    <p>Years of professional experience: {submittedText(submitted.values['Years of professional experience'])}</p>
+                    <p>Sessions per week: {submittedText(submitted.values['Sessions per week'])}</p>
+                    <p>Mentoring approach: {submittedText(submitted.values['Mentoring approach'])}</p>
                   </article>
 
                   <article className="mentor-application-detail-card">
@@ -1450,82 +1439,30 @@ export function ApplyForMentorForm({
       return (
         <div className="boa-stack">
           <div>
-            <h3 className="boa-card-title">Mentorship Preferences and Availability</h3>
-            <p className="boa-card-subtitle">Choose when you are available and how you prefer to mentor.</p>
-          </div>
-          <fieldset className="apid-field">
-            <legend>Available days and times (optional)</legend>
-            <div className="boa-stack">
-              {DAYS.map((day) => {
-                const selected = form.selectedDays.includes(day);
-                return (
-                  <div key={day} style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '0.5rem' }}>
-                    <label style={{ minWidth: 120 }}>
-                      <input type="checkbox" checked={selected} disabled={isSubmitting}
-                        onChange={(event) => update({
-                          selectedDays: event.target.checked
-                            ? [...form.selectedDays, day]
-                            : form.selectedDays.filter((selectedDay) => selectedDay !== day),
-                        })} /> {day}
-                    </label>
-                    {selected && (
-                      <>
-                        <label htmlFor={`mentor-${day}-start`} className="boa-muted">From</label>
-                        <input id={`mentor-${day}-start`} className="apid-input" type="time"
-                          aria-label={`${day} start time`} value={form.dayTimes[day]?.start ?? ''}
-                          onChange={(event) => update({
-                            dayTimes: { ...form.dayTimes, [day]: { ...form.dayTimes[day], start: event.target.value } },
-                          })} disabled={isSubmitting} />
-                        <label htmlFor={`mentor-${day}-end`} className="boa-muted">To</label>
-                        <input id={`mentor-${day}-end`} className="apid-input" type="time"
-                          aria-label={`${day} end time`} value={form.dayTimes[day]?.end ?? ''}
-                          onChange={(event) => update({
-                            dayTimes: { ...form.dayTimes, [day]: { ...form.dayTimes[day], end: event.target.value } },
-                          })} disabled={isSubmitting} />
-                      </>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-          </fieldset>
-          <div className="apid-field">
-            <label htmlFor="mentor-time-zone">Time zone (optional)</label>
-            <select id="mentor-time-zone" className="apid-input" value={form.timeZone}
-              onChange={(event) => update({ timeZone: event.target.value })} disabled={isSubmitting}>
-              {[...new Set([form.timeZone, ...TIME_ZONES])].map((zone) => <option key={zone}>{zone}</option>)}
-            </select>
+            <h3 className="boa-card-title">Mentorship preferences</h3>
+            <p className="boa-card-subtitle">Share your experience, weekly mentoring capacity, and approach.</p>
           </div>
           <div className="apid-field">
-            <label htmlFor="mentor-max-mentees">
-              How many mentees can you comfortably mentor at the same time? (optional)
-            </label>
-            <input id="mentor-max-mentees" className="apid-input" type="number" min={1} max={100} step={1}
-              value={form.maxMentees} onChange={(event) => update({ maxMentees: event.target.value })}
+            <label htmlFor="mentor-experience-years">Years of professional experience (optional)</label>
+            <input id="mentor-experience-years" className="apid-input" type="number" min={0} max={80} step={1}
+              value={form.experienceYears}
+              onChange={(event) => update({ experienceYears: event.target.value })}
               disabled={isSubmitting} />
           </div>
-          <fieldset className="apid-field">
-            <legend>Mentorship format (optional)</legend>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(190px, 1fr))', gap: '0.75rem' }}>
-              {FORMATS.map(({ value, description, icon: Icon }) => {
-                const selected = form.formats.includes(value);
-                return (
-                  <label key={value} className="apid-card"
-                    style={{ padding: '1rem', cursor: 'pointer', borderColor: selected ? 'var(--primary)' : undefined }}>
-                    <input type="checkbox" checked={selected} disabled={isSubmitting}
-                      onChange={(event) => update({
-                        formats: event.target.checked
-                          ? [...form.formats, value]
-                          : form.formats.filter((format) => format !== value),
-                      })} />
-                    <Icon size={20} aria-hidden="true" />
-                    <strong>{value}</strong>
-                    <span className="boa-muted">{description}</span>
-                  </label>
-                );
-              })}
-            </div>
-          </fieldset>
+          <div className="apid-field">
+            <label htmlFor="mentor-sessions-per-week">Sessions per week (optional)</label>
+            <input id="mentor-sessions-per-week" className="apid-input" type="number" min={0} max={100} step={1}
+              value={form.sessionsPerWeek}
+              onChange={(event) => update({ sessionsPerWeek: event.target.value })}
+              disabled={isSubmitting} />
+          </div>
+          <div className="apid-field">
+            <label htmlFor="mentor-approach">Mentoring approach (optional)</label>
+            <textarea id="mentor-approach" className="apid-input" rows={4} maxLength={2000}
+              value={form.mentoringApproach}
+              onChange={(event) => update({ mentoringApproach: event.target.value })}
+              disabled={isSubmitting} />
+          </div>
         </div>
       );
     }
@@ -1615,11 +1552,13 @@ export function ApplyForMentorForm({
                   <strong>{education.educationLevel || 'Education level not provided'}</strong>
                   {education.fieldOfStudy && ` · ${education.fieldOfStudy}`}
                   {education.institution && ` · ${education.institution}`}
-                  <div className="boa-muted">
-                    {education.file
-                      ? `Document: ${education.file.name}`
-                      : education.link ? `Link: ${education.link}` : 'No certificate provided'}
-                  </div>
+                  {education.file && (
+                    <div className="boa-muted">
+                      Document: {education.file.name}
+                    </div>
+                  )}
+                  {education.link && <div className="boa-muted">Link: {education.link}</div>}
+                  {!education.file && !education.link && <div className="boa-muted">No certificate provided</div>}
                 </li>
               ))}
             </ul>
@@ -1642,7 +1581,11 @@ export function ApplyForMentorForm({
               {form.professionalCertificates.map((certificate, index) => (
                 <li key={`${certificate.name}-${index}`}>
                   <strong>{certificate.name || 'Untitled certificate'}</strong>
-                  {certificate.file && <div className="boa-muted">File: {certificate.file.name}</div>}
+                  {certificate.file && (
+                    <div className="boa-muted">
+                      File: {certificate.file.name}
+                    </div>
+                  )}
                   {certificate.link && <div className="boa-muted">Link: {certificate.link}</div>}
                   <div className="boa-muted">
                     Skills: {[
@@ -1673,7 +1616,7 @@ export function ApplyForMentorForm({
                   <strong>{experience.role}</strong> · {experience.organization} · {experience.startYear}–{experience.current ? 'Present' : experience.endYear}
                   {experience.description && <div>{experience.description}</div>}
                   <div className="boa-muted">
-                    Proof: {experience.proofFile?.name ?? experience.proofLink}
+                    Proof: {experience.proofFile?.name || experience.proofLink || 'Not provided'}
                   </div>
                 </li>
               ))}
@@ -1694,16 +1637,18 @@ export function ApplyForMentorForm({
                       ? '–Present'
                       : experience.endYear ? `–${experience.endYear}` : ''}`}
                   {experience.description && <div>{experience.description}</div>}
+                  {(experience.proofFile || experience.proofLink) && (
+                    <div className="boa-muted">Proof: {experience.proofFile?.name ?? experience.proofLink}</div>
+                  )}
                 </li>
               ))}
             </ul>
           )}
         </SummarySection>
-        <SummarySection title="Mentorship Preferences and Availability" onEdit={() => setStep(6)}>
-          <p>{form.selectedDays.map((day) =>
-            `${day} ${form.dayTimes[day]?.start}–${form.dayTimes[day]?.end}`
-          ).join(', ')} ({form.timeZone})</p>
-          <p>Capacity: {form.maxMentees} mentees · {form.formats.join(', ')}</p>
+        <SummarySection title="Mentorship preferences" onEdit={() => setStep(6)}>
+          <p>Years of professional experience: {form.experienceYears || 'Not provided'}</p>
+          <p>Sessions per week: {form.sessionsPerWeek || 'Not provided'}</p>
+          <p>Mentoring approach: {form.mentoringApproach.trim() || 'Not provided'}</p>
         </SummarySection>
         <SummarySection title="CV and Letter of Motivation" onEdit={() => setStep(7)}>
           <p>CV: {form.cv ? `${form.cv.name} · ${formatFileSize(form.cv)}` : 'Not provided'}</p>

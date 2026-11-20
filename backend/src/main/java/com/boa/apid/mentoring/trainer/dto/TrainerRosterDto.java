@@ -21,7 +21,6 @@ public record TrainerRosterDto(
         int pendingTrainees,
         int maxConcurrentTrainees,
         String bio,
-        String availabilityNotes,
         List<TrainerSkillDto> skills,
         Instant effectiveFrom,
         Instant updatedAt,

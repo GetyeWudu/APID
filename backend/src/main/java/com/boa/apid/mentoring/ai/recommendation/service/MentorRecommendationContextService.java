@@ -89,7 +89,6 @@ public class MentorRecommendationContextService {
         append(profile, "Professional experience (years)", mentor.experienceYears());
         append(profile, "Mentoring approach", redact(mentor.mentoringApproach(), mentor));
         append(profile, "Sessions per week", mentor.sessionsPerWeek());
-        append(profile, "Availability", redact(mentor.availabilityNotes(), mentor));
         append(profile, "Average trainee rating", mentor.averageRating());
         append(profile, "Active trainees", mentor.activeTrainees());
         append(profile, "Available capacity", mentor.remainingCapacity());
@@ -101,7 +100,6 @@ public class MentorRecommendationContextService {
         if (application != null) {
             append(profile, "Expertise summary", redact(application.getExpertiseSummary(), mentor));
             append(profile, "Application profile", redact(sanitizeApplicationNote(application.getNote()), mentor));
-            append(profile, "Application availability", redact(application.getAvailabilityNotes(), mentor));
             append(profile, "Application experience (years)", application.getExperienceYears());
             append(profile, "Application mentoring approach",
                     redact(application.getMentoringApproach(), mentor));

@@ -9,7 +9,6 @@ public record TrainerDirectoryDto(
         String fullName,
         String departmentName,
         String bio,
-        String availabilityNotes,
         int activeTrainees,
         int remainingCapacity,
         Double averageRating,

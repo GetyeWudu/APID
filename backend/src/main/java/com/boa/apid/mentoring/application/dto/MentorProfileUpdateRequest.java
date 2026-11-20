@@ -9,7 +9,6 @@ import java.util.List;
 public record MentorProfileUpdateRequest(
         @NotBlank @Size(max = 100000) String profileDetails,
         @Size(max = 1000) String changeNote,
-        @Size(max = 1000) String availabilityNotes,
         @Min(0) Integer experienceYears,
         @Size(max = 2000) String mentoringApproach,
         @Min(0) Integer sessionsPerWeek,

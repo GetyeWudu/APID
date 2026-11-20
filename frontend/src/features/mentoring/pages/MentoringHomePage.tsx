@@ -190,7 +190,7 @@ export function MentoringHomePage() {
       <div className="boa-stack">
         <PageHeader
           title="Mentor Profile"
-          subtitle="Keep your expertise, availability, and trainee capacity up to date for employees seeking a mentor."
+          subtitle="Keep your expertise, mentoring profile, and trainee capacity up to date for employees seeking a mentor."
           source="live"
         />
         <MentorProfileForm activeSkills={activeSkills} currentUserId={user?.id ?? 0} />

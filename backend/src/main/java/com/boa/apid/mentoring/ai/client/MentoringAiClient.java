@@ -23,7 +23,7 @@ public class MentoringAiClient {
 
     public MentoringAiClient(
             @Value("${mentoring.ai.ollama.chat-url:http://10.9.36.155:11434/api/chat}") String chatUrl,
-            @Value("${mentoring.ai.ollama.model:qwen3:8b}") String model
+            @Value("${mentoring.ai.ollama.model:qwen3:8gb}") String model
     ) {
         HttpClient httpClient = HttpClient.newBuilder()
                 .connectTimeout(Duration.ofSeconds(5))

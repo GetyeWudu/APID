@@ -343,6 +343,74 @@
   overflow-wrap: anywhere;
 }
 
+.mentor-profile-change-section {
+  grid-column: 1 / -1;
+}
+
+.mentor-profile-change-comparison {
+  display: grid;
+  gap: 0.55rem;
+}
+
+.mentor-profile-change-comparison-headings,
+.mentor-profile-change-comparison-row {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.55rem;
+}
+
+.mentor-profile-change-comparison-headings {
+  color: var(--muted);
+  font-size: 0.76rem;
+}
+
+.mentor-profile-change-comparison-row {
+  padding-top: 0.55rem;
+  border-top: 1px solid var(--border);
+}
+
+.mentor-profile-change-label {
+  grid-column: 1 / -1;
+  color: var(--text);
+  font-size: 0.8rem;
+}
+
+.mentor-profile-change-comparison-row > div {
+  min-width: 0;
+  padding: 0.65rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--text);
+  font-size: 0.8rem;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+  white-space: pre-line;
+}
+
+.mentor-profile-change-file {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  flex-wrap: wrap;
+  margin-top: 0.55rem;
+  padding-top: 0.55rem;
+  border-top: 1px solid var(--border);
+}
+
+.mentor-profile-change-file > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  min-width: 0;
+  margin-right: auto;
+  overflow-wrap: anywhere;
+}
+
+.mentor-profile-change-note {
+  margin-top: 0.85rem !important;
+}
+
 .mentor-application-agreement-snapshot {
   display: grid;
   gap: 0.4rem;
@@ -546,54 +614,10 @@
   gap: 0.35rem;
 }
 
-.mentor-availability-list {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 0.45rem;
-}
-
-.mentor-availability-item {
-  display: flex;
-  justify-content: space-between;
-  gap: 0.5rem;
-  padding: 0.55rem 0.65rem;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  background: var(--surface);
-  font-size: 0.78rem;
-}
-
-.mentor-availability-item strong {
-  color: var(--text);
-}
-
-.mentor-availability-item span {
-  color: var(--muted);
-  text-align: right;
-}
-
-.mentor-availability-timezone {
-  grid-column: 1 / -1;
-  color: var(--muted-soft);
-  font-size: 0.75rem;
-}
-
 .mentor-preference-bottom-grid {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(140px, 0.55fr);
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 0.75rem;
-}
-
-.mentor-preference-format {
-  display: inline-flex;
-  align-items: center;
-  padding: 0.28rem 0.55rem;
-  border: 1px solid var(--brand-soft-border);
-  border-radius: 999px;
-  background: var(--brand-soft);
-  color: var(--brand);
-  font-size: 0.75rem;
-  font-weight: 700;
 }
 
 .mentor-capacity-card {
@@ -648,10 +672,6 @@
 
   .mentor-application-detail-section dl > div {
     grid-template-columns: minmax(90px, 0.7fr) minmax(0, 1.3fr);
-  }
-
-  .mentor-availability-list {
-    grid-template-columns: minmax(0, 1fr);
   }
 
   .mentor-preference-bottom-grid {

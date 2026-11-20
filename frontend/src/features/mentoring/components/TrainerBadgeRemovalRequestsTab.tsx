@@ -53,6 +53,10 @@ export function TrainerBadgeRemovalRequestsTab({
 
   return (
     <div className="boa-stack">
+      <div>
+        <h2 className="boa-card-title">Badge removal requests</h2>
+        <p className="boa-card-subtitle">Review mentor requests to remove their mentor authorization.</p>
+      </div>
       {requests.length === 0 ? (
         <div className="apid-card">
           <EmptyState

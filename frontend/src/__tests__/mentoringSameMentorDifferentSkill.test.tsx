@@ -16,7 +16,6 @@ const mentor: MentorDirectoryItem = {
   fullName: 'Mentor One',
   departmentName: 'Finance',
   bio: null,
-  availabilityNotes: null,
   activeTrainees: 1,
   remainingCapacity: 3,
   averageRating: 4.5,
@@ -162,26 +161,20 @@ describe('same mentor requests for different skills', () => {
       expect(screen.getByText('Page 2 of 2 (12 mentors)')).toBeInTheDocument();
     });
 
-    it('opens the selected mentor profile in a modal with readable availability', () => {
-      const availabilityNotes = JSON.stringify({
-        days: [{ day: 'Tuesday', start: '10:00', end: '12:00' }],
-        timeZone: 'Africa/Addis_Ababa',
-        formats: ['Both'],
-      });
+    it('opens the selected mentor profile without a schedule section', () => {
       renderWithProviders(
         <MentorDirectory
-          mentors={[{ ...mentor, availabilityNotes }]}
+          mentors={[mentor]}
           currentUserId={7}
         />
       );
 
-      expect(screen.queryByText(availabilityNotes)).not.toBeInTheDocument();
       fireEvent.click(screen.getByRole('button', { name: 'View profile for Mentor One' }));
 
       const profileDialog = screen.getByRole('dialog', { name: 'Mentor profile for Mentor One' });
-      expect(within(profileDialog).getByText('Tuesday')).toBeInTheDocument();
-      expect(within(profileDialog).getByText('10:00–12:00')).toBeInTheDocument();
-      expect(within(profileDialog).getByText('Africa/Addis Ababa')).toBeInTheDocument();
+      expect(within(profileDialog).getByText('Open capacity')).toBeInTheDocument();
+      expect(within(profileDialog).queryByText(/time zone/i)).not.toBeInTheDocument();
+      expect(within(profileDialog).queryByText(/availability details/i)).not.toBeInTheDocument();
       fireEvent.click(within(profileDialog).getByRole('button', { name: 'Close mentor profile' }));
       expect(screen.queryByRole('dialog', { name: 'Mentor profile for Mentor One' })).not.toBeInTheDocument();
     });

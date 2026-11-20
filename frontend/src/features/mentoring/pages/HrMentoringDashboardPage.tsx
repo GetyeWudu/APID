@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useSearchParams } from 'react-router-dom';
 import { useAuth } from '../../../app/AuthContext';
@@ -10,7 +10,6 @@ import {
   PermissionGate,
 } from '../../../shared/components/ui';
 import { HR_MODULE_PERMISSIONS } from '../../../shared/auth/workspaceResolver';
-import { skillsApi } from '../../admin/skills/api/skillsApi';
 import { mentorApplicationApi } from '../api/mentorApplicationApi';
 import { mentoringMatchApi } from '../api/mentoringMatchApi';
 import { mentoringTrainerApi } from '../api/mentoringTrainerApi';
@@ -22,7 +21,8 @@ import { TrainerApplicationsTab } from '../components/TrainerApplicationsTab';
 import { TrainerRosterTab } from '../components/TrainerRosterTab';
 import './MentoringDashboard.css';
 
-type HrTabKey = 'applications' | 'trainers' | 'badge-removal-requests' | 'direct-matching' | 'matching' | 'analytics';
+type HrTabKey = 'applications' | 'mentor-management' | 'direct-matching' | 'matching' | 'analytics';
+type MentorManagementSection = 'profile-updates' | 'removal-requests' | 'access';
 
 interface HrTabMeta {
   key: HrTabKey;
@@ -33,72 +33,85 @@ interface HrTabMeta {
 const HR_TABS: HrTabMeta[] = [
   { key: 'applications', label: 'Trainer Applications', anyPermissions: ['TRAINER_APPLICATION_REVIEW'] },
   {
-    key: 'trainers',
-    label: 'Approved Trainers',
-    anyPermissions: ['TRAINER_DIRECT_APPOINT', 'TRAINER_STATUS_MANAGE', 'MENTORING_REPORT_VIEW_ALL'],
+    key: 'mentor-management',
+    label: 'Mentor Management',
+    anyPermissions: ['TRAINER_STATUS_MANAGE', 'TRAINER_APPLICATION_REVIEW'],
   },
-  { key: 'badge-removal-requests', label: 'Badge Removal Requests', anyPermissions: ['TRAINER_STATUS_MANAGE'] },
   { key: 'direct-matching', label: 'Match Mentor & Trainee', anyPermissions: ['MENTORING_MATCH_MANAGE'] },
   { key: 'matching', label: 'Match Requests & Reassignments', anyPermissions: ['MENTORING_MATCH_MANAGE', 'TRAINER_STATUS_MANAGE'] },
   { key: 'analytics', label: 'Outcomes', anyPermissions: ['MENTORING_REPORT_VIEW_ALL'] },
 ];
 
+const MENTOR_MANAGEMENT_SECTIONS: Array<{
+  key: MentorManagementSection;
+  label: string;
+  anyPermissions: string[];
+}> = [
+  { key: 'profile-updates', label: 'Update request management', anyPermissions: ['TRAINER_APPLICATION_REVIEW'] },
+  { key: 'removal-requests', label: 'Removal requests', anyPermissions: ['TRAINER_STATUS_MANAGE'] },
+  { key: 'access', label: 'Manage access', anyPermissions: ['TRAINER_STATUS_MANAGE'] },
+];
+
 export function HrMentoringDashboardPage() {
   const { hasAnyPermission } = useAuth();
   const [searchParams] = useSearchParams();
+  const [selectedManagementSection, setSelectedManagementSection] =
+    useState<MentorManagementSection>('profile-updates');
   const visibleTabs = useMemo(
     () => HR_TABS.filter((tab) => hasAnyPermission(tab.anyPermissions)),
     [hasAnyPermission]
   );
-  const requestedTab = searchParams.get('tab') as HrTabKey | null;
+  const requestedTabValue = searchParams.get('tab');
+  const requestedTab = (requestedTabValue === 'badge-removal-requests'
+    ? 'mentor-management'
+    : requestedTabValue) as HrTabKey | null;
   const activeTab = visibleTabs.find((tab) => tab.key === requestedTab)?.key ?? visibleTabs[0]?.key ?? null;
 
   const canReviewApplications = hasAnyPermission(['TRAINER_APPLICATION_REVIEW']);
   const canManageTrainerStatus = hasAnyPermission(['TRAINER_STATUS_MANAGE']);
-  const canManageTrainers = hasAnyPermission([
-    'TRAINER_DIRECT_APPOINT',
-    'TRAINER_STATUS_MANAGE',
-    'MENTORING_REPORT_VIEW_ALL',
-    'MENTORING_MATCH_MANAGE',
-  ]);
-  const canAppointTrainers = hasAnyPermission(['TRAINER_DIRECT_APPOINT']);
   const canManageMatches = hasAnyPermission(['MENTORING_MATCH_MANAGE']);
   const canViewReports = hasAnyPermission(['MENTORING_REPORT_VIEW_ALL']);
+  const visibleManagementSections = MENTOR_MANAGEMENT_SECTIONS
+    .filter((section) => hasAnyPermission(section.anyPermissions));
+  const activeManagementSection = visibleManagementSections.find(
+    (section) => section.key === selectedManagementSection
+  )?.key ?? visibleManagementSections[0]?.key ?? null;
+  const canLoadTrainers = (
+    activeTab === 'matching'
+      && hasAnyPermission(['TRAINER_STATUS_MANAGE', 'MENTORING_MATCH_MANAGE'])
+  ) || (activeTab === 'direct-matching' && canManageMatches)
+    || (activeTab === 'mentor-management' && activeManagementSection === 'access' && canManageTrainerStatus)
+    || (activeTab === 'analytics' && canViewReports);
 
   const applicationsQuery = useQuery({
     queryKey: ['mentoring', 'applications'],
     queryFn: mentorApplicationApi.list,
-    enabled: canReviewApplications,
+    enabled: canReviewApplications && (
+      activeTab === 'applications'
+      || (activeTab === 'mentor-management' && activeManagementSection === 'profile-updates')
+    ),
   });
   const trainersQuery = useQuery({
     queryKey: ['mentoring', 'trainers'],
     queryFn: mentoringTrainerApi.listRoster,
-    enabled: canManageTrainers,
-  });
-  const candidatesQuery = useQuery({
-    queryKey: ['mentoring', 'appointment-candidates'],
-    queryFn: mentoringTrainerApi.listAppointmentCandidates,
-    enabled: canAppointTrainers,
+    enabled: canLoadTrainers,
   });
   const matchingEmployeesQuery = useQuery({
     queryKey: ['mentoring', 'matching-employees'],
     queryFn: mentoringTrainerApi.listMatchingEmployees,
-    enabled: canManageMatches,
-  });
-  const skillsQuery = useQuery({
-    queryKey: ['mentoring', 'active-skills'],
-    queryFn: skillsApi.listActive,
-    enabled: canAppointTrainers,
+    enabled: canManageMatches && activeTab === 'direct-matching',
   });
   const matchRequestsQuery = useQuery({
     queryKey: ['mentoring', 'hr-match-requests'],
     queryFn: mentoringMatchApi.listForHr,
-    enabled: canManageMatches,
+    enabled: canManageMatches && activeTab === 'matching',
   });
   const badgeRemovalRequestsQuery = useQuery({
     queryKey: ['mentoring', 'badge-removal-requests'],
     queryFn: mentoringTrainerApi.listBadgeRemovalRequests,
-    enabled: canManageTrainerStatus && activeTab === 'badge-removal-requests',
+    enabled: canManageTrainerStatus
+      && activeTab === 'mentor-management'
+      && activeManagementSection === 'removal-requests',
   });
   const overviewQuery = useQuery({
     queryKey: ['mentoring', 'hr-overview'],
@@ -115,13 +128,17 @@ export function HrMentoringDashboardPage() {
   }
 
   const activeQueries = [
-    canReviewApplications ? applicationsQuery : null,
-    canManageTrainers ? trainersQuery : null,
-    canAppointTrainers ? candidatesQuery : null,
-    canManageMatches ? matchingEmployeesQuery : null,
-    canAppointTrainers ? skillsQuery : null,
-    canManageMatches ? matchRequestsQuery : null,
-    canManageTrainerStatus && activeTab === 'badge-removal-requests' ? badgeRemovalRequestsQuery : null,
+    canReviewApplications && (
+      activeTab === 'applications'
+      || (activeTab === 'mentor-management' && activeManagementSection === 'profile-updates')
+    ) ? applicationsQuery : null,
+    canLoadTrainers ? trainersQuery : null,
+    canManageMatches && activeTab === 'direct-matching' ? matchingEmployeesQuery : null,
+    canManageMatches && activeTab === 'matching' ? matchRequestsQuery : null,
+    canManageTrainerStatus && activeTab === 'mentor-management'
+      && activeManagementSection === 'removal-requests'
+      ? badgeRemovalRequestsQuery
+      : null,
     canViewReports && activeTab === 'analytics' ? overviewQuery : null,
   ].filter((query): query is NonNullable<typeof query> => query !== null);
   const isLoading = activeQueries.some((query) => query.isLoading);
@@ -130,17 +147,13 @@ export function HrMentoringDashboardPage() {
     ? 'Failed to load trainer applications.'
     : failedQuery === trainersQuery
       ? 'Failed to load trainer authorizations.'
-      : failedQuery === candidatesQuery
-        ? 'Failed to load employee appointment candidates.'
-        : failedQuery === matchingEmployeesQuery
-          ? 'Failed to load active matching employees.'
-          : failedQuery === skillsQuery
-            ? 'Failed to load the active skills catalog.'
-            : failedQuery === matchRequestsQuery
-              ? 'Failed to load HR matching requests.'
-              : failedQuery === badgeRemovalRequestsQuery
-                ? 'Failed to load mentor badge removal requests.'
-              : 'Failed to load mentoring analytics.';
+      : failedQuery === matchingEmployeesQuery
+        ? 'Failed to load active matching employees.'
+        : failedQuery === matchRequestsQuery
+          ? 'Failed to load HR matching requests.'
+          : failedQuery === badgeRemovalRequestsQuery
+            ? 'Failed to load mentor badge removal requests.'
+            : 'Failed to load mentoring analytics.';
 
   if (isLoading) return <LoadingSkeleton rows={6} height={28} />;
   if (failedQuery) {
@@ -156,36 +169,64 @@ export function HrMentoringDashboardPage() {
   const trainers = trainersQuery.data ?? [];
   const overview = overviewQuery.data;
   const matchRequests = matchRequestsQuery.data ?? [];
-  const activeSkills = skillsQuery.data ?? [];
 
   return (
     <div className="boa-stack mentoring-dashboard">
       <PageHeader
         title={visibleTabs.find((tab) => tab.key === activeTab)?.label ?? 'Mentoring'}
-        subtitle="Manage trainer applications, authorizations, HR matching, and mentoring outcomes."
+        subtitle={activeTab === 'mentor-management'
+          ? 'Review profile updates, removal requests, and mentor access.'
+          : 'Manage trainer applications, HR matching, and mentoring outcomes.'}
         source="live"
       />
 
       {activeTab === 'applications' && (
         <PermissionGate permission="TRAINER_APPLICATION_REVIEW">
-          <TrainerApplicationsTab applications={applications} />
-        </PermissionGate>
-      )}
-
-      {activeTab === 'trainers' && (
-        <PermissionGate anyPermissions={['TRAINER_DIRECT_APPOINT', 'TRAINER_STATUS_MANAGE', 'MENTORING_REPORT_VIEW_ALL']}>
-          <TrainerRosterTab
-            trainers={trainers}
-            candidates={candidatesQuery.data ?? []}
-            skills={activeSkills.map((skill) => ({ id: skill.id, name: skill.name }))}
+          <TrainerApplicationsTab
+            applications={applications.filter((application) => application.applicationType !== 'PROFILE_UPDATE')}
           />
         </PermissionGate>
       )}
 
-      {activeTab === 'badge-removal-requests' && (
-        <PermissionGate permission="TRAINER_STATUS_MANAGE">
-          <TrainerBadgeRemovalRequestsTab requests={badgeRemovalRequestsQuery.data ?? []} />
-        </PermissionGate>
+      {activeTab === 'mentor-management' && activeManagementSection && (
+        <div className="boa-stack">
+          <div
+            role="tablist"
+            aria-label="Mentor Management sections"
+            style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}
+          >
+            {visibleManagementSections.map((section) => (
+              <button
+                key={section.key}
+                type="button"
+                role="tab"
+                aria-selected={activeManagementSection === section.key}
+                className={`apid-btn ${activeManagementSection === section.key ? 'apid-btn-primary' : 'apid-btn-outline'}`}
+                onClick={() => setSelectedManagementSection(section.key)}
+              >
+                {section.label}
+              </button>
+            ))}
+          </div>
+          {activeManagementSection === 'profile-updates' && canReviewApplications && (
+            <PermissionGate permission="TRAINER_APPLICATION_REVIEW">
+              <TrainerApplicationsTab
+                applications={applications}
+                mode="profile-updates"
+              />
+            </PermissionGate>
+          )}
+          {activeManagementSection === 'removal-requests' && canManageTrainerStatus && (
+            <PermissionGate permission="TRAINER_STATUS_MANAGE">
+              <TrainerBadgeRemovalRequestsTab requests={badgeRemovalRequestsQuery.data ?? []} />
+            </PermissionGate>
+          )}
+          {activeManagementSection === 'access' && canManageTrainerStatus && (
+            <PermissionGate permission="TRAINER_STATUS_MANAGE">
+              <TrainerRosterTab trainers={trainers} candidates={[]} skills={[]} mode="access" />
+            </PermissionGate>
+          )}
+        </div>
       )}
 
       {activeTab === 'matching' && (

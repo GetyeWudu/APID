@@ -18,56 +18,6 @@ import './MentorDirectory.css';
 
 const MENTORS_PER_PAGE = 10;
 
-type AvailabilityProfile = {
-  days: Array<{ day: string; start: string; end: string }>;
-  timeZone: string;
-  formats: string[];
-};
-
-function parseAvailability(value: string | null | undefined): AvailabilityProfile | null {
-  if (!value) return null;
-  try {
-    const parsed: unknown = JSON.parse(value);
-    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return null;
-    const availability = parsed as Record<string, unknown>;
-    const days = Array.isArray(availability.days)
-      ? availability.days
-        .filter((entry): entry is Record<string, unknown> =>
-          Boolean(entry) && typeof entry === 'object' && !Array.isArray(entry))
-        .map((entry) => ({
-          day: typeof entry.day === 'string' ? entry.day : '',
-          start: typeof entry.start === 'string' ? entry.start : '',
-          end: typeof entry.end === 'string' ? entry.end : '',
-        }))
-        .filter((entry) => entry.day)
-      : [];
-    return {
-      days,
-      timeZone: typeof availability.timeZone === 'string' ? availability.timeZone : '',
-      formats: Array.isArray(availability.formats)
-        ? availability.formats.filter((format): format is string => typeof format === 'string')
-        : [],
-    };
-  } catch {
-    return null;
-  }
-}
-
-function formatAvailability(value: string | null | undefined) {
-  const availability = parseAvailability(value);
-  if (!availability) {
-    return value?.trim().startsWith('{') ? null : value;
-  }
-  const schedule = availability.days.map(({ day, start, end }) =>
-    `${day}${start && end ? ` ${start}–${end}` : ''}`
-  );
-  return [
-    schedule.join(', '),
-    availability.timeZone.replace(/_/g, ' '),
-    availability.formats.join(', '),
-  ].filter(Boolean).join(' · ') || null;
-}
-
 function normalizeProfileText(value: string) {
   return value.trim().replace(/\s+/g, ' ').toLowerCase();
 }
@@ -170,9 +120,6 @@ export function MentorDirectory({
           (request.status === 'PENDING' || request.status === 'ACCEPTED')
       )
     : undefined;
-  const profileAvailability = profileMentor
-    ? parseAvailability(profileMentor.availabilityNotes)
-    : null;
   const profileSkillsSummary = profileMentor?.skills.map((skill) => skill.name).join(', ') ?? '';
   const profileApproach = profileMentor?.mentoringApproach?.trim() || '';
   const profileBio = profileMentor?.bio?.trim() || '';
@@ -228,12 +175,11 @@ export function MentorDirectory({
         : `${mentor.experienceYears} year${mentor.experienceYears === 1 ? '' : 's'}`,
     },
     {
-      key: 'availability',
-      header: 'Availability',
+      key: 'capacity',
+      header: 'Capacity',
       render: (mentor) => {
-        const availability = formatAvailability(mentor.availabilityNotes);
         return (
-          <div className="mentor-directory-availability">
+          <div className="mentor-directory-capacity">
             <strong>
               {mentor.remainingCapacity === undefined
                 ? 'Capacity not available'
@@ -242,10 +188,7 @@ export function MentorDirectory({
             {mentor.sessionsPerWeek != null && (
               <span>{mentor.sessionsPerWeek} sessions/week</span>
             )}
-            {availability && <span title={availability}>{availability}</span>}
-            {mentor.sessionsPerWeek == null && !availability && (
-              <span className="boa-muted">Schedule not provided</span>
-            )}
+            {mentor.sessionsPerWeek == null && <span className="boa-muted">Weekly sessions not provided</span>}
           </div>
         );
       },
@@ -444,7 +387,7 @@ export function MentorDirectory({
                   ? 'Not provided'
                   : `${profileMentor.experienceYears} year${profileMentor.experienceYears === 1 ? '' : 's'}`}
               </strong></div>
-              <div><span>Availability</span><strong>
+              <div><span>Open capacity</span><strong>
                 {profileMentor.remainingCapacity} open slot{profileMentor.remainingCapacity === 1 ? '' : 's'}
               </strong></div>
               <div><span>Sessions per week</span><strong>
@@ -505,32 +448,6 @@ export function MentorDirectory({
                 <p>{profileBio}</p>
               </section>
             )}
-            <section className="mentor-directory-profile-section">
-              <h4>Availability details</h4>
-              {!profileAvailability ? (
-                <p>{formatAvailability(profileMentor.availabilityNotes) || 'No schedule provided.'}</p>
-              ) : (
-                <>
-                  {profileAvailability.days.length > 0 ? (
-                    <ul>
-                      {profileAvailability.days.map((day, index) => (
-                        <li key={`${day.day}-${index}`}>
-                          <strong>{day.day}</strong>
-                          {' '}
-                          {day.start && day.end ? `${day.start}–${day.end}` : 'Time not specified'}
-                        </li>
-                      ))}
-                    </ul>
-                  ) : <p>No preferred days provided.</p>}
-                  {profileAvailability.timeZone && (
-                    <p>Time zone: {profileAvailability.timeZone.replace(/_/g, ' ')}</p>
-                  )}
-                  {profileAvailability.formats.length > 0 && (
-                    <p>Format: {profileAvailability.formats.join(', ')}</p>
-                  )}
-                </>
-              )}
-            </section>
             <div className="apid-modal-actions">
               <button
                 type="button"

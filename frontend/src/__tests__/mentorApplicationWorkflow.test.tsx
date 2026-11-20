@@ -100,7 +100,6 @@ describe('mentor application workflow', () => {
         evidenceFiles: [{ fileId: 31, fileName: 'proof.pdf' }],
         note: null,
         expertiseSummary: null,
-        availabilityNotes: null,
         maxConcurrentTrainees: null,
         submittedAt: '2026-01-01T00:00:00Z',
         reviewedByUsername: null,
@@ -136,12 +135,10 @@ describe('mentor application workflow', () => {
           'Mentoring interests / expertise: ["Backend Development","Database Design & Management"]',
           'Professional certificates: [{"title":"Program Certificate","document":"certificate.pdf","skills":["Backend Development"]}]',
           'General professional experience: [{"title":"Software Engineer","organization":"Example Ltd","years":"2025–2026","description":"Software development"}]',
-          'Availability: {"days":[{"day":"Monday","start":"08:32","end":"09:33"}],"timeZone":"Africa/Addis_Ababa"}',
           'Maximum concurrent mentees: 5',
           'CV: resume.pdf (85 KB)',
         ].join('\n'),
         expertiseSummary: 'Backend Development',
-        availabilityNotes: null,
         maxConcurrentTrainees: 5,
         submittedAt: '2026-01-01T00:00:00Z',
         reviewedByUsername: null,
@@ -177,7 +174,6 @@ describe('mentor application workflow', () => {
         evidenceFiles: [{ fileId: 31, fileName: 'proof.pdf' }],
         note: null,
         expertiseSummary: null,
-        availabilityNotes: null,
         maxConcurrentTrainees: null,
         submittedAt: '2026-01-01T00:00:00Z',
         reviewedByUsername: 'hr',
@@ -215,12 +211,9 @@ describe('mentor application workflow', () => {
         'Full name: Mentor One',
         'Educational background: [{"educationLevel":"Bachelor\'s Degree","fieldOfStudy":"Software Engineering","institution":"Example University","certificateLink":"https://example.edu/degree","certificateDocument":"degree.pdf"}]',
         'Mentoring interests / expertise: ["API Development & Integration","Backend Development"]',
-        'Availability: {"days":[{"day":"Monday","start":"","end":""},{"day":"Friday","start":"09:00","end":"12:00"}],"timeZone":"Africa/Addis_Ababa"}',
-        'Mentorship formats: One-on-One Mentorship, Both',
         'Maximum concurrent mentees: 5',
       ].join('\n'),
       expertiseSummary: null,
-      availabilityNotes: null,
       maxConcurrentTrainees: null,
       submittedAt: '2026-01-01T00:00:00Z',
       reviewedByUsername: null,
@@ -274,7 +267,6 @@ describe('mentor application workflow', () => {
       ],
       note: null,
       expertiseSummary: null,
-      availabilityNotes: null,
       maxConcurrentTrainees: null,
       submittedAt: '2026-01-01T00:00:00Z',
       reviewedByUsername: null,
@@ -311,7 +303,6 @@ describe('mentor application workflow', () => {
       evidenceFiles: [],
       note: 'Mentor profile update request',
       expertiseSummary: null,
-      availabilityNotes: 'Weekday evenings',
       experienceYears: 8,
       mentoringApproach: 'Practical coaching',
       sessionsPerWeek: 2,
@@ -326,7 +317,6 @@ describe('mentor application workflow', () => {
 
     expect(await screen.findByRole('heading', { name: 'Requested profile changes' })).toBeInTheDocument();
     expect(screen.getByText('Practical coaching')).toBeInTheDocument();
-    expect(screen.getByText('Weekday evenings')).toBeInTheDocument();
     expect(screen.queryByRole('heading', { name: 'Educational background' })).not.toBeInTheDocument();
   });
 
@@ -393,7 +383,7 @@ describe('mentor application workflow', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Add Career Experience' }));
     expect(screen.getByLabelText('Job title')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Continue' }));
-    expect(await screen.findByText('Mentorship Preferences and Availability')).toBeInTheDocument();
+    expect(await screen.findByText('Mentorship Preferences')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Continue' }));
     expect(await screen.findByText('CV and Letter of Motivation')).toBeInTheDocument();
     expect(screen.getByLabelText(/CV \(optional\)/)).toBeInTheDocument();
@@ -401,11 +391,6 @@ describe('mentor application workflow', () => {
   });
 
   it('includes additional skills and evidence in the complete profile update', async () => {
-    const availability = {
-      days: [{ day: 'Monday', start: '08:00', end: '09:00' }],
-      timeZone: 'Africa/Addis_Ababa',
-      formats: ['One-on-One Mentorship'],
-    };
     vi.spyOn(mentoringTrainerApi, 'getProfile').mockResolvedValue({
       id: 5,
       employeeId: 10,
@@ -420,7 +405,6 @@ describe('mentor application workflow', () => {
       pendingTrainees: 0,
       maxConcurrentTrainees: 5,
       bio: null,
-      availabilityNotes: JSON.stringify(availability),
       skills: [{ id: 4, name: 'Advanced Excel', category: 'Finance', status: 'ACTIVE' }],
       profileApplicationDetails: [
         'MENTOR APPLICATION DETAILS',
@@ -430,8 +414,6 @@ describe('mentor application workflow', () => {
         'Professional certificates: [{"title":"Certificate","link":"","document":"cert.pdf","skills":["Advanced Excel"]}]',
         'Previous mentorship experience: No',
         'General professional experience: [{"title":"Software Engineer","organization":"Example","years":"2024–Present","description":"Builds software"}]',
-        `Availability: ${JSON.stringify(availability)}`,
-        'Mentorship formats: One-on-One Mentorship',
         'Maximum concurrent mentees: 5',
         'CV: resume.pdf',
         'Letter of motivation: letter.pdf',
@@ -498,7 +480,6 @@ describe('mentor application workflow', () => {
       pendingTrainees: 0,
       maxConcurrentTrainees: 5,
       bio: 'Current approach',
-      availabilityNotes: null,
       skills: [{ id: 4, name: 'Advanced Excel', category: 'Finance', status: 'ACTIVE' }],
       effectiveFrom: '2026-01-01T00:00:00Z',
       updatedAt: '2026-01-01T00:00:00Z',
@@ -525,7 +506,6 @@ describe('mentor application workflow', () => {
 
     await waitFor(() => expect(requestProfileUpdate).toHaveBeenCalled());
     expect(requestProfileUpdate).toHaveBeenCalledWith(expect.objectContaining({
-      availabilityNotes: JSON.stringify({ days: [], timeZone: 'UTC', formats: [] }),
       experienceYears: null,
       mentoringApproach: 'A new approach',
       sessionsPerWeek: null,

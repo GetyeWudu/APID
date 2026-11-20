@@ -119,7 +119,6 @@ class MentorApplicationServiceTest {
                 null,
                 null,
                 null,
-                null,
                 List.of(upload),
                 List.of("Supporting evidence"),
                 true,
@@ -184,7 +183,6 @@ class MentorApplicationServiceTest {
                 null,
                 null,
                 "Experienced mentor",
-                "Weekdays",
                 null,
                 null,
                 null,
@@ -233,7 +231,6 @@ class MentorApplicationServiceTest {
                         null,
                         null,
                         null,
-                        null,
                         List.of(proofUpload()),
                         List.of(),
                         true,
@@ -266,7 +263,6 @@ class MentorApplicationServiceTest {
                         null,
                         null,
                         null,
-                        null,
                         List.of(proofUpload()),
                         List.of(),
                         false,
@@ -292,7 +288,6 @@ class MentorApplicationServiceTest {
                 BusinessException.class,
                 () -> service.submit(
                         List.of(12L),
-                        null,
                         null,
                         null,
                         null,
@@ -333,7 +328,6 @@ class MentorApplicationServiceTest {
                 BusinessException.class,
                 () -> service.submit(
                         List.of(12L),
-                        null,
                         null,
                         null,
                         null,
@@ -382,7 +376,6 @@ class MentorApplicationServiceTest {
                 0,
                 0,
                 3,
-                null,
                 null,
                 List.of(),
                 Instant.now(),
@@ -590,7 +583,7 @@ class MentorApplicationServiceTest {
         when(trainerAuthorizationService.getOwnProfile(actor)).thenReturn(new TrainerRosterDto(
                 1L, 2L, actor.getUserId(), "EMP-7", "Mentor Applicant", "Finance", "ACTIVE",
                 TrainerAuthorizationSource.APPLICATION, TrainerAuthorizationStatus.ACTIVE, true,
-                0, 0, 3, null, null, List.of(new TrainerSkillDto(
+                0, 0, 3, null, List.of(new TrainerSkillDto(
                         4L, "Existing skill", "Finance", TrainerAuthorizationStatus.ACTIVE, null
                 )), Instant.now(), Instant.now(),
                 null, null, null, null, null, null, List.of()
@@ -609,7 +602,6 @@ class MentorApplicationServiceTest {
                 new MentorProfileUpdateRequest(
                         "MENTOR APPLICATION DETAILS\nEducational background: []\nMentoring interests / expertise: [\"Existing skill\"]",
                         null,
-                        "Weekday evenings",
                         8,
                         "A new mentoring approach",
                         2,
@@ -628,7 +620,6 @@ class MentorApplicationServiceTest {
         assertEquals(MentorApplicationStatus.PENDING, saved.getStatus());
         assertNull(saved.getProofDocument());
         assertEquals("A new mentoring approach", saved.getMentoringApproach());
-        assertEquals("Weekday evenings", saved.getAvailabilityNotes());
         assertEquals(MentorApplicationType.PROFILE_UPDATE, result.applicationType());
         assertEquals("MENTOR APPLICATION DETAILS\nEducational background: []\nMentoring interests / expertise: [\"Existing skill\"]",
                 saved.getNote());

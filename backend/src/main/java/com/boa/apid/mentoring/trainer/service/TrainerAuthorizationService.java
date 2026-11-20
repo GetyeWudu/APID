@@ -329,7 +329,7 @@ public class TrainerAuthorizationService {
         saveStatusHistory(saved, null, null, TrainerAuthorizationStatus.ACTIVE,
                 request.appointmentReason().trim(), appointingAdmin);
         notify(trainer.getId(), "TRAINER_DIRECTLY_APPOINTED", "You have been appointed as a mentor",
-                "HR appointed you to mentor employees. Set your mentoring profile and availability.",
+                "HR appointed you to mentor employees. Complete your mentoring profile.",
                 "/mentoring?view=trainer");
         recordAudit(actor, trainer.getId(), "TRAINER_DIRECT_APPOINTED", saved.getId(),
                 Map.of("skillIds", skillIds, "maxConcurrentTrainees", saved.getMaxConcurrentTrainees()));
@@ -388,7 +388,6 @@ public class TrainerAuthorizationService {
     @Transactional
     public TrainerRosterDto updateOwnProfile(TrainerProfileRequest request, ApidUserPrincipal actor) {
         if (request.bio() != null
-                || request.availabilityNotes() != null
                 || request.experienceYears() != null
                 || request.mentoringApproach() != null
                 || request.sessionsPerWeek() != null
@@ -460,7 +459,6 @@ public class TrainerAuthorizationService {
         validateProfileCapacity(mentorUserId, requestedCapacity);
         authorization.setBio(application.getMentoringApproach());
         authorization.setMentoringApproach(application.getMentoringApproach());
-        authorization.setAvailabilityNotes(application.getAvailabilityNotes());
         authorization.setExperienceYears(application.getExperienceYears());
         authorization.setSessionsPerWeek(application.getSessionsPerWeek());
         authorization.setMaxConcurrentTrainees(requestedCapacity);
@@ -470,7 +468,6 @@ public class TrainerAuthorizationService {
             authorization.setSourceApplication(profileApplication);
         }
         profileApplication.setNote(application.getNote());
-        profileApplication.setAvailabilityNotes(application.getAvailabilityNotes());
         profileApplication.setExperienceYears(application.getExperienceYears());
         profileApplication.setMentoringApproach(application.getMentoringApproach());
         profileApplication.setSessionsPerWeek(application.getSessionsPerWeek());
@@ -775,7 +772,6 @@ public class TrainerAuthorizationService {
                 : application.getMentoringApproach();
         authorization.setBio(mentoringApproach);
         authorization.setMentoringApproach(mentoringApproach);
-        authorization.setAvailabilityNotes(application.getAvailabilityNotes());
         authorization.setExperienceYears(application.getExperienceYears());
         authorization.setSessionsPerWeek(application.getSessionsPerWeek());
         authorization.setAuthorizedBy(reviewer);
@@ -1084,7 +1080,6 @@ public class TrainerAuthorizationService {
                 pending,
                 authorization.getMaxConcurrentTrainees(),
                 authorization.getBio(),
-                authorization.getAvailabilityNotes(),
                 skills(authorization, false),
                 authorization.getEffectiveFrom(),
                 authorization.getUpdatedAt(),
@@ -1206,7 +1201,6 @@ public class TrainerAuthorizationService {
                 employee.getFullName(),
                 employee.getDepartmentName(),
                 authorization.getBio(),
-                authorization.getAvailabilityNotes(),
                 active,
                 Math.max(0, authorization.getMaxConcurrentTrainees() - active - pending),
                 averageRating,

@@ -106,7 +106,6 @@ class MentorRecommendationServiceTest {
                 "Mentor Name",
                 "Engineering",
                 null,
-                null,
                 0,
                 2,
                 4.5,

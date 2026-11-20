@@ -26,10 +26,12 @@ export function TrainerRosterTab({
   trainers,
   candidates,
   skills,
+  mode = 'roster',
 }: {
   trainers: TrainerRosterItem[];
   candidates: TrainerEmployeeCandidate[];
   skills: SkillOption[];
+  mode?: 'roster' | 'access';
 }) {
   const queryClient = useQueryClient();
   const { pushToast } = useToast();
@@ -158,29 +160,36 @@ export function TrainerRosterTab({
     <div className="trainer-roster">
       <div className="trainer-roster-header">
         <div>
-          <h3>Approved Trainers</h3>
+          <h3>{mode === 'access' ? 'Manage mentor access' : 'Approved Trainers'}</h3>
           <p>
-            Manage live trainer authorizations, mentoring capacity, and current workload.
+            {mode === 'access'
+              ? 'Suspend, revoke, or restore mentor skill authorizations.'
+              : 'Manage live trainer authorizations, mentoring capacity, and current workload.'}
           </p>
         </div>
-        <PermissionGate permission="TRAINER_DIRECT_APPOINT">
-          <button
-            type="button"
-            className="trainer-roster-appoint"
-            disabled={candidates.length === 0 || skills.length === 0}
-            onClick={() => setShowAppoint(true)}
-          >
-            <UserPlus size={14} /> Appoint Trainer
-          </button>
-        </PermissionGate>
+        {mode === 'roster' && (
+          <PermissionGate permission="TRAINER_DIRECT_APPOINT">
+            <button
+              type="button"
+              className="trainer-roster-appoint"
+              disabled={candidates.length === 0 || skills.length === 0}
+              onClick={() => setShowAppoint(true)}
+            >
+              <UserPlus size={14} /> Appoint Trainer
+            </button>
+          </PermissionGate>
+        )}
       </div>
 
       {trainers.length === 0 ? (
-        <EmptyState title="No trainer authorizations" description="Approved applications and direct appointments will appear here." />
+        <EmptyState
+          title="No mentor authorizations"
+          description="Mentor authorizations will appear here when available."
+        />
       ) : (
         <>
           <div className="trainer-roster-summary">
-            <div><span>Approved trainers</span><strong>{trainers.length}</strong></div>
+            <div><span>Mentors</span><strong>{trainers.length}</strong></div>
             <div><span>Accepting matches</span><strong>{activeTrainerCount}</strong></div>
             <div><span>Active skills</span><strong>{activeSkillCount}</strong></div>
             <div><span>At capacity</span><strong>{atCapacityCount}</strong></div>
@@ -347,13 +356,6 @@ export function TrainerRosterTab({
                     </div>
                     <p>{atCap ? 'At capacity' : `${trainer.maxConcurrentTrainees - committed} places available`}</p>
                   </div>
-
-                  {trainer.availabilityNotes && (
-                    <div className="trainer-roster-availability">
-                      <strong>Availability</strong>
-                      <p>{trainer.availabilityNotes}</p>
-                    </div>
-                  )}
 
                   <div className="trainer-roster-modal-skills">
                     <div className="trainer-roster-section-title">

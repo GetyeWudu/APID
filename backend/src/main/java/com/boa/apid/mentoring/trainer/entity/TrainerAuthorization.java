@@ -41,9 +41,6 @@ public class TrainerAuthorization {
     @Column(length = 2000)
     private String bio;
 
-    @Column(name = "availability_notes", length = 1000)
-    private String availabilityNotes;
-
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "profile_picture_file_id")
     private StoredFile profilePicture;
@@ -109,8 +106,6 @@ public class TrainerAuthorization {
     public void setMaxConcurrentTrainees(int maxConcurrentTrainees) { this.maxConcurrentTrainees = maxConcurrentTrainees; }
     public String getBio() { return bio; }
     public void setBio(String bio) { this.bio = bio; }
-    public String getAvailabilityNotes() { return availabilityNotes; }
-    public void setAvailabilityNotes(String availabilityNotes) { this.availabilityNotes = availabilityNotes; }
     public StoredFile getProfilePicture() { return profilePicture; }
     public void setProfilePicture(StoredFile profilePicture) { this.profilePicture = profilePicture; }
     public Integer getExperienceYears() { return experienceYears; }

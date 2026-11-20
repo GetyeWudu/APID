@@ -31,7 +31,6 @@ export interface TrainerRosterItem {
   pendingTrainees: number;
   maxConcurrentTrainees: number;
   bio: string | null;
-  availabilityNotes: string | null;
   experienceYears?: number | null;
   mentoringApproach?: string | null;
   sessionsPerWeek?: number | null;
@@ -55,7 +54,6 @@ export interface TrainerDirectoryItem {
   fullName: string;
   departmentName: string | null;
   bio: string | null;
-  availabilityNotes: string | null;
   experienceYears?: number | null;
   mentoringApproach?: string | null;
   sessionsPerWeek?: number | null;

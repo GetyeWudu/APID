@@ -35,7 +35,6 @@ function buildMentor(
     fullName: `Mentor ${userId}`,
     departmentName: 'Engineering',
     bio: null,
-    availabilityNotes: null,
     activeTrainees: 1,
     remainingCapacity,
     averageRating: 4.5,

@@ -31,7 +31,6 @@ describe('MentorInvitationForm', () => {
       pendingTrainees: 0,
       maxConcurrentTrainees: 5,
       bio: null,
-      availabilityNotes: null,
       skills: [
         { id: 4, name: 'Advanced Excel', category: 'Finance', status: 'ACTIVE' },
         { id: 8, name: 'Financial Modeling', category: 'Finance', status: 'ACTIVE' },

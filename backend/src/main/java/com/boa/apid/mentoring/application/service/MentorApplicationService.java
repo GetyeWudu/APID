@@ -104,104 +104,17 @@ public class MentorApplicationService {
             MultipartFile proofDocument,
             ApidUserPrincipal actor
     ) {
-        return submit(catalogSkillId, customSkill, note, null, null, null, proofDocument, actor);
-    }
-
-    @Transactional
-    public MentorApplicationSubmittedDto submit(
-            Long catalogSkillId,
-            String customSkill,
-            String note,
-            String expertiseSummary,
-            String availabilityNotes,
-            Integer maxConcurrentTrainees,
-            MultipartFile proofDocument,
-            ApidUserPrincipal actor
-    ) {
         return submit(
                 catalogSkillId == null ? List.of() : List.of(catalogSkillId),
                 customSkill,
                 note,
-                expertiseSummary,
-                availabilityNotes,
-                maxConcurrentTrainees,
+                null,
+                null,
+                null,
+                null,
+                null,
                 proofDocument == null ? List.of() : List.of(proofDocument),
-                actor
-        );
-    }
-
-    @Transactional
-    public MentorApplicationSubmittedDto submit(
-            List<Long> catalogSkillIds,
-            String customSkill,
-            String note,
-            String expertiseSummary,
-            String availabilityNotes,
-            Integer maxConcurrentTrainees,
-            List<MultipartFile> supportingEvidence,
-            ApidUserPrincipal actor
-    ) {
-        return submit(
-                catalogSkillIds,
-                customSkill,
-                note,
-                expertiseSummary,
-                availabilityNotes,
-                null,
-                null,
-                null,
-                maxConcurrentTrainees,
-                supportingEvidence,
-                actor
-        );
-    }
-
-    @Transactional
-    public MentorApplicationSubmittedDto submit(
-            List<Long> catalogSkillIds,
-            String customSkill,
-            String note,
-            String expertiseSummary,
-            String availabilityNotes,
-            Integer experienceYears,
-            String mentoringApproach,
-            Integer sessionsPerWeek,
-            Integer maxConcurrentTrainees,
-            List<MultipartFile> supportingEvidence,
-            ApidUserPrincipal actor
-    ) {
-        return submit(catalogSkillIds, customSkill, note, expertiseSummary, availabilityNotes,
-                experienceYears, mentoringApproach, sessionsPerWeek, maxConcurrentTrainees,
-                supportingEvidence, List.of(), actor);
-    }
-
-    @Transactional
-    public MentorApplicationSubmittedDto submit(
-            List<Long> catalogSkillIds,
-            String customSkill,
-            String note,
-            String expertiseSummary,
-            String availabilityNotes,
-            Integer experienceYears,
-            String mentoringApproach,
-            Integer sessionsPerWeek,
-            Integer maxConcurrentTrainees,
-            List<MultipartFile> supportingEvidence,
-            List<String> supportingEvidenceContexts,
-            ApidUserPrincipal actor
-    ) {
-        return submit(
-                catalogSkillIds,
-                customSkill,
-                note,
-                expertiseSummary,
-                availabilityNotes,
-                experienceYears,
-                mentoringApproach,
-                sessionsPerWeek,
-                maxConcurrentTrainees,
-                supportingEvidence,
-                supportingEvidenceContexts,
+                List.of(),
                 false,
                 null,
                 actor
@@ -214,7 +127,6 @@ public class MentorApplicationService {
             String customSkill,
             String note,
             String expertiseSummary,
-            String availabilityNotes,
             Integer experienceYears,
             String mentoringApproach,
             Integer sessionsPerWeek,
@@ -230,7 +142,6 @@ public class MentorApplicationService {
                 customSkill,
                 note,
                 expertiseSummary,
-                availabilityNotes,
                 experienceYears,
                 mentoringApproach,
                 sessionsPerWeek,
@@ -261,7 +172,6 @@ public class MentorApplicationService {
                 null,
                 null,
                 null,
-                null,
                 supportingEvidence,
                 List.of(),
                 actor,
@@ -281,7 +191,6 @@ public class MentorApplicationService {
         User applicant = userRepository.findByIdForUpdate(actor.getUserId())
                 .orElseThrow(() -> new ResourceNotFoundException("Mentor account not found"));
         String approach = normalizeOptional(request.mentoringApproach());
-        String availability = normalizeOptional(request.availabilityNotes());
         if (request.experienceYears() != null && request.experienceYears() < 0) {
             throw new BusinessException("INVALID_MENTOR_EXPERIENCE", "Years of experience cannot be negative.");
         }
@@ -289,12 +198,6 @@ public class MentorApplicationService {
             throw new BusinessException(
                     "INVALID_MENTOR_WEEKLY_SESSIONS",
                     "Sessions per week cannot be negative."
-            );
-        }
-        if (availability != null && availability.length() > 1000) {
-            throw new BusinessException(
-                    "MENTOR_APPLICATION_AVAILABILITY_TOO_LONG",
-                    "Availability details must be 1000 characters or fewer."
             );
         }
         if (approach != null && approach.length() > 2000) {
@@ -387,7 +290,6 @@ public class MentorApplicationService {
                 : currentProfile.mentoringApproach();
         boolean hasNewSkills = !newSkills.isEmpty() || !newCustomSkills.isEmpty();
         if (java.util.Objects.equals(currentApproach, approach)
-                && java.util.Objects.equals(currentProfile.availabilityNotes(), availability)
                 && java.util.Objects.equals(currentProfile.experienceYears(), request.experienceYears())
                 && java.util.Objects.equals(currentProfile.sessionsPerWeek(), request.sessionsPerWeek())
                 && java.util.Objects.equals(
@@ -453,7 +355,6 @@ public class MentorApplicationService {
                 requestedSkills.stream().map(Skill::getName),
                 requestedCustomSkills.stream()
         ).distinct().collect(java.util.stream.Collectors.joining(", ")));
-        application.setAvailabilityNotes(availability);
         application.setExperienceYears(request.experienceYears());
         application.setMentoringApproach(approach);
         application.setSessionsPerWeek(request.sessionsPerWeek());
@@ -474,7 +375,6 @@ public class MentorApplicationService {
             String customSkill,
             String note,
             String expertiseSummary,
-            String availabilityNotes,
             Integer experienceYears,
             String mentoringApproach,
             Integer sessionsPerWeek,
@@ -507,7 +407,6 @@ public class MentorApplicationService {
                 ? null
                 : String.join("; ", customSkillNames);
         String normalizedExpertise = normalizeOptional(expertiseSummary);
-        String normalizedAvailability = normalizeOptional(availabilityNotes);
         String normalizedApproach = normalizeOptional(mentoringApproach);
         List<Long> requestedSkillIds = catalogSkillIds == null ? List.of() : catalogSkillIds;
         Set<Long> uniqueSkillIds = new LinkedHashSet<>(requestedSkillIds);
@@ -534,12 +433,6 @@ public class MentorApplicationService {
             throw new BusinessException(
                     "MENTOR_APPLICATION_EXPERTISE_TOO_LONG",
                     "Expertise summary must be 2000 characters or fewer."
-            );
-        }
-        if (normalizedAvailability != null && normalizedAvailability.length() > 1000) {
-            throw new BusinessException(
-                    "MENTOR_APPLICATION_AVAILABILITY_TOO_LONG",
-                    "Availability notes must be 1000 characters or fewer."
             );
         }
         if (experienceYears != null && experienceYears < 0) {
@@ -677,7 +570,6 @@ public class MentorApplicationService {
         application.setCustomSkill(normalizedCustomSkill);
         application.setNote(normalizeOptional(note));
         application.setExpertiseSummary(normalizedExpertise);
-        application.setAvailabilityNotes(normalizedAvailability);
         application.setExperienceYears(experienceYears);
         application.setMentoringApproach(normalizedApproach);
         application.setSessionsPerWeek(sessionsPerWeek);
