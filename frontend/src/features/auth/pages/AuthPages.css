@@ -1,0 +1,434 @@
+/* ========================================================
+   Bank of Abyssinia — APID Authentication Experience
+   Abyssinia People Intelligence & Development
+   Executive Split-Screen Layout (Adey Gold & Corporate Blue)
+   ======================================================== */
+
+.boa-auth-container {
+  min-height: 100vh;
+  display: grid;
+  grid-template-columns: 1.15fr 1fr;
+  background-color: #f8fafc;
+  color: #0f172a;
+  font-family: Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  overflow-x: hidden;
+}
+
+/* ========================================================
+   LEFT: Hero / Brand Pillar Pane
+   ======================================================== */
+.boa-auth-hero-pane {
+  background: linear-gradient(150deg, #070c18 0%, #0c1a38 55%, #0f172a 100%);
+  color: #f8fafc;
+  padding: 3.5rem 3.5rem;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  position: relative;
+  overflow: hidden;
+}
+
+/* Ambient Dual Glow (Royal Blue & Adey Gold) */
+.boa-auth-hero-pane::before {
+  content: '';
+  position: absolute;
+  top: -100px;
+  left: -80px;
+  width: 500px;
+  height: 500px;
+  border-radius: 999px;
+  background: radial-gradient(circle, rgba(29, 78, 216, 0.22) 0%, transparent 70%);
+  pointer-events: none;
+}
+
+.boa-auth-hero-pane::after {
+  content: '';
+  position: absolute;
+  bottom: -120px;
+  right: -100px;
+  width: 550px;
+  height: 550px;
+  border-radius: 999px;
+  background: radial-gradient(circle, rgba(245, 183, 0, 0.16) 0%, transparent 70%);
+  pointer-events: none;
+}
+
+.boa-auth-hero-content {
+  position: relative;
+  z-index: 2;
+  max-width: 520px;
+}
+
+.boa-auth-hero-eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.3rem 0.85rem;
+  border-radius: 999px;
+  background: rgba(29, 78, 216, 0.16);
+  border: 1px solid rgba(59, 130, 246, 0.3);
+  color: #bfdbfe;
+  font-size: 0.78rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  margin-bottom: 2rem;
+}
+
+.boa-auth-hero-title {
+  font-size: clamp(2rem, 3.2vw, 2.75rem);
+  font-weight: 800;
+  line-height: 1.18;
+  letter-spacing: -0.025em;
+  color: #ffffff;
+  margin: 0 0 1.25rem;
+}
+
+.boa-auth-title-gold {
+  background: linear-gradient(135deg, #f5b700 0%, #fde68a 60%, #ffffff 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  display: inline-block;
+}
+
+.boa-auth-hero-desc {
+  font-size: 1.02rem;
+  color: #94a3b8;
+  line-height: 1.6;
+  margin: 0 0 2.5rem;
+}
+
+/* 3 Welcoming Value Cards */
+.boa-auth-pillars {
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+  margin-bottom: 2rem;
+}
+
+.boa-auth-pillar-card {
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 12px;
+  padding: 1rem 1.15rem;
+  display: flex;
+  align-items: flex-start;
+  gap: 0.95rem;
+  transition: background 0.2s ease, border-color 0.2s ease;
+}
+
+.boa-auth-pillar-card:hover {
+  background: rgba(255, 255, 255, 0.07);
+  border-color: rgba(255, 255, 255, 0.16);
+}
+
+.boa-auth-pillar-icon {
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+}
+
+.boa-auth-pillar-icon.gold {
+  background: rgba(245, 183, 0, 0.12);
+  color: #f5b700;
+  border: 1px solid rgba(245, 183, 0, 0.25);
+}
+
+.boa-auth-pillar-icon.blue {
+  background: rgba(37, 99, 235, 0.15);
+  color: #60a5fa;
+  border: 1px solid rgba(37, 99, 235, 0.3);
+}
+
+.boa-auth-pillar-icon.emerald {
+  background: rgba(16, 185, 129, 0.12);
+  color: #34d399;
+  border: 1px solid rgba(16, 185, 129, 0.25);
+}
+
+.boa-auth-pillar-card strong {
+  display: block;
+  font-size: 0.92rem;
+  font-weight: 700;
+  color: #ffffff;
+  margin-bottom: 0.18rem;
+}
+
+.boa-auth-pillar-card span {
+  font-size: 0.82rem;
+  color: #cbd5e1;
+  line-height: 1.45;
+}
+
+/* Institutional Security Footnote on Hero */
+.boa-auth-hero-footer {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  font-size: 0.8rem;
+  color: #64748b;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  padding-top: 1.5rem;
+}
+
+/* ========================================================
+   RIGHT: Sign-In Form Pane
+   ======================================================== */
+.boa-auth-form-pane {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  padding: 3rem 4rem;
+  background-color: #f8fafc;
+  overflow-y: auto;
+}
+
+.boa-auth-form-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 2rem;
+}
+
+.boa-auth-back-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.85rem;
+  font-weight: 500;
+  color: #64748b;
+  text-decoration: none;
+  transition: color 0.15s ease;
+}
+
+.boa-auth-back-link:hover {
+  color: #0f172a;
+}
+
+.boa-auth-card-wrap {
+  width: 100%;
+  max-width: 440px;
+  margin: auto auto;
+}
+
+.boa-auth-header-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0.25rem 0.65rem;
+  border-radius: 999px;
+  background: rgba(29, 78, 216, 0.08);
+  border: 1px solid rgba(59, 130, 246, 0.25);
+  color: #1d4ed8;
+  font-size: 0.74rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  margin-bottom: 0.85rem;
+}
+
+.boa-auth-title {
+  font-size: 1.85rem;
+  font-weight: 800;
+  letter-spacing: -0.025em;
+  color: #0f172a;
+  margin: 0 0 0.5rem;
+}
+
+.boa-auth-subtitle {
+  font-size: 0.95rem;
+  color: #64748b;
+  line-height: 1.5;
+  margin: 0 0 1.75rem;
+}
+
+/* Alert Banners */
+.boa-auth-alert {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+  padding: 0.85rem 1rem;
+  border-radius: 10px;
+  font-size: 0.86rem;
+  line-height: 1.45;
+  margin-bottom: 1.25rem;
+}
+
+.boa-auth-alert.ok {
+  background-color: #dcfce7;
+  border: 1px solid #bbf7d0;
+  color: #15803d;
+}
+
+.boa-auth-alert.err {
+  background-color: #fee2e2;
+  border: 1px solid #fecaca;
+  color: #b91c1c;
+}
+
+.boa-auth-alert-icon {
+  flex-shrink: 0;
+  margin-top: 0.1rem;
+}
+
+/* Form Fields with Integrated Icons */
+.boa-auth-form {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+.boa-input-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+}
+
+.boa-input-label {
+  font-size: 0.86rem;
+  font-weight: 600;
+  color: #1e293b;
+}
+
+.boa-input-wrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.boa-input-icon {
+  position: absolute;
+  left: 0.95rem;
+  color: #94a3b8;
+  pointer-events: none;
+  display: flex;
+  align-items: center;
+}
+
+.boa-auth-input {
+  width: 100%;
+  padding: 0.72rem 0.95rem 0.72rem 2.65rem;
+  border: 1.5px solid #cbd5e1;
+  border-radius: 10px;
+  font-size: 0.95rem;
+  background-color: #ffffff;
+  color: #0f172a;
+  outline: none;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.boa-auth-input:focus {
+  border-color: #c97a00;
+  box-shadow: 0 0 0 3px rgba(201, 122, 0, 0.2);
+}
+
+.boa-auth-input::placeholder {
+  color: #94a3b8;
+  font-weight: 400;
+}
+
+/* Password Toggle Eye inside input */
+.boa-input-action-btn {
+  position: absolute;
+  right: 0.75rem;
+  background: transparent;
+  border: none;
+  color: #64748b;
+  cursor: pointer;
+  padding: 0.35rem;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: color 0.15s ease, background-color 0.15s ease;
+}
+
+.boa-input-action-btn:hover {
+  color: #0f172a;
+  background-color: #f1f5f9;
+}
+
+/* Submit Button */
+.boa-auth-submit-btn {
+  margin-top: 0.5rem;
+  width: 100%;
+  padding: 0.8rem 1.25rem;
+  border-radius: 10px;
+  border: none;
+  background: linear-gradient(135deg, #f5b700 0%, #c97a00 100%);
+  color: #0b0f19;
+  font-weight: 700;
+  font-size: 0.95rem;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  box-shadow: 0 4px 14px rgba(245, 183, 0, 0.3);
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.boa-auth-submit-btn:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: 0 6px 20px rgba(245, 183, 0, 0.42);
+}
+
+.boa-auth-submit-btn:disabled {
+  opacity: 0.65;
+  cursor: not-allowed;
+  transform: none;
+}
+
+@keyframes apidSpin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.apid-spin {
+  animation: apidSpin 1s linear infinite;
+}
+
+/* Form Bottom Help Notice */
+.boa-auth-form-footer {
+  margin-top: 2rem;
+  padding-top: 1.5rem;
+  border-top: 1px solid #e2e8f0;
+  font-size: 0.8rem;
+  color: #64748b;
+  line-height: 1.5;
+  text-align: center;
+}
+
+.boa-auth-form-footer a {
+  color: #1d4ed8;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.boa-auth-form-footer a:hover {
+  text-decoration: underline;
+}
+
+/* ========================================================
+   Responsive Breakpoints
+   ======================================================== */
+@media (max-width: 1024px) {
+  .boa-auth-container {
+    grid-template-columns: 1fr;
+  }
+  .boa-auth-hero-pane {
+    display: none;
+  }
+  .boa-auth-form-pane {
+    padding: 3rem 1.5rem;
+    min-height: 100vh;
+  }
+}

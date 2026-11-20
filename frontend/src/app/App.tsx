@@ -7,6 +7,7 @@ import { ChangePasswordPage } from '../features/auth/pages/ChangePasswordPage';
 import { LoginPage } from '../features/auth/pages/LoginPage';
 import { coachingRoutes } from '../features/coaching/routes';
 import { PortalHomePage } from '../features/home/PortalHomePage';
+import { PublicLandingPage } from '../features/home/PublicLandingPage';
 import { mentoringRoutes } from '../features/mentoring/routes';
 import { workspaceRoutes } from '../features/workspace/routes';
 import { resolveAuthorizedModules } from '../shared/auth/workspaceResolver';
@@ -55,8 +56,17 @@ export function AdaptiveHomeRouter() {
   return <Navigate to="/home" replace />;
 }
 
+export function RootEntryRoute() {
+  const { isAuthenticated, user } = useAuth();
+  if (isAuthenticated && user) {
+    return <AdaptiveHomeRouter />;
+  }
+  return <PublicLandingPage />;
+}
+
 export function AppRoutes() {
   const element = useRoutes([
+    { path: '/landing', element: <PublicLandingPage /> },
     { path: '/login', element: <LoginPage /> },
     {
       path: '/change-password',
@@ -76,11 +86,7 @@ export function AppRoutes() {
     },
     {
       path: '/',
-      element: (
-        <ProtectedRoute>
-          <AdaptiveHomeRouter />
-        </ProtectedRoute>
-      ),
+      element: <RootEntryRoute />,
     },
     ...workspaceRoutes,
     ...coachingRoutes,

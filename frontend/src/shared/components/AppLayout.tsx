@@ -50,7 +50,7 @@ import {
 import { coreConfigApi } from '../../features/admin/config/api/coreConfigApi';
 import { workspaceLiveApi } from '../../features/workspace/api/workspaceDashboardApi';
 import { mentoringTrainerApi } from '../../features/mentoring/api/mentoringTrainerApi';
-import { AvatarBadge, NotificationBellPopover, useToast } from './ui';
+import { AvatarBadge, BoaEmblem, NotificationBellPopover, useToast } from './ui';
 
 interface NavEntry {
   to: string;
@@ -529,8 +529,8 @@ export function AppLayout({ children }: { children: ReactNode }) {
     return [...(employeeGroup ? [employeeGroup] : []), ...visibleModuleGroups];
   }, [activeModule, isWorkspacePath, moduleNavGroups, hasAnyPermission]);
 
-  // Full-bleed split auth layout without app chrome when unauthenticated or password-change-pending
-  if (!isAuthenticated || !user || user.mustChangePassword) {
+  // Full-bleed layout without app chrome when unauthenticated, password-change-pending, or public landing page
+  if (!isAuthenticated || !user || user.mustChangePassword || location.pathname === '/landing') {
     return <>{children}</>;
   }
 
@@ -614,11 +614,11 @@ export function AppLayout({ children }: { children: ReactNode }) {
         <aside className={`boa-sidebar ${collapsed ? 'collapsed' : ''} ${mobileOpen ? 'mobile-open' : ''}`}>
           <div className="boa-sidebar-brand">
             <div className="boa-brand-mark">
-              <span className="boa-brand-emblem">BoA</span>
+              <BoaEmblem size={34} variant="solid-dark" withGlow />
               {!collapsed && (
                 <div className="boa-brand-text">
-                  <span className="boa-brand-title">APID Portal</span>
-                  <span className="boa-brand-sub">Bank of Abyssinia</span>
+                  <span className="boa-brand-title">Bank of Abyssinia</span>
+                  <span className="boa-brand-sub">APID · People Intelligence</span>
                 </div>
               )}
             </div>

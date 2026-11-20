@@ -1,9 +1,25 @@
 import { useState, type FormEvent } from 'react';
-import { Navigate, useLocation, useNavigate } from 'react-router-dom';
+import { Link, Navigate, useLocation, useNavigate } from 'react-router-dom';
 import type { AxiosError } from 'axios';
-import { Eye, EyeOff, Lock } from 'lucide-react';
+import {
+  AlertCircle,
+  ArrowLeft,
+  ArrowRight,
+  Award,
+  CheckCircle2,
+  ClipboardCheck,
+  Eye,
+  EyeOff,
+  HeartHandshake,
+  Loader2,
+  Lock,
+  ShieldCheck,
+  User,
+} from 'lucide-react';
 import { useAuth } from '../../../app/AuthContext';
 import type { ApiErrorPayload } from '../../../shared/api/apiClient';
+import { BoaBrandHeader } from '../../../shared/components/ui/BoaEmblem';
+import './AuthPages.css';
 
 export function LoginPage() {
   const { isAuthenticated, user, login } = useAuth();
@@ -35,83 +51,150 @@ export function LoginPage() {
       }
     } catch (err) {
       const axiosErr = err as AxiosError<ApiErrorPayload>;
-      setError(axiosErr.response?.data?.message || 'Unable to sign in. Please check your credentials.');
+      setError(
+        axiosErr.response?.data?.message ||
+          'Unable to sign in. Please check your credentials or contact IT support.'
+      );
     } finally {
       setSubmitting(false);
     }
   };
 
   return (
-    <div className="boa-auth-split">
-      <section className="boa-auth-hero">
-        <div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '2.25rem' }}>
-            <span className="boa-brand-emblem" style={{ width: 42, height: 42, fontSize: '1rem' }}>BoA</span>
-            <div>
-              <div style={{ fontWeight: 700, fontSize: '1.05rem', color: '#ffffff' }}>Bank of Abyssinia</div>
-              <div style={{ fontSize: '0.8rem', color: '#94a3b8' }}>Abyssinia Personal Intelligence &amp; Development</div>
-            </div>
+    <div className="boa-auth-container">
+      {/* LEFT: Welcoming Brand & Growth Pillars Pane */}
+      <section className="boa-auth-hero-pane">
+        <div className="boa-auth-hero-content">
+          <Link to="/" style={{ textDecoration: 'none', display: 'inline-block', marginBottom: '2.5rem' }}>
+            <BoaBrandHeader compact light subtitle="People Intelligence Development" />
+          </Link>
+
+          <div className="boa-auth-hero-eyebrow">
+            <ShieldCheck size={14} color="#60A5FA" />
+            <span>Bank of Abyssinia Internal Portal</span>
           </div>
 
-          <h2 style={{ fontSize: '2rem', lineHeight: 1.2, margin: '0 0 0.85rem', maxWidth: 460 }}>
-            Performance Intelligence, Coaching &amp; Mentoring Portal
-          </h2>
-          <p style={{ color: '#cbd5e1', maxWidth: 450, lineHeight: 1.55, margin: '0 0 2rem' }}>
-            Unified capability governance across HR Mentoring, PMS Performance Coaching, and organizational reporting lines.
+          <h1 className="boa-auth-hero-title">
+            Grow People. <br />
+            Improve Performance. <br />
+            <span className="boa-auth-title-gold">Build Knowledge.</span>
+          </h1>
+
+          <p className="boa-auth-hero-desc">
+            A unified internal platform that helps Bank of Abyssinia employees develop their skills,
+            collaborate with certified mentors, and excel in their roles.
           </p>
 
           <div className="boa-auth-pillars">
-            <div className="boa-auth-pillar">
-              <strong>Permission-Driven Governance</strong>
-              <span>Role matrices and adaptive workspaces strictly enforced at API and session layers.</span>
+            <div className="boa-auth-pillar-card">
+              <div className="boa-auth-pillar-icon gold">
+                <ClipboardCheck size={18} />
+              </div>
+              <div>
+                <strong>Performance &amp; Coaching</strong>
+                <span>Continuous appraisal reviews, goal tracking, and constructive coaching guidance.</span>
+              </div>
             </div>
-            <div className="boa-auth-pillar">
-              <strong>Precision Appraisal Rules</strong>
-              <span>Tracks unrounded OverallFinalRating eligibility (&lt; 3.0000) and coaching exit readiness.</span>
+
+            <div className="boa-auth-pillar-card">
+              <div className="boa-auth-pillar-icon blue">
+                <Award size={18} />
+              </div>
+              <div>
+                <strong>HR Mentoring</strong>
+                <span>Direct knowledge transfer with experienced banking colleagues across departments.</span>
+              </div>
             </div>
-            <div className="boa-auth-pillar">
-              <strong>Structured Knowledge Transfer</strong>
-              <span>Certified Trainer pipelines, capacity-guarded mentoring matches, and session oversight.</span>
+
+            <div className="boa-auth-pillar-card">
+              <div className="boa-auth-pillar-icon emerald">
+                <HeartHandshake size={18} />
+              </div>
+              <div>
+                <strong>Employee Development</strong>
+                <span>Personalized growth milestones, learning agendas, and developmental support.</span>
+              </div>
             </div>
           </div>
         </div>
 
-        <div style={{ fontSize: '0.78rem', color: '#94a3b8' }}>
-          Protected by Bank of Abyssinia Internal Security Policies · Audited Access
+        <div className="boa-auth-hero-footer">
+          <ShieldCheck size={15} />
+          <span>Protected under Bank of Abyssinia Information Security Policies &bull; Audited Access</span>
         </div>
       </section>
 
-      <section className="boa-auth-panel">
-        <div className="apid-card apid-auth-card">
-          <div style={{ display: 'inline-flex', alignItems: 'center', gap: '0.45rem', color: 'var(--brand)', fontSize: '0.78rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '0.5rem' }}>
-            <Lock size={14} />
-            Secure Portal Access
+      {/* RIGHT: Modern Sign-In Console Pane */}
+      <section className="boa-auth-form-pane">
+        <div className="boa-auth-form-top">
+          <Link to="/" className="boa-auth-back-link">
+            <ArrowLeft size={15} />
+            <span>Back to Platform Overview</span>
+          </Link>
+
+          {/* Mobile-only logo display */}
+          <div style={{ display: 'none' }} className="boa-auth-mobile-logo">
+            <BoaBrandHeader compact subtitle="APID Portal" />
           </div>
-          <h1>Sign in to APID</h1>
-          <p className="apid-subtitle">
-            Use your assigned APID credentials to enter your authorized workspace.
+        </div>
+
+        <div className="boa-auth-card-wrap">
+          <div className="boa-auth-header-pill">
+            <Lock size={12} />
+            <span>Secure Portal Access</span>
+          </div>
+
+          <h2 className="boa-auth-title">Sign in to APID</h2>
+          <p className="boa-auth-subtitle">
+            Enter your bank credentials to access your personalized employee growth workspace.
           </p>
 
-          {state?.notice && <div className="apid-alert apid-alert-ok">{state.notice}</div>}
-          {error && <div className="apid-alert apid-alert-err">{error}</div>}
+          {/* Notice Feedback Banner (e.g. from password update) */}
+          {state?.notice && (
+            <div className="boa-auth-alert ok">
+              <CheckCircle2 size={18} className="boa-auth-alert-icon" />
+              <span>{state.notice}</span>
+            </div>
+          )}
 
-          <form onSubmit={handleSubmit} className="apid-form">
-            <div className="apid-field">
-              <label htmlFor="username">Username</label>
-              <input
-                id="username"
-                type="text"
-                value={username}
-                onChange={(e) => setUsername(e.target.value)}
-                autoComplete="username"
-                placeholder="Enter your username"
-                required
-              />
+          {/* Error Feedback Banner */}
+          {error && (
+            <div className="boa-auth-alert err" role="alert">
+              <AlertCircle size={18} className="boa-auth-alert-icon" />
+              <span>{error}</span>
+            </div>
+          )}
+
+          <form onSubmit={handleSubmit} className="boa-auth-form">
+            <div className="boa-input-group">
+              <label htmlFor="username" className="boa-input-label">
+                Username or Employee ID
+              </label>
+              <div className="boa-input-wrapper">
+                <span className="boa-input-icon">
+                  <User size={17} />
+                </span>
+                <input
+                  id="username"
+                  type="text"
+                  value={username}
+                  onChange={(e) => setUsername(e.target.value)}
+                  autoComplete="username"
+                  placeholder="e.g. abebe.bekele"
+                  className="boa-auth-input"
+                  required
+                />
+              </div>
             </div>
 
-            <div className="apid-field">
-              <label htmlFor="password">Password</label>
-              <div style={{ display: 'flex', gap: '0.4rem' }}>
+            <div className="boa-input-group">
+              <label htmlFor="password" className="boa-input-label">
+                Password
+              </label>
+              <div className="boa-input-wrapper">
+                <span className="boa-input-icon">
+                  <Lock size={17} />
+                </span>
                 <input
                   id="password"
                   type={showPassword ? 'text' : 'password'}
@@ -119,26 +202,54 @@ export function LoginPage() {
                   onChange={(e) => setPassword(e.target.value)}
                   autoComplete="current-password"
                   placeholder="Enter your password"
+                  className="boa-auth-input"
                   required
-                  style={{ flex: 1 }}
+                  style={{ paddingRight: '2.8rem' }}
                 />
                 <button
                   type="button"
-                  className="apid-btn apid-btn-outline"
+                  className="boa-input-action-btn"
                   aria-label={showPassword ? 'Hide password' : 'Show password'}
                   onClick={() => setShowPassword((s) => !s)}
-                  style={{ padding: '0 0.7rem' }}
+                  tabIndex={-1}
                 >
-                  {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                  {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
                 </button>
               </div>
             </div>
 
-            <button type="submit" className="apid-btn apid-btn-primary" disabled={submitting} style={{ marginTop: '0.25rem' }}>
-              {submitting ? 'Authenticating...' : 'Sign In'}
+            <button
+              type="submit"
+              className="boa-auth-submit-btn"
+              disabled={submitting}
+            >
+              {submitting ? (
+                <>
+                  <Loader2 size={17} className="apid-spin" />
+                  <span>Verifying credentials...</span>
+                </>
+              ) : (
+                <>
+                  <span>Sign In to Workspace</span>
+                  <ArrowRight size={17} />
+                </>
+              )}
             </button>
           </form>
+
+          <div className="boa-auth-form-footer">
+            <div>
+              Having difficulty signing in? Contact your manager or the{' '}
+              <span style={{ color: '#0F172A', fontWeight: 600 }}>Bank IT Service Desk</span>.
+            </div>
+            <div style={{ marginTop: '0.45rem', fontSize: '0.74rem', color: '#94A3B8' }}>
+              Bank of Abyssinia &bull; Authorized Personnel Only
+            </div>
+          </div>
         </div>
+
+        {/* Empty bottom space to maintain vertical balance */}
+        <div style={{ height: '1.5rem' }} />
       </section>
     </div>
   );
