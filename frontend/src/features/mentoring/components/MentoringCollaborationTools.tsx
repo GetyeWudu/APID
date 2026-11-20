@@ -1,7 +1,7 @@
 import { useState, type FormEvent } from 'react';
 import axios from 'axios';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Download, Link2, Plus } from 'lucide-react';
+import { Download, FileText, Link2, Plus } from 'lucide-react';
 import type { ApiErrorPayload } from '../../../shared/api/apiClient';
 import {
   EmptyState,
@@ -29,25 +29,43 @@ function formatDateTime(value: string) {
 export function MentoringResourcesPanel({
   relationshipId,
   canAdd,
+  sessionId,
 }: {
   relationshipId: number;
   canAdd: boolean;
+  sessionId?: number;
 }) {
   const [targetType, setTargetType] = useState<'FILE' | 'LINK'>('LINK');
   const [file, setFile] = useState<File | null>(null);
   const queryClient = useQueryClient();
   const { pushToast } = useToast();
+  const isSessionScoped = sessionId !== undefined;
+  const resourcesQueryKey = sessionId !== undefined
+    ? ['mentoring', 'session-resources', relationshipId, sessionId]
+    : ['mentoring', 'resources', relationshipId];
   const resourcesQuery = useQuery({
-    queryKey: ['mentoring', 'resources', relationshipId],
-    queryFn: () => mentoringPairingApi.listResources(relationshipId),
+    queryKey: resourcesQueryKey,
+    queryFn: () => sessionId === undefined
+      ? mentoringPairingApi.listResources(relationshipId)
+      : mentoringPairingApi.listSessionResources(relationshipId, sessionId),
   });
   const addMutation = useMutation({
-    mutationFn: (input: { title: string; externalUrl?: string; file?: File }) =>
-      mentoringPairingApi.addResource(relationshipId, input),
+    mutationFn: (input: { title: string; externalUrl?: string; file?: File }) => {
+      if (sessionId !== undefined) {
+        return mentoringPairingApi.addSessionResource(relationshipId, sessionId, input);
+      }
+      return mentoringPairingApi.addResource(relationshipId, input);
+    },
     onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: ['mentoring', 'resources', relationshipId] });
+      await queryClient.invalidateQueries({ queryKey: resourcesQueryKey });
       setFile(null);
-      pushToast({ title: 'Resource shared', message: 'The resource is now available to this relationship.', tone: 'ok' });
+      pushToast({
+        title: 'Resource shared',
+        message: isSessionScoped
+          ? 'The resource is now available in this session.'
+          : 'The resource is now available to this relationship.',
+        tone: 'ok',
+      });
     },
     onError: (error: unknown) => pushToast({
       title: 'Unable to share resource',
@@ -68,7 +86,9 @@ export function MentoringResourcesPanel({
 
   const download = async (resourceId: number, fileName: string) => {
     try {
-      const blob = await mentoringPairingApi.downloadResource(relationshipId, resourceId);
+      const blob = sessionId === undefined
+        ? await mentoringPairingApi.downloadResource(relationshipId, resourceId)
+        : await mentoringPairingApi.downloadSessionResource(relationshipId, sessionId, resourceId);
       const url = URL.createObjectURL(blob);
       const anchor = document.createElement('a');
       anchor.href = url;
@@ -91,11 +111,32 @@ export function MentoringResourcesPanel({
 
   return (
     <div className="boa-stack">
+      {isSessionScoped && (
+        <div>
+          <h3 className="boa-card-title">
+            Session resources <span className="mentoring-session-resource-count">{resourcesQuery.data?.length ?? 0}</span>
+          </h3>
+          <p className="boa-card-subtitle">
+            {canAdd
+              ? "Share files and links for this session only. They are separate from the pairing's general resources."
+              : "Resources shared by the mentor for this session appear here, separate from the pairing's general resources."}
+          </p>
+        </div>
+      )}
       {canAdd && (
-        <form className="apid-card boa-stack" onSubmit={handleSubmit}>
+        <form
+          className={isSessionScoped ? 'mentoring-session-resource-form boa-stack' : 'apid-card boa-stack'}
+          onSubmit={handleSubmit}
+        >
           <div>
-            <h3 className="boa-card-title">Share a resource</h3>
-            <p className="boa-card-subtitle">Share a learning link or upload a file with this mentoring relationship.</p>
+            <h3 className="boa-card-title">
+              {isSessionScoped ? 'Share a session resource' : 'Share a resource'}
+            </h3>
+            <p className="boa-card-subtitle">
+              {isSessionScoped
+                ? 'Add a learning link or file specifically for this session.'
+                : 'Share a learning link or upload a file with this mentoring relationship.'}
+            </p>
           </div>
           <div className="boa-grid-2">
             <label>
@@ -144,36 +185,85 @@ export function MentoringResourcesPanel({
         </form>
       )}
       {(resourcesQuery.data ?? []).length === 0 ? (
-        <EmptyState title="No resources yet" description="Learning links and files shared with this relationship will appear here." />
+        <EmptyState
+          title={isSessionScoped ? 'No session resources yet' : 'No resources yet'}
+          description={isSessionScoped
+            ? canAdd
+              ? 'Files and links shared specifically for this session will appear here.'
+              : 'Your mentor has not shared any resources for this session yet.'
+            : 'Learning links and files shared with this relationship will appear here.'}
+        />
       ) : (
-        <div className="boa-stack">
-          {(resourcesQuery.data ?? []).map((resource) => (
-            <article key={resource.id} className="apid-card" style={{ border: '1px solid var(--border)' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', gap: '0.5rem', flexWrap: 'wrap' }}>
-                <div>
-                  <strong>{resource.title}</strong>
-                  <div className="boa-muted" style={{ fontSize: '0.8rem' }}>
-                    Shared by {resource.uploadedByName} · {formatDateTime(resource.createdAt)}
+        isSessionScoped ? (
+          <div className="mentoring-session-resource-list" role="list" aria-label="Session resources">
+            {(resourcesQuery.data ?? []).map((resource) => (
+              <article key={resource.id} className="mentoring-session-resource-row" role="listitem">
+                <div className="mentoring-session-resource-main">
+                  <span className="mentoring-session-resource-icon" aria-hidden="true">
+                    {resource.resourceType === 'FILE' ? <FileText size={17} /> : <Link2 size={17} />}
+                  </span>
+                  <div className="mentoring-session-resource-copy">
+                    <strong className="mentoring-session-resource-title" title={resource.title}>
+                      {resource.title}
+                    </strong>
+                    <div className="mentoring-session-resource-meta">
+                      <span>{resource.resourceType === 'FILE' ? 'File' : 'Link'}</span>
+                      {' · Shared by '}{resource.uploadedByName}
+                      {' · '}{formatDateTime(resource.createdAt)}
+                    </div>
                   </div>
                 </div>
-                <StatusPill label={resource.resourceType} tone="neutral" />
-              </div>
-              {resource.resourceType === 'FILE' ? (
-                <button
-                  type="button"
-                  className="apid-btn apid-btn-outline apid-btn-sm"
-                  onClick={() => void download(resource.id, resource.fileName ?? resource.title)}
-                >
-                  <Download size={14} /> {resource.fileName ?? 'Download file'}
-                </button>
-              ) : (
-                <a href={resource.externalUrl ?? undefined} target="_blank" rel="noreferrer" className="apid-btn apid-btn-outline apid-btn-sm">
-                  <Link2 size={14} /> Open resource
-                </a>
-              )}
-            </article>
-          ))}
-        </div>
+                {resource.resourceType === 'FILE' ? (
+                  <button
+                    type="button"
+                    className="apid-btn apid-btn-outline apid-btn-sm mentoring-session-resource-action"
+                    onClick={() => void download(resource.id, resource.fileName ?? resource.title)}
+                  >
+                    <Download size={14} /> Download
+                  </button>
+                ) : (
+                  <a
+                    href={resource.externalUrl ?? undefined}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="apid-btn apid-btn-outline apid-btn-sm mentoring-session-resource-action"
+                  >
+                    <Link2 size={14} /> Open
+                  </a>
+                )}
+              </article>
+            ))}
+          </div>
+        ) : (
+          <div className="boa-stack">
+            {(resourcesQuery.data ?? []).map((resource) => (
+              <article key={resource.id} className="apid-card" style={{ border: '1px solid var(--border)' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', gap: '0.5rem', flexWrap: 'wrap' }}>
+                  <div>
+                    <strong>{resource.title}</strong>
+                    <div className="boa-muted" style={{ fontSize: '0.8rem' }}>
+                      Shared by {resource.uploadedByName} · {formatDateTime(resource.createdAt)}
+                    </div>
+                  </div>
+                  <StatusPill label={resource.resourceType} tone="neutral" />
+                </div>
+                {resource.resourceType === 'FILE' ? (
+                  <button
+                    type="button"
+                    className="apid-btn apid-btn-outline apid-btn-sm"
+                    onClick={() => void download(resource.id, resource.fileName ?? resource.title)}
+                  >
+                    <Download size={14} /> {resource.fileName ?? 'Download file'}
+                  </button>
+                ) : (
+                  <a href={resource.externalUrl ?? undefined} target="_blank" rel="noreferrer" className="apid-btn apid-btn-outline apid-btn-sm">
+                    <Link2 size={14} /> Open resource
+                  </a>
+                )}
+              </article>
+            ))}
+          </div>
+        )
       )}
     </div>
   );

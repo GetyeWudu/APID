@@ -48,6 +48,7 @@ import {
 } from '../auth/workspaceResolver';
 import { coreConfigApi } from '../../features/admin/config/api/coreConfigApi';
 import { workspaceLiveApi } from '../../features/workspace/api/workspaceDashboardApi';
+import { MentoringVideoSessionReminder } from '../../features/mentoring/components/MentoringVideoSessionReminder';
 import { mentoringTrainerApi } from '../../features/mentoring/api/mentoringTrainerApi';
 import { AvatarBadge, NotificationBellPopover, useToast } from './ui';
 
@@ -815,6 +816,9 @@ export function AppLayout({ children }: { children: ReactNode }) {
 
         <main className="boa-content">{children}</main>
       </div>
+      {hasEmployeeAccess && user.permissions.includes('EMPLOYEE_PORTAL_ACCESS') && (
+        <MentoringVideoSessionReminder key={user.id} userId={user.id} />
+      )}
     </div>
   );
 }

@@ -25,6 +25,7 @@ import com.boa.apid.mentoring.pairing.entity.MentoringRelationship;
 import com.boa.apid.mentoring.pairing.entity.MentoringRelationshipMember;
 import com.boa.apid.mentoring.pairing.entity.MentoringRelationshipMemberStatus;
 import com.boa.apid.mentoring.pairing.entity.MentoringRelationshipStatus;
+import com.boa.apid.mentoring.pairing.entity.MentoringRequestType;
 import com.boa.apid.mentoring.pairing.entity.MentoringSession;
 import com.boa.apid.mentoring.pairing.entity.MentoringSessionStatus;
 import com.boa.apid.mentoring.pairing.repository.MentoringMessageRepository;
@@ -150,10 +151,11 @@ public class MentoringCollaborationService {
         requireRelationshipAccess(relationshipId, actor.getUserId());
         List<MentoringSession> sessions =
                 sessionRepository.findByRelationship_IdOrderByScheduledStartDesc(relationshipId);
-        Map<Long, Employee> employeesByUserId = loadEmployees(
-                sessions.stream().map(session -> session.getCreatedByUser().getId()).toList()
-        );
-        return sessions.stream()
+        List<MentoringSession> visibleSessions = sessions.stream()
+                .filter(session -> isSessionVisibleTo(session, actor.getUserId()))
+                .toList();
+        Map<Long, Employee> employeesByUserId = loadSessionEmployees(visibleSessions);
+        return visibleSessions.stream()
                 .map(session -> toSessionDto(session, employeesByUserId))
                 .toList();
     }
@@ -170,10 +172,11 @@ public class MentoringCollaborationService {
 
         List<MentoringSession> sessions =
                 sessionRepository.findByRelationship_IdInOrderByScheduledStartDesc(relationshipIds);
-        Map<Long, Employee> employeesByUserId = loadEmployees(
-                sessions.stream().map(session -> session.getCreatedByUser().getId()).toList()
-        );
-        return sessions.stream()
+        List<MentoringSession> visibleSessions = sessions.stream()
+                .filter(session -> isSessionVisibleTo(session, actor.getUserId()))
+                .toList();
+        Map<Long, Employee> employeesByUserId = loadSessionEmployees(visibleSessions);
+        return visibleSessions.stream()
                 .map(session -> toSessionDto(session, employeesByUserId))
                 .toList();
     }
@@ -221,8 +224,7 @@ public class MentoringCollaborationService {
         session.setStatus(MentoringSessionStatus.COMPLETED);
         MentoringSession saved = sessionRepository.save(session);
         reservationService.release("MENTORING", sessionId, "Session report submitted.");
-        Map<Long, Employee> employeesByUserId =
-                loadEmployees(List.of(actor.getUserId(), session.getCreatedByUser().getId()));
+        Map<Long, Employee> employeesByUserId = loadSessionEmployees(saved, actor.getUserId());
         return toSessionDto(saved, employeesByUserId);
     }
 
@@ -263,6 +265,7 @@ public class MentoringCollaborationService {
             );
         }
         validateSession(body);
+        MentoringRelationshipMember targetTrainee = resolveTargetTrainee(relationship, body.traineeUserId());
 
         String meetingUrl = normalizeMeetingUrl(body.meetingUrl());
         if ((body.deliveryMode() == MentoringDeliveryMode.ONLINE || body.deliveryMode() == MentoringDeliveryMode.HYBRID)
@@ -280,6 +283,7 @@ public class MentoringCollaborationService {
 
         MentoringSession session = new MentoringSession();
         session.setRelationship(relationship);
+        session.setTargetTraineeMember(targetTrainee);
         session.setTitle(body.title().trim());
         session.setAgenda(normalizeOptionalText(body.agenda()));
         session.setScheduledStart(body.scheduledStart());
@@ -293,7 +297,8 @@ public class MentoringCollaborationService {
         MentoringSession saved = sessionRepository.save(session);
 
         // Register central reservation & enforce cross-module conflict check
-        List<CreateReservationCommand.ParticipantReservationInput> participants = getReservationParticipants(relationship);
+        List<CreateReservationCommand.ParticipantReservationInput> participants =
+                getReservationParticipants(relationship, targetTrainee);
         if (participants.isEmpty()) {
             throw new BusinessException("NO_PARTICIPANTS", "No valid employee participants found for this mentoring relationship.", HttpStatus.BAD_REQUEST);
         }
@@ -310,7 +315,7 @@ public class MentoringCollaborationService {
                 participants
         ));
 
-        Map<Long, Employee> employeesByUserId = loadEmployees(List.of(actor.getUserId()));
+        Map<Long, Employee> employeesByUserId = loadSessionEmployees(saved, actor.getUserId());
         return toSessionDto(saved, employeesByUserId);
     }
 
@@ -333,6 +338,8 @@ public class MentoringCollaborationService {
             throw new BusinessException("SESSION_MISMATCH", "Session does not belong to this relationship.", HttpStatus.BAD_REQUEST);
         }
 
+        ensureSessionVisibleTo(session, actor.getUserId());
+
         if (session.getStatus() != MentoringSessionStatus.SCHEDULED) {
             throw new BusinessException("INVALID_STATE", "This session is currently " + session.getStatus() + " and cannot be answered.", HttpStatus.BAD_REQUEST);
         }
@@ -351,7 +358,7 @@ public class MentoringCollaborationService {
         }
 
         MentoringSession saved = sessionRepository.save(session);
-        Map<Long, Employee> employeesByUserId = loadEmployees(List.of(actor.getUserId(), session.getCreatedByUser().getId()));
+        Map<Long, Employee> employeesByUserId = loadSessionEmployees(saved, actor.getUserId());
         return toSessionDto(saved, employeesByUserId);
     }
 
@@ -376,6 +383,8 @@ public class MentoringCollaborationService {
             throw new BusinessException("SESSION_MISMATCH", "Session does not belong to this relationship.", HttpStatus.BAD_REQUEST);
         }
 
+        ensureSessionVisibleTo(session, actor.getUserId());
+
         if (session.getStatus() == MentoringSessionStatus.COMPLETED || session.getStatus() == MentoringSessionStatus.CANCELLED) {
             throw new BusinessException("INVALID_STATE", "Cannot reschedule a completed or cancelled session.", HttpStatus.BAD_REQUEST);
         }
@@ -396,7 +405,7 @@ public class MentoringCollaborationService {
         }
 
         // Check availability across mentor and trainees
-        List<Long> employeeIds = getRelationshipEmployeeIds(relationship);
+        List<Long> employeeIds = getSessionEmployeeIds(relationship, session.getTargetTraineeMember());
         AvailabilityCheckResponse check = reservationService.checkAvailability(
                 new AvailabilityCheckRequest(employeeIds, request.proposedStart(), request.proposedEnd(), "MENTORING", session.getId())
         );
@@ -415,7 +424,7 @@ public class MentoringCollaborationService {
         session.setRespondedAt(Instant.now());
 
         MentoringSession saved = sessionRepository.save(session);
-        Map<Long, Employee> employeesByUserId = loadEmployees(List.of(actor.getUserId(), session.getCreatedByUser().getId()));
+        Map<Long, Employee> employeesByUserId = loadSessionEmployees(saved, actor.getUserId());
         return toSessionDto(saved, employeesByUserId);
     }
 
@@ -457,7 +466,7 @@ public class MentoringCollaborationService {
         }
 
         MentoringSession saved = sessionRepository.save(session);
-        Map<Long, Employee> employeesByUserId = loadEmployees(List.of(actor.getUserId(), session.getCreatedByUser().getId()));
+        Map<Long, Employee> employeesByUserId = loadSessionEmployees(saved, actor.getUserId());
         return toSessionDto(saved, employeesByUserId);
     }
 
@@ -490,7 +499,7 @@ public class MentoringCollaborationService {
         reservationService.release("MENTORING", session.getId(), session.getCancellationReason());
 
         MentoringSession saved = sessionRepository.save(session);
-        Map<Long, Employee> employeesByUserId = loadEmployees(List.of(actor.getUserId(), session.getCreatedByUser().getId()));
+        Map<Long, Employee> employeesByUserId = loadSessionEmployees(saved, actor.getUserId());
         return toSessionDto(saved, employeesByUserId);
     }
 
@@ -592,12 +601,54 @@ public class MentoringCollaborationService {
         return memberRepository.existsByRelationship_IdAndTraineeUser_Id(relationship.getId(), userId);
     }
 
-    private List<Long> getRelationshipEmployeeIds(MentoringRelationship relationship) {
+    private MentoringRelationshipMember resolveTargetTrainee(
+            MentoringRelationship relationship,
+            Long traineeUserId
+    ) {
+        if (relationship.getRequest().getRequestType() == MentoringRequestType.GROUP && traineeUserId == null) {
+            throw new BusinessException(
+                    "MENTORING_SESSION_TRAINEE_REQUIRED",
+                    "Select the trainee who should receive this group-pairing session."
+            );
+        }
+        if (traineeUserId == null) {
+            return null;
+        }
+        return memberRepository.findByRelationship_IdAndTraineeUser_IdAndStatus(
+                        relationship.getId(),
+                        traineeUserId,
+                        MentoringRelationshipMemberStatus.ACTIVE
+                )
+                .orElseThrow(() -> new BusinessException(
+                        "INVALID_MENTORING_SESSION_TRAINEE",
+                        "Choose an active trainee in this mentoring relationship."
+                ));
+    }
+
+    private boolean isSessionVisibleTo(MentoringSession session, Long userId) {
+        MentoringRelationshipMember targetTrainee = session.getTargetTraineeMember();
+        return targetTrainee == null
+                || session.getRelationship().getMentorUser().getId().equals(userId)
+                || targetTrainee.getTraineeUser().getId().equals(userId);
+    }
+
+    private void ensureSessionVisibleTo(MentoringSession session, Long userId) {
+        if (!isSessionVisibleTo(session, userId)) {
+            throw new ResourceNotFoundException("Mentoring session not found.");
+        }
+    }
+
+    private List<Long> getSessionEmployeeIds(
+            MentoringRelationship relationship,
+            MentoringRelationshipMember targetTrainee
+    ) {
         List<Long> employeeIds = new ArrayList<>();
         employeeRepository.findByUserId(relationship.getMentorUser().getId())
                 .ifPresent(e -> employeeIds.add(e.getId()));
 
-        List<MentoringRelationshipMember> members = memberRepository.findByRelationship_IdOrderByJoinedAtAsc(relationship.getId());
+        List<MentoringRelationshipMember> members = targetTrainee == null
+                ? memberRepository.findByRelationship_IdOrderByJoinedAtAsc(relationship.getId())
+                : List.of(targetTrainee);
         for (MentoringRelationshipMember m : members) {
             employeeRepository.findByUserId(m.getTraineeUser().getId())
                     .ifPresent(e -> employeeIds.add(e.getId()));
@@ -605,14 +656,19 @@ public class MentoringCollaborationService {
         return employeeIds;
     }
 
-    private List<CreateReservationCommand.ParticipantReservationInput> getReservationParticipants(MentoringRelationship relationship) {
+    private List<CreateReservationCommand.ParticipantReservationInput> getReservationParticipants(
+            MentoringRelationship relationship,
+            MentoringRelationshipMember targetTrainee
+    ) {
         List<CreateReservationCommand.ParticipantReservationInput> commands = new ArrayList<>();
         Employee mentorEmp = employeeRepository.findByUserId(relationship.getMentorUser().getId()).orElse(null);
         if (mentorEmp != null) {
             commands.add(new CreateReservationCommand.ParticipantReservationInput(mentorEmp.getId(), ParticipationRole.MENTOR));
         }
 
-        List<MentoringRelationshipMember> members = memberRepository.findByRelationship_IdOrderByJoinedAtAsc(relationship.getId());
+        List<MentoringRelationshipMember> members = targetTrainee == null
+                ? memberRepository.findByRelationship_IdOrderByJoinedAtAsc(relationship.getId())
+                : List.of(targetTrainee);
         for (MentoringRelationshipMember m : members) {
             Employee traineeEmp = employeeRepository.findByUserId(m.getTraineeUser().getId()).orElse(null);
             if (traineeEmp != null) {
@@ -691,6 +747,29 @@ public class MentoringCollaborationService {
         return employees;
     }
 
+    private Map<Long, Employee> loadSessionEmployees(MentoringSession session, Long... additionalUserIds) {
+        return loadSessionEmployees(List.of(session), additionalUserIds);
+    }
+
+    private Map<Long, Employee> loadSessionEmployees(
+            List<MentoringSession> sessions,
+            Long... additionalUserIds
+    ) {
+        Set<Long> userIds = new LinkedHashSet<>();
+        for (MentoringSession session : sessions) {
+            userIds.add(session.getCreatedByUser().getId());
+            if (session.getTargetTraineeMember() != null) {
+                userIds.add(session.getTargetTraineeMember().getTraineeUser().getId());
+            }
+        }
+        for (Long userId : additionalUserIds) {
+            if (userId != null) {
+                userIds.add(userId);
+            }
+        }
+        return loadEmployees(userIds);
+    }
+
     private String employeeName(Long userId, String username, Map<Long, Employee> employeesByUserId) {
         Employee employee = employeesByUserId.get(userId);
         return employee == null ? username : employee.getFullName();
@@ -706,8 +785,20 @@ public class MentoringCollaborationService {
             throw new BusinessException("SESSION_MISMATCH", "Session does not belong to this relationship.", HttpStatus.BAD_REQUEST);
         }
 
+        ensureSessionVisibleTo(session, actor.getUserId());
+
         if (session.getDeliveryMode() != MentoringDeliveryMode.ONLINE && session.getDeliveryMode() != MentoringDeliveryMode.HYBRID) {
             throw new BusinessException("NOT_A_VIDEO_SESSION", "This mentoring session is configured for in-person delivery.", HttpStatus.BAD_REQUEST);
+        }
+        Instant now = Instant.now();
+        if (session.getStatus() != MentoringSessionStatus.CONFIRMED
+                || now.isBefore(session.getScheduledStart())
+                || !now.isBefore(session.getScheduledEnd())) {
+            throw new BusinessException(
+                    "MENTORING_SESSION_NOT_JOINABLE",
+                    "Video access is available only during the confirmed session time.",
+                    HttpStatus.CONFLICT
+            );
         }
 
         Employee callerEmp = employeeRepository.findByUserId(actor.getUserId()).orElse(null);
@@ -749,6 +840,7 @@ public class MentoringCollaborationService {
             Map<Long, Employee> employeesByUserId
     ) {
         User creator = session.getCreatedByUser();
+        MentoringRelationshipMember targetTrainee = session.getTargetTraineeMember();
         String meetingUrl = session.getMeetingUrl();
         if ((session.getDeliveryMode() == MentoringDeliveryMode.ONLINE || session.getDeliveryMode() == MentoringDeliveryMode.HYBRID)
                 && (meetingUrl == null || meetingUrl.isBlank())) {
@@ -758,6 +850,14 @@ public class MentoringCollaborationService {
         return new MentoringSessionDto(
                 session.getId(),
                 session.getRelationship().getId(),
+                targetTrainee == null ? null : targetTrainee.getTraineeUser().getId(),
+                targetTrainee == null
+                        ? null
+                        : employeeName(
+                                targetTrainee.getTraineeUser().getId(),
+                                targetTrainee.getTraineeUser().getUsername(),
+                                employeesByUserId
+                        ),
                 session.getTitle(),
                 session.getAgenda(),
                 session.getScheduledStart(),

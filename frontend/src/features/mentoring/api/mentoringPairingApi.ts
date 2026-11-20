@@ -102,6 +102,8 @@ export type MentoringSessionStatus =
 export interface MentoringSession {
   id: number;
   relationshipId: number;
+  traineeUserId?: number | null;
+  traineeName?: string | null;
   title: string;
   agenda: string | null;
   scheduledStart: string;
@@ -142,6 +144,7 @@ export interface MentoringChatHistory {
 export interface MentoringResource {
   id: number;
   relationshipId: number;
+  sessionId: number | null;
   title: string;
   resourceType: 'FILE' | 'LINK';
   fileId: number | null;
@@ -225,6 +228,7 @@ export const mentoringPairingApi = {
       deliveryMode: MentoringDeliveryMode;
       meetingUrl?: string;
       location?: string;
+      traineeUserId?: number;
     }
   ): Promise<MentoringSession> {
     const response = await apiClient.post<ApiResponse<MentoringSession>>(
@@ -392,6 +396,42 @@ export const mentoringPairingApi = {
   async downloadResource(relationshipId: number, resourceId: number): Promise<Blob> {
     const response = await apiClient.get<Blob>(
       `/mentoring/pairing/relationships/${relationshipId}/resources/${resourceId}/file`,
+      { responseType: 'blob' }
+    );
+    return response.data;
+  },
+
+  async listSessionResources(relationshipId: number, sessionId: number): Promise<MentoringResource[]> {
+    const response = await apiClient.get<ApiResponse<MentoringResource[]>>(
+      `/mentoring/pairing/relationships/${relationshipId}/sessions/${sessionId}/resources`
+    );
+    return response.data.data;
+  },
+
+  async addSessionResource(
+    relationshipId: number,
+    sessionId: number,
+    input: { title: string; externalUrl?: string; file?: File }
+  ): Promise<MentoringResource> {
+    const formData = new FormData();
+    formData.append('title', input.title);
+    if (input.externalUrl) formData.append('externalUrl', input.externalUrl);
+    if (input.file) formData.append('file', input.file);
+    const response = await apiClient.post<ApiResponse<MentoringResource>>(
+      `/mentoring/pairing/relationships/${relationshipId}/sessions/${sessionId}/resources`,
+      formData,
+      { headers: { 'Content-Type': 'multipart/form-data' } }
+    );
+    return response.data.data;
+  },
+
+  async downloadSessionResource(
+    relationshipId: number,
+    sessionId: number,
+    resourceId: number
+  ): Promise<Blob> {
+    const response = await apiClient.get<Blob>(
+      `/mentoring/pairing/relationships/${relationshipId}/sessions/${sessionId}/resources/${resourceId}/file`,
       { responseType: 'blob' }
     );
     return response.data;

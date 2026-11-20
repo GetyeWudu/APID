@@ -8,6 +8,7 @@ import java.time.Instant;
 public record MentoringResourceDto(
         Long id,
         Long relationshipId,
+        Long sessionId,
         String title,
         MentoringResourceType resourceType,
         Long fileId,
@@ -20,6 +21,7 @@ public record MentoringResourceDto(
         return new MentoringResourceDto(
                 resource.getId(),
                 resource.getRelationship().getId(),
+                resource.getSession() == null ? null : resource.getSession().getId(),
                 resource.getTitle(),
                 resource.getResourceType(),
                 resource.getFile() == null ? null : resource.getFile().getId(),

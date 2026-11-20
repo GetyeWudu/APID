@@ -31,6 +31,7 @@ import com.boa.apid.mentoring.pairing.entity.MentoringRelationship;
 import com.boa.apid.mentoring.pairing.entity.MentoringRelationshipMember;
 import com.boa.apid.mentoring.pairing.entity.MentoringRelationshipMemberStatus;
 import com.boa.apid.mentoring.pairing.entity.MentoringRelationshipStatus;
+import com.boa.apid.mentoring.pairing.entity.MentoringSession;
 import com.boa.apid.mentoring.pairing.repository.MentoringRelationshipMemberRepository;
 import com.boa.apid.mentoring.pairing.repository.MentoringRelationshipRepository;
 import com.boa.apid.mentoring.pairing.entity.MentoringSessionStatus;
@@ -94,7 +95,23 @@ public class MentoringRelationshipManagementService {
     @Transactional(readOnly = true)
     public List<MentoringResourceDto> listResources(Long relationshipId, ApidUserPrincipal actor) {
         requireRelationshipAccess(relationshipId, actor.getUserId());
-        return resourceRepository.findByRelationship_IdOrderByCreatedAtDesc(relationshipId).stream()
+        return resourceRepository.findByRelationship_IdAndSessionIsNullOrderByCreatedAtDesc(relationshipId).stream()
+                .map(MentoringResourceDto::from)
+                .toList();
+    }
+
+    @Transactional(readOnly = true)
+    public List<MentoringResourceDto> listSessionResources(
+            Long relationshipId,
+            Long sessionId,
+            ApidUserPrincipal actor
+    ) {
+        requireRelationshipAccess(relationshipId, actor.getUserId());
+        MentoringSession session = requireSession(relationshipId, sessionId);
+        ensureSessionVisibleTo(session, actor.getUserId());
+        return resourceRepository.findByRelationship_IdAndSession_IdOrderByCreatedAtDesc(
+                        relationshipId, sessionId)
+                .stream()
                 .map(MentoringResourceDto::from)
                 .toList();
     }
@@ -109,6 +126,70 @@ public class MentoringRelationshipManagementService {
     ) {
         MentoringRelationship relationship = requireRelationshipAccess(relationshipId, actor.getUserId());
         ensureWritableParticipant(relationship, actor.getUserId());
+        return MentoringResourceDto.from(saveResource(relationship, null, title, externalUrl, file, actor));
+    }
+
+    @Transactional
+    public MentoringResourceDto addSessionResource(
+            Long relationshipId,
+            Long sessionId,
+            String title,
+            String externalUrl,
+            MultipartFile file,
+            ApidUserPrincipal actor
+    ) {
+        MentoringRelationship relationship = requireRelationshipAccess(relationshipId, actor.getUserId());
+        if (!relationship.getMentorUser().getId().equals(actor.getUserId())) {
+            throw new AccessDeniedException("Only the mentor can share resources for a session.");
+        }
+        ensureWritableParticipant(relationship, actor.getUserId());
+        MentoringSession session = requireSession(relationshipId, sessionId);
+        return MentoringResourceDto.from(saveResource(relationship, session, title, externalUrl, file, actor));
+    }
+
+    @Transactional(readOnly = true)
+    public FileStorageService.LoadedFile downloadResource(
+            Long relationshipId,
+            Long resourceId,
+            ApidUserPrincipal actor
+    ) {
+        MentoringResource resource = resourceRepository.findDetailedById(resourceId)
+                .orElseThrow(() -> new ResourceNotFoundException("Mentoring resource not found"));
+        if (!resource.getRelationship().getId().equals(relationshipId) || resource.getSession() != null) {
+            throw new ResourceNotFoundException("Mentoring resource not found");
+        }
+        requireRelationshipAccess(resource.getRelationship().getId(), actor.getUserId());
+        return loadResourceFile(resource);
+    }
+
+    @Transactional(readOnly = true)
+    public FileStorageService.LoadedFile downloadSessionResource(
+            Long relationshipId,
+            Long sessionId,
+            Long resourceId,
+            ApidUserPrincipal actor
+    ) {
+        MentoringResource resource = resourceRepository.findDetailedById(resourceId)
+                .orElseThrow(() -> new ResourceNotFoundException("Mentoring resource not found"));
+        if (!resource.getRelationship().getId().equals(relationshipId)
+                || resource.getSession() == null
+                || !resource.getSession().getId().equals(sessionId)
+                || !resource.getSession().getRelationship().getId().equals(relationshipId)) {
+            throw new ResourceNotFoundException("Mentoring resource not found");
+        }
+        requireRelationshipAccess(relationshipId, actor.getUserId());
+        ensureSessionVisibleTo(resource.getSession(), actor.getUserId());
+        return loadResourceFile(resource);
+    }
+
+    private MentoringResource saveResource(
+            MentoringRelationship relationship,
+            MentoringSession session,
+            String title,
+            String externalUrl,
+            MultipartFile file,
+            ApidUserPrincipal actor
+    ) {
         String normalizedTitle = title == null ? "" : title.trim();
         String normalizedUrl = normalizeOptional(externalUrl);
         boolean hasFile = file != null && !file.isEmpty();
@@ -124,6 +205,7 @@ public class MentoringRelationshipManagementService {
 
         MentoringResource resource = new MentoringResource();
         resource.setRelationship(relationship);
+        resource.setSession(session);
         resource.setTitle(normalizedTitle);
         resource.setUploadedBy(requireUser(actor.getUserId()));
         if (hasFile) {
@@ -140,21 +222,10 @@ public class MentoringRelationshipManagementService {
             resource.setResourceType(MentoringResourceType.LINK);
             resource.setExternalUrl(normalizeHttpUrl(normalizedUrl));
         }
-        return MentoringResourceDto.from(resourceRepository.save(resource));
+        return resourceRepository.save(resource);
     }
 
-    @Transactional(readOnly = true)
-    public FileStorageService.LoadedFile downloadResource(
-            Long relationshipId,
-            Long resourceId,
-            ApidUserPrincipal actor
-    ) {
-        MentoringResource resource = resourceRepository.findDetailedById(resourceId)
-                .orElseThrow(() -> new ResourceNotFoundException("Mentoring resource not found"));
-        if (!resource.getRelationship().getId().equals(relationshipId)) {
-            throw new ResourceNotFoundException("Mentoring resource not found");
-        }
-        requireRelationshipAccess(resource.getRelationship().getId(), actor.getUserId());
+    private FileStorageService.LoadedFile loadResourceFile(MentoringResource resource) {
         if (resource.getResourceType() != MentoringResourceType.FILE || resource.getFile() == null) {
             throw new ResourceNotFoundException("Mentoring resource file not found");
         }
@@ -333,6 +404,24 @@ public class MentoringRelationshipManagementService {
             throw new AccessDeniedException("You are not a participant in this mentoring relationship.");
         }
         return relationship;
+    }
+
+    private MentoringSession requireSession(Long relationshipId, Long sessionId) {
+        MentoringSession session = sessionRepository.findById(sessionId)
+                .orElseThrow(() -> new ResourceNotFoundException("Mentoring session not found"));
+        if (!session.getRelationship().getId().equals(relationshipId)) {
+            throw new ResourceNotFoundException("Mentoring session not found");
+        }
+        return session;
+    }
+
+    private void ensureSessionVisibleTo(MentoringSession session, Long userId) {
+        MentoringRelationshipMember targetTrainee = session.getTargetTraineeMember();
+        if (targetTrainee != null
+                && !session.getRelationship().getMentorUser().getId().equals(userId)
+                && !targetTrainee.getTraineeUser().getId().equals(userId)) {
+            throw new ResourceNotFoundException("Mentoring session not found");
+        }
     }
 
     private void ensureWritableParticipant(MentoringRelationship relationship, Long userId) {

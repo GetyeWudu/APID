@@ -2,7 +2,6 @@ import { useState, type FormEvent } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   CalendarDays,
-  Video,
   Clock,
   Check,
   X,
@@ -29,14 +28,19 @@ import {
   type MentoringDeliveryMode,
 } from '../api/mentoringPairingApi';
 import { MentoringDailyVideoModal } from '../components/MentoringDailyVideoModal';
-import { MentoringSessionDetails } from '../components/MentoringSessionDetails';
+import { MentoringSessionJoinButton } from '../components/MentoringSessionJoinButton';
+import {
+  MentoringSessionListHeader,
+  MentoringSessionListRow,
+} from '../components/MentoringSessionListRow';
 import { MentoringSessionReport } from '../components/MentoringSessionReport';
 import { MentoringSessionRating } from '../components/MentoringSessionRating';
+import { MentoringResourcesPanel } from '../components/MentoringCollaborationTools';
 import {
   BANK_OPERATING_TIME_OPTIONS,
   toEthiopianTime,
 } from '../../coaching/utils/ethiopianTimeUtils';
-import { isMentoringSessionDay } from '../utils/mentoringSessionUtils';
+import { getMentoringDeliveryModeLabel } from '../utils/mentoringSessionUtils';
 
 type SessionView = 'mentor' | 'trainee';
 
@@ -49,6 +53,13 @@ function buildEatIsoString(dateStr: string, timeStr: string, durationMinutes = 0
   const [hour, minute] = timeStr.split(':').map(Number);
   const dateUtc = new Date(Date.UTC(year, month - 1, day, hour - 3, minute + durationMinutes));
   return dateUtc.toISOString();
+}
+
+function formatSessionStart(value: string) {
+  const date = new Date(value);
+  return Number.isNaN(date.getTime())
+    ? 'Time unavailable'
+    : new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' }).format(date);
 }
 
 function formatDualTimeRange(startIso: string, endIso: string) {
@@ -99,6 +110,7 @@ export function MentoringSessionsPage({ view }: { view: SessionView }) {
   const [createDuration, setCreateDuration] = useState(45);
   const [createDeliveryMode, setCreateDeliveryMode] = useState<MentoringDeliveryMode>('ONLINE');
   const [createTitle, setCreateTitle] = useState('');
+  const [selectedTraineeUserId, setSelectedTraineeUserId] = useState('');
   const [createAgenda, setCreateAgenda] = useState('');
   const [createMeetingUrl, setCreateMeetingUrl] = useState('');
   const [createLocation, setCreateLocation] = useState('');
@@ -146,6 +158,7 @@ export function MentoringSessionsPage({ view }: { view: SessionView }) {
         deliveryMode: MentoringDeliveryMode;
         meetingUrl?: string;
         location?: string;
+        traineeUserId?: number;
       };
     }) => mentoringPairingApi.createSession(variables.relationshipId, variables.input),
     onSuccess: () => {
@@ -156,6 +169,7 @@ export function MentoringSessionsPage({ view }: { view: SessionView }) {
       });
       setCreateFormOpen(false);
       setCreateTitle('');
+      setSelectedTraineeUserId('');
       setCreateAgenda('');
       setCreateMeetingUrl('');
       setCreateLocation('');
@@ -309,6 +323,15 @@ export function MentoringSessionsPage({ view }: { view: SessionView }) {
     .filter((pair, index, pairs) =>
       pairs.findIndex((candidate) => candidate.relationshipId === pair.relationshipId) === index
     );
+  const selectedMentoringRelationship = activeMentorRelationships.find(
+    (pair) => pair.relationshipId === Number(selectedRelationshipId)
+  );
+  const selectedGroupTrainees = allRelationships.filter(
+    (pair) =>
+      pair.relationshipId === Number(selectedRelationshipId)
+      && pair.currentUserRole === 'MENTOR'
+      && pair.memberStatus === 'ACTIVE'
+  );
 
   const handleCreateSessionSubmit = (e: FormEvent) => {
     e.preventDefault();
@@ -320,6 +343,22 @@ export function MentoringSessionsPage({ view }: { view: SessionView }) {
         tone: 'err',
       });
       return;
+    }
+
+    let traineeUserId: number | undefined;
+    if (selectedMentoringRelationship?.requestType === 'GROUP') {
+      traineeUserId = Number(selectedTraineeUserId);
+      const selectedTraineeIsActive = selectedGroupTrainees.some(
+        (pair) => pair.traineeUserId === traineeUserId
+      );
+      if (!Number.isSafeInteger(traineeUserId) || !selectedTraineeIsActive) {
+        pushToast({
+          title: 'Select a trainee',
+          message: 'Choose the active trainee who should receive this group-pairing session.',
+          tone: 'err',
+        });
+        return;
+      }
     }
 
     const checkDate = new Date(`${createDate}T12:00:00`);
@@ -354,6 +393,7 @@ export function MentoringSessionsPage({ view }: { view: SessionView }) {
         deliveryMode: createDeliveryMode,
         meetingUrl: createDeliveryMode === 'ONLINE' ? createMeetingUrl.trim() || undefined : undefined,
         location: createDeliveryMode === 'IN_PERSON' ? createLocation.trim() || undefined : undefined,
+        traineeUserId,
       },
     });
   };
@@ -450,6 +490,7 @@ export function MentoringSessionsPage({ view }: { view: SessionView }) {
                 onChange={(e) => {
                   if (createSessionMutation.isError) createSessionMutation.reset();
                   setSelectedRelationshipId(e.target.value);
+                  setSelectedTraineeUserId('');
                   const nextParams = new URLSearchParams(searchParams);
                   if (e.target.value) nextParams.set('relationshipId', e.target.value);
                   else nextParams.delete('relationshipId');
@@ -467,6 +508,34 @@ export function MentoringSessionsPage({ view }: { view: SessionView }) {
                 ))}
               </select>
             </div>
+
+            {selectedMentoringRelationship?.requestType === 'GROUP' && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
+                <label style={{ fontSize: '0.85rem', fontWeight: 600 }} htmlFor="mentoring-session-trainee">
+                  Session for trainee *
+                </label>
+                <select
+                  id="mentoring-session-trainee"
+                  className="apid-input"
+                  value={selectedTraineeUserId}
+                  onChange={(event) => {
+                    if (createSessionMutation.isError) createSessionMutation.reset();
+                    setSelectedTraineeUserId(event.target.value);
+                  }}
+                  required
+                >
+                  <option value="">Select one trainee</option>
+                  {selectedGroupTrainees.map((trainee) => (
+                    <option key={trainee.memberId} value={trainee.traineeUserId}>
+                      {trainee.traineeName}
+                    </option>
+                  ))}
+                </select>
+                <span className="boa-muted" style={{ fontSize: '0.78rem' }}>
+                  Only this trainee will receive and see the session.
+                </span>
+              </div>
+            )}
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
               <label style={{ fontSize: '0.85rem', fontWeight: 600 }}>Session Title *</label>
@@ -646,13 +715,18 @@ export function MentoringSessionsPage({ view }: { view: SessionView }) {
           />
         </section>
       ) : (
-        <div className="boa-stack">
+        <div className="mentoring-session-list" role="list" aria-label="Mentoring sessions">
+          <MentoringSessionListHeader />
           {sessions.map((session) => {
             const pair = relationshipsById.get(session.relationshipId);
             const partnerLabel = pair
               ? view === 'mentor'
-                ? (traineesByRelationship.get(pair.relationshipId) ?? [pair.traineeName]).join(', ')
+                ? session.traineeName ?? (traineesByRelationship.get(pair.relationshipId) ?? [pair.traineeName]).join(', ')
                 : pair.mentorName
+              : 'Mentoring pairing';
+            const pairLabel = pair
+              ? `${pair.mentorName} → ${session.traineeName
+                ?? (traineesByRelationship.get(pair.relationshipId) ?? [pair.traineeName]).join(', ')}`
               : 'Mentoring pairing';
 
             const timeDetails = formatDualTimeRange(session.scheduledStart, session.scheduledEnd);
@@ -683,104 +757,63 @@ export function MentoringSessionsPage({ view }: { view: SessionView }) {
             }
 
             return (
-              <article
+              <MentoringSessionListRow
                 key={session.id}
-                className="apid-card boa-stack"
-                style={{
-                  border:
-                    session.status === 'RESCHEDULE_PROPOSED'
-                      ? '1px solid #3b82f6'
-                      : session.status === 'CONFIRMED'
-                      ? '1px solid rgba(16, 185, 129, 0.4)'
-                      : '1px solid var(--border)',
-                }}
+                session={session}
+                approach={getMentoringDeliveryModeLabel(session.deliveryMode)}
+                startTime={formatSessionStart(session.scheduledStart)}
+                statusLabel={statusText}
+                statusTone={statusTone}
+                pairLabel={pairLabel}
               >
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '1rem' }}>
+              <article className="boa-stack mentoring-session-detail-content">
+                <div className="mentoring-session-detail-summary">
                   <div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', flexWrap: 'wrap' }}>
-                      <h3 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 700 }}>{session.title}</h3>
+                    <div className="mentoring-session-detail-badges">
                       <StatusPill label={statusText} tone={statusTone} />
-                      <span className="boa-pill" style={{ background: 'var(--muted)', fontSize: '0.72rem', fontWeight: 600 }}>
+                      <span className="boa-pill mentoring-session-approach">
                         {session.deliveryMode.replace('_', ' ')}
                       </span>
                     </div>
 
-                    <p className="boa-muted" style={{ margin: '0.35rem 0 0', fontSize: '0.86rem' }}>
+                    <p className="boa-muted mentoring-session-participants">
                       <strong>{isMentor ? 'Trainee(s):' : 'Mentor:'}</strong> {partnerLabel}
                       {pair?.skillName ? ` · Skill: ${pair.skillName}` : ''}
                     </p>
                   </div>
 
-                  <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', alignItems: 'center' }}>
+                  <div className="mentoring-session-detail-actions">
                     <Link
                       to={`/mentoring/pairing/${session.relationshipId}`}
                       className="apid-btn apid-btn-outline apid-btn-sm"
                     >
                       View Pairing
                     </Link>
-                    {(session.deliveryMode === 'ONLINE' || session.deliveryMode === 'HYBRID') &&
-                      isMentoringSessionDay(session.scheduledStart) &&
-                      session.status !== 'CANCELLED' &&
-                      session.status !== 'DECLINED' && (
-                        <button
-                          type="button"
-                          onClick={() => setSelectedForVideo(session)}
-                          className="apid-btn apid-btn-sm"
-                          style={{
-                            background: 'linear-gradient(135deg, #0284c7, #0369a1)',
-                            color: '#ffffff',
-                            border: 'none',
-                            fontWeight: 600,
-                            boxShadow: '0 2px 4px rgba(2, 132, 199, 0.25)',
-                            display: 'inline-flex',
-                            alignItems: 'center',
-                            gap: '0.35rem',
-                            cursor: 'pointer',
-                          }}
-                        >
-                          <Video size={14} /> Join Daily.co Video
-                        </button>
-                    )}
+                    <MentoringSessionJoinButton
+                      session={session}
+                      onJoin={() => setSelectedForVideo(session)}
+                    />
                   </div>
                 </div>
 
-                <MentoringSessionDetails session={session} />
-                <MentoringSessionReport session={session} isMentor={isMentor} />
-                <MentoringSessionRating
-                  relationshipId={session.relationshipId}
-                  sessionId={session.id}
-                  isMentee={isTrainee}
-                  isCompleted={session.status === 'COMPLETED'}
-                />
-
                 {/* Ethiopian Dual Clock Time Banner */}
                 <div
-                  style={{
-                    background: 'var(--surface-sunken, rgba(0,0,0,0.02))',
-                    padding: '0.75rem 1rem',
-                    borderRadius: '8px',
-                    border: '1px solid var(--border)',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'space-between',
-                    flexWrap: 'wrap',
-                    gap: '0.75rem',
-                  }}
+                  className="mentoring-session-time-summary"
                 >
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                  <div className="mentoring-session-time-main">
                     <Clock size={18} className="text-amber-600" />
                     <div>
-                      <div style={{ fontWeight: 700, fontSize: '0.92rem' }}>
+                      <div className="mentoring-session-time-primary">
                         {timeDetails.date} · {timeDetails.ethiopianRange}
                       </div>
-                      <div className="boa-muted" style={{ fontSize: '0.8rem' }}>
+                      <div className="boa-muted mentoring-session-time-secondary">
                         International Clock: {timeDetails.eatRange}
                       </div>
                     </div>
                   </div>
 
                   {session.location && (
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.84rem' }}>
+                    <div className="mentoring-session-location">
                       <MapPin size={15} className="text-blue-500" />
                       <span>{session.location}</span>
                     </div>
@@ -789,10 +822,28 @@ export function MentoringSessionsPage({ view }: { view: SessionView }) {
 
                 {/* Agenda */}
                 {session.agenda && (
-                  <p style={{ margin: '0.2rem 0', fontSize: '0.88rem', color: 'var(--text-subtle)' }}>
+                  <p className="mentoring-session-agenda">
                     <strong>Agenda:</strong> {session.agenda}
                   </p>
                 )}
+
+                <MentoringSessionReport session={session} isMentor={isMentor} />
+                <MentoringSessionRating
+                  relationshipId={session.relationshipId}
+                  sessionId={session.id}
+                  isMentee={isTrainee}
+                  sessionStatus={session.status}
+                  scheduledEnd={session.scheduledEnd}
+                />
+                <MentoringResourcesPanel
+                  relationshipId={session.relationshipId}
+                  sessionId={session.id}
+                  canAdd={
+                    view === 'mentor'
+                    && pair?.currentUserRole === 'MENTOR'
+                    && pair?.relationshipStatus === 'ACTIVE'
+                  }
+                />
 
                 {/* Reschedule Proposal Banner (when RESCHEDULE_PROPOSED) */}
                 {session.status === 'RESCHEDULE_PROPOSED' && session.proposedStart && session.proposedEnd && (
@@ -958,6 +1009,7 @@ export function MentoringSessionsPage({ view }: { view: SessionView }) {
                   </div>
                 )}
               </article>
+              </MentoringSessionListRow>
             );
           })}
         </div>

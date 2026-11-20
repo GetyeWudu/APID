@@ -15,17 +15,23 @@ public interface MentoringSessionRatingRepository extends JpaRepository<Mentorin
             SELECT COUNT(DISTINCT rating.session.id)
             FROM MentoringSessionRating rating
             WHERE rating.session.relationship.mentorUser.id = :mentorUserId
-              AND rating.session.status =
+              AND rating.session.status IN (
+                com.boa.apid.mentoring.pairing.entity.MentoringSessionStatus.CONFIRMED,
                 com.boa.apid.mentoring.pairing.entity.MentoringSessionStatus.COMPLETED
+              )
+              AND rating.session.scheduledEnd <= CURRENT_TIMESTAMP
             """)
-    long countCompletedSessionsWithRatingsByMentorUserId(@Param("mentorUserId") Long mentorUserId);
+    long countEndedSessionsWithRatingsByMentorUserId(@Param("mentorUserId") Long mentorUserId);
 
     @Query("""
             SELECT AVG(rating.rating)
             FROM MentoringSessionRating rating
             WHERE rating.session.relationship.mentorUser.id = :mentorUserId
-              AND rating.session.status =
+              AND rating.session.status IN (
+                com.boa.apid.mentoring.pairing.entity.MentoringSessionStatus.CONFIRMED,
                 com.boa.apid.mentoring.pairing.entity.MentoringSessionStatus.COMPLETED
+              )
+              AND rating.session.scheduledEnd <= CURRENT_TIMESTAMP
             """)
-    Double averageCompletedByMentorUserId(@Param("mentorUserId") Long mentorUserId);
+    Double averageEndedByMentorUserId(@Param("mentorUserId") Long mentorUserId);
 }

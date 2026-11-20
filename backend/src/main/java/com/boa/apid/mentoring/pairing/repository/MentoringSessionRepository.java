@@ -15,10 +15,15 @@ import java.util.Optional;
 
 public interface MentoringSessionRepository extends JpaRepository<MentoringSession, Long> {
 
-    @EntityGraph(attributePaths = {"createdByUser"})
+    @EntityGraph(attributePaths = {"createdByUser", "targetTraineeMember", "targetTraineeMember.traineeUser"})
     List<MentoringSession> findByRelationship_IdOrderByScheduledStartDesc(Long relationshipId);
 
-    @EntityGraph(attributePaths = {"createdByUser", "relationship"})
+    @EntityGraph(attributePaths = {
+            "createdByUser",
+            "relationship",
+            "targetTraineeMember",
+            "targetTraineeMember.traineeUser"
+    })
     List<MentoringSession> findByRelationship_IdInOrderByScheduledStartDesc(Collection<Long> relationshipIds);
 
     long countByStatus(MentoringSessionStatus status);

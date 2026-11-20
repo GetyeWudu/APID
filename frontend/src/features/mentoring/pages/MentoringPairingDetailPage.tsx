@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import axios from 'axios';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { ArrowLeft, CalendarDays, Check, MessageCircle, Video, X } from 'lucide-react';
+import { ArrowLeft, CalendarDays, Check, MessageCircle, X } from 'lucide-react';
 import { Link, useParams, useSearchParams } from 'react-router-dom';
 import type { ApiErrorPayload } from '../../../shared/api/apiClient';
 import {
@@ -14,15 +14,19 @@ import {
 } from '../../../shared/components/ui';
 import { mentoringPairingApi, type MentoringSession } from '../api/mentoringPairingApi';
 import { MentoringDailyVideoModal } from '../components/MentoringDailyVideoModal';
-import { MentoringSessionDetails } from '../components/MentoringSessionDetails';
+import { MentoringSessionJoinButton } from '../components/MentoringSessionJoinButton';
+import {
+  MentoringSessionListHeader,
+  MentoringSessionListRow,
+} from '../components/MentoringSessionListRow';
 import { MentoringSessionReport } from '../components/MentoringSessionReport';
 import { MentoringSessionRating } from '../components/MentoringSessionRating';
 import {
   MentoringFeedbackForm,
-  MentoringProgressPanel,
+  MentoringResourcesPanel,
   MentoringRelationshipClosure,
 } from '../components/MentoringCollaborationTools';
-import { isMentoringSessionDay } from '../utils/mentoringSessionUtils';
+import { getMentoringDeliveryModeLabel } from '../utils/mentoringSessionUtils';
 
 type DetailTab = 'overview' | 'sessions' | 'progress';
 
@@ -195,123 +199,118 @@ export function MentoringPairingDetailPage() {
           ? 'IN PROGRESS'
           : session.status;
       return (
-        <article key={session.id} className="apid-card" style={{ border: '1px solid var(--border)' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', gap: '0.7rem', flexWrap: 'wrap' }}>
-            <div>
-              <h3 style={{ margin: 0 }}>{session.title}</h3>
-              <p className="boa-muted" style={{ margin: '0.3rem 0 0', fontSize: '0.84rem' }}>
-                {formatDateTime(session.scheduledStart)} to {formatDateTime(session.scheduledEnd)}
-              </p>
-              <p className="boa-muted" style={{ margin: '0.25rem 0 0', fontSize: '0.8rem' }}>
-                Scheduled by {session.createdByName}
-              </p>
+        <MentoringSessionListRow
+          key={session.id}
+          session={session}
+          approach={getMentoringDeliveryModeLabel(session.deliveryMode)}
+          startTime={formatDateTime(session.scheduledStart)}
+          statusLabel={status}
+          statusTone={sessionStatusTone(status)}
+          pairLabel={`${detail.mentorName} → ${session.traineeName ?? (detail.trainees.map((trainee) => trainee.name).join(', ') || 'Trainees')}`}
+        >
+          <article className="boa-stack mentoring-session-detail-content">
+            <header className="mentoring-session-detail-summary">
+              <div>
+                <p className="boa-muted mentoring-session-date-range">
+                  {formatDateTime(session.scheduledStart)} to {formatDateTime(session.scheduledEnd)}
+                </p>
+                <p className="boa-muted mentoring-session-scheduled-by">
+                  Scheduled by {session.createdByName}
+                </p>
+              </div>
+              <div className="mentoring-session-detail-badges">
+                <StatusPill label={status} tone={sessionStatusTone(status)} />
+                <StatusPill label={getMentoringDeliveryModeLabel(session.deliveryMode)} tone="neutral" />
+              </div>
+            </header>
+            <div className="mentoring-session-detail-actions">
+              <MentoringSessionJoinButton
+                session={session}
+                onJoin={() => setSelectedForVideo(session)}
+              />
             </div>
-            <StatusPill label={status} tone={sessionStatusTone(status)} />
-          </div>
-          <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', marginTop: '0.7rem', flexWrap: 'wrap' }}>
-            <StatusPill label={session.deliveryMode.replace('_', ' ')} tone="neutral" />
-            {(session.deliveryMode === 'ONLINE' || session.deliveryMode === 'HYBRID') &&
-              isMentoringSessionDay(session.scheduledStart) &&
-              session.status !== 'CANCELLED' &&
-              session.status !== 'DECLINED' && (
+            <div className="mentoring-session-pair-meta">
+              <p><strong>Pair</strong><span>{detail.mentorName} → {session.traineeName ?? detail.trainees.map((trainee) => trainee.name).join(', ')}</span></p>
+              <p><strong>Skill</strong><span>{detail.skillName ?? 'Not specified'}</span></p>
+            </div>
+            {session.agenda && (
+              <p className="mentoring-session-agenda">
+                <strong>Agenda:</strong> {session.agenda}
+              </p>
+            )}
+            <MentoringSessionReport
+              session={session}
+              isMentor={detail.currentUserRole === 'MENTOR'}
+            />
+            <MentoringSessionRating
+              relationshipId={relationshipId}
+              sessionId={session.id}
+              isMentee={detail.currentUserRole === 'TRAINEE'}
+              sessionStatus={session.status}
+              scheduledEnd={session.scheduledEnd}
+            />
+            <MentoringResourcesPanel
+              relationshipId={relationshipId}
+              sessionId={session.id}
+              canAdd={detail.currentUserRole === 'MENTOR' && detail.status === 'ACTIVE'}
+            />
+            {session.status === 'DECLINED' && (
+              <p className="boa-muted" role="status">
+                Declined{session.declineReason ? `: ${session.declineReason}` : '.'}
+              </p>
+            )}
+            {session.status === 'RESCHEDULE_PROPOSED' && (
+              <div className="boa-card" style={{ border: '1px solid var(--border)' }}>
+                <strong>Reschedule requested</strong>
+                {session.proposedStart && session.proposedEnd && (
+                  <p className="boa-muted" style={{ margin: '0.35rem 0' }}>
+                    Proposed: {formatDateTime(session.proposedStart)} to {formatDateTime(session.proposedEnd)}
+                  </p>
+                )}
+                {session.rescheduleReason && <p className="boa-muted" style={{ margin: '0.35rem 0' }}>{session.rescheduleReason}</p>}
+                {detail.currentUserRole === 'MENTOR' ? (
+                  <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', marginTop: '0.65rem' }}>
+                    <button
+                      type="button"
+                      className="apid-btn apid-btn-primary apid-btn-sm"
+                      onClick={() => respondRescheduleMutation.mutate({ sessionId: session.id, accept: true })}
+                      disabled={respondRescheduleMutation.isPending}
+                    >
+                      <Check size={14} /> Accept new time
+                    </button>
+                    <button
+                      type="button"
+                      className="apid-btn apid-btn-outline apid-btn-sm"
+                      onClick={() => respondRescheduleMutation.mutate({ sessionId: session.id, accept: false })}
+                      disabled={respondRescheduleMutation.isPending}
+                    >
+                      <X size={14} /> Keep original time
+                    </button>
+                  </div>
+                ) : (
+                  <p className="boa-muted" style={{ margin: '0.35rem 0 0' }}>
+                    Waiting for the mentor to respond to this proposal.
+                  </p>
+                )}
+              </div>
+            )}
+            {detail.currentUserRole === 'TRAINEE' && session.status === 'SCHEDULED' && (
+              <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
                 <button
                   type="button"
-                  onClick={() => setSelectedForVideo(session)}
-                  className="apid-btn apid-btn-sm"
-                  style={{
-                    background: 'linear-gradient(135deg, #0284c7, #0369a1)',
-                    color: '#ffffff',
-                    border: 'none',
-                    fontWeight: 600,
-                    boxShadow: '0 2px 4px rgba(2, 132, 199, 0.25)',
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    gap: '0.35rem',
-                    cursor: 'pointer',
-                  }}
+                  className="apid-btn apid-btn-primary apid-btn-sm"
+                  onClick={() => acceptSessionMutation.mutate(session.id)}
+                  disabled={acceptSessionMutation.isPending}
                 >
-                  <Video size={14} /> Join Daily.co Video
+                  <Check size={14} /> Accept session
                 </button>
+                <Link to={sessionsPath} className="apid-btn apid-btn-outline apid-btn-sm">
+                  Propose another time or decline
+                </Link>
+              </div>
             )}
-
-            {activeTab === 'progress' && (
-              <section className="apid-card boa-stack">
-                <div>
-                  <h2 className="boa-card-title">Progress and milestones</h2>
-                  <p className="boa-card-subtitle">Record and review learning milestones, observations, and next steps.</p>
-                </div>
-                <MentoringProgressPanel relationshipId={relationshipId} canAdd={detail.status === 'ACTIVE'} />
-              </section>
-            )}
-          </div>
-          <MentoringSessionDetails session={session} />
-          <MentoringSessionReport
-            session={session}
-            isMentor={detail.currentUserRole === 'MENTOR'}
-          />
-          <MentoringSessionRating
-            relationshipId={relationshipId}
-            sessionId={session.id}
-            isMentee={detail.currentUserRole === 'TRAINEE'}
-            isCompleted={session.status === 'COMPLETED'}
-          />
-          {session.agenda && <p className="boa-muted">{session.agenda}</p>}
-          {session.status === 'DECLINED' && (
-            <p className="boa-muted" role="status">
-              Declined{session.declineReason ? `: ${session.declineReason}` : '.'}
-            </p>
-          )}
-          {session.status === 'RESCHEDULE_PROPOSED' && (
-            <div className="boa-card" style={{ border: '1px solid var(--border)' }}>
-              <strong>Reschedule requested</strong>
-              {session.proposedStart && session.proposedEnd && (
-                <p className="boa-muted" style={{ margin: '0.35rem 0' }}>
-                  Proposed: {formatDateTime(session.proposedStart)} to {formatDateTime(session.proposedEnd)}
-                </p>
-              )}
-              {session.rescheduleReason && <p className="boa-muted" style={{ margin: '0.35rem 0' }}>{session.rescheduleReason}</p>}
-              {detail.currentUserRole === 'MENTOR' ? (
-                <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', marginTop: '0.65rem' }}>
-                  <button
-                    type="button"
-                    className="apid-btn apid-btn-primary apid-btn-sm"
-                    onClick={() => respondRescheduleMutation.mutate({ sessionId: session.id, accept: true })}
-                    disabled={respondRescheduleMutation.isPending}
-                  >
-                    <Check size={14} /> Accept new time
-                  </button>
-                  <button
-                    type="button"
-                    className="apid-btn apid-btn-outline apid-btn-sm"
-                    onClick={() => respondRescheduleMutation.mutate({ sessionId: session.id, accept: false })}
-                    disabled={respondRescheduleMutation.isPending}
-                  >
-                    <X size={14} /> Keep original time
-                  </button>
-                </div>
-              ) : (
-                <p className="boa-muted" style={{ margin: '0.35rem 0 0' }}>
-                  Waiting for the mentor to respond to this proposal.
-                </p>
-              )}
-            </div>
-          )}
-          {detail.currentUserRole === 'TRAINEE' && session.status === 'SCHEDULED' && (
-            <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
-              <button
-                type="button"
-                className="apid-btn apid-btn-primary apid-btn-sm"
-                onClick={() => acceptSessionMutation.mutate(session.id)}
-                disabled={acceptSessionMutation.isPending}
-              >
-                <Check size={14} /> Accept session
-              </button>
-              <Link to={sessionsPath} className="apid-btn apid-btn-outline apid-btn-sm">
-                Propose another time or decline
-              </Link>
-            </div>
-          )}
-        </article>
+          </article>
+        </MentoringSessionListRow>
       );
     });
 
@@ -473,7 +472,10 @@ export function MentoringPairingDetailPage() {
                 description="Session requests and confirmed sessions for this pairing will appear here."
               />
             ) : (
-              <div className="boa-stack">{renderSessionCards(pairingSessions.slice(0, 3))}</div>
+              <div className="mentoring-session-list" role="list" aria-label="Mentoring sessions">
+                <MentoringSessionListHeader />
+                {renderSessionCards(pairingSessions.slice(0, 3))}
+              </div>
             )}
           </section>
 
@@ -535,7 +537,10 @@ export function MentoringPairingDetailPage() {
                   <p className="boa-card-subtitle">Requests, confirmations, reschedule proposals, and session history.</p>
                 </div>
               </div>
-              {renderSessionCards(pairingSessions)}
+              <div className="mentoring-session-list" role="list" aria-label="Mentoring sessions">
+                <MentoringSessionListHeader />
+                {renderSessionCards(pairingSessions)}
+              </div>
             </section>
           )}
         </div>

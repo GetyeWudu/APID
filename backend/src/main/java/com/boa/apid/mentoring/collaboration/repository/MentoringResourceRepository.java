@@ -10,8 +10,21 @@ import java.util.Optional;
 public interface MentoringResourceRepository extends JpaRepository<MentoringResource, Long> {
 
     @EntityGraph(attributePaths = {"file", "uploadedBy"})
-    List<MentoringResource> findByRelationship_IdOrderByCreatedAtDesc(Long relationshipId);
+    List<MentoringResource> findByRelationship_IdAndSessionIsNullOrderByCreatedAtDesc(Long relationshipId);
 
-    @EntityGraph(attributePaths = {"relationship", "file"})
+    @EntityGraph(attributePaths = {"file", "uploadedBy"})
+    List<MentoringResource> findByRelationship_IdAndSession_IdOrderByCreatedAtDesc(
+            Long relationshipId,
+            Long sessionId
+    );
+
+    @EntityGraph(attributePaths = {
+            "relationship",
+            "session",
+            "session.relationship",
+            "session.targetTraineeMember",
+            "session.targetTraineeMember.traineeUser",
+            "file"
+    })
     Optional<MentoringResource> findDetailedById(Long id);
 }

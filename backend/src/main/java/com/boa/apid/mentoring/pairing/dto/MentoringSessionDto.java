@@ -8,6 +8,8 @@ import java.time.Instant;
 public record MentoringSessionDto(
         Long id,
         Long relationshipId,
+        Long traineeUserId,
+        String traineeName,
         String title,
         String agenda,
         Instant scheduledStart,

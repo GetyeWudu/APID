@@ -20,6 +20,8 @@ import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Instant;
+
 @Service
 public class MentoringSessionRatingService {
 
@@ -74,10 +76,12 @@ public class MentoringSessionRatingService {
             throw new ResourceNotFoundException("Mentoring session not found.");
         }
         requireMentee(session, menteeUserId);
-        if (session.getStatus() != MentoringSessionStatus.COMPLETED) {
+        if ((session.getStatus() != MentoringSessionStatus.CONFIRMED
+                && session.getStatus() != MentoringSessionStatus.COMPLETED)
+                || Instant.now().isBefore(session.getScheduledEnd())) {
             throw new BusinessException(
-                    "MENTORING_SESSION_NOT_COMPLETED",
-                    "You can rate this session after it is completed.",
+                    "MENTORING_SESSION_NOT_ENDED",
+                    "You can rate this session after its scheduled end.",
                     HttpStatus.CONFLICT
             );
         }
@@ -106,11 +110,11 @@ public class MentoringSessionRatingService {
                         mentorUserId, TrainerAuthorizationStatus.ACTIVE).isEmpty()) {
             throw new AccessDeniedException("Only an active mentor can view a mentor rating.");
         }
-        long ratedSessionCount = ratingRepository.countCompletedSessionsWithRatingsByMentorUserId(mentorUserId);
+        long ratedSessionCount = ratingRepository.countEndedSessionsWithRatingsByMentorUserId(mentorUserId);
         if (ratedSessionCount < MINIMUM_RATINGS_FOR_MENTOR_AVERAGE) {
             return new MentorSessionRatingDto(null);
         }
-        return new MentorSessionRatingDto(ratingRepository.averageCompletedByMentorUserId(mentorUserId));
+        return new MentorSessionRatingDto(ratingRepository.averageEndedByMentorUserId(mentorUserId));
     }
 
     private MentoringSession requireSession(Long relationshipId, Long sessionId) {
@@ -124,6 +128,10 @@ public class MentoringSessionRatingService {
 
     private void requireMentee(MentoringSession session, Long userId) {
         Long relationshipId = session.getRelationship().getId();
+        if (session.getTargetTraineeMember() != null
+                && !session.getTargetTraineeMember().getTraineeUser().getId().equals(userId)) {
+            throw new AccessDeniedException("Only the selected trainee can rate this session.");
+        }
         if (session.getRelationship().getMentorUser().getId().equals(userId)
                 || !memberRepository.existsByRelationship_IdAndTraineeUser_Id(relationshipId, userId)) {
             throw new AccessDeniedException("Only a mentee in this relationship can rate its session.");

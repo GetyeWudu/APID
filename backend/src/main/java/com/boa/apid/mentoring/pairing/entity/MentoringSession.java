@@ -17,6 +17,10 @@ public class MentoringSession {
     @JoinColumn(name = "relationship_id", nullable = false)
     private MentoringRelationship relationship;
 
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "target_trainee_member_id")
+    private MentoringRelationshipMember targetTraineeMember;
+
     @Column(nullable = false, length = 180)
     private String title;
 
@@ -91,6 +95,10 @@ public class MentoringSession {
     public Long getId() { return id; }
     public MentoringRelationship getRelationship() { return relationship; }
     public void setRelationship(MentoringRelationship relationship) { this.relationship = relationship; }
+    public MentoringRelationshipMember getTargetTraineeMember() { return targetTraineeMember; }
+    public void setTargetTraineeMember(MentoringRelationshipMember targetTraineeMember) {
+        this.targetTraineeMember = targetTraineeMember;
+    }
     public String getTitle() { return title; }
     public void setTitle(String title) { this.title = title; }
     public String getAgenda() { return agenda; }

@@ -9,6 +9,7 @@ import org.springframework.data.repository.query.Param;
 
 import java.util.Collection;
 import java.util.List;
+import java.util.Optional;
 
 public interface MentoringRelationshipMemberRepository extends JpaRepository<MentoringRelationshipMember, Long> {
 
@@ -33,6 +34,12 @@ public interface MentoringRelationshipMemberRepository extends JpaRepository<Men
     List<MentoringRelationshipMember> findByRelationship_IdOrderByJoinedAtAsc(Long relationshipId);
 
     boolean existsByRelationship_IdAndTraineeUser_IdAndStatus(
+            Long relationshipId,
+            Long traineeUserId,
+            MentoringRelationshipMemberStatus status
+    );
+
+    Optional<MentoringRelationshipMember> findByRelationship_IdAndTraineeUser_IdAndStatus(
             Long relationshipId,
             Long traineeUserId,
             MentoringRelationshipMemberStatus status

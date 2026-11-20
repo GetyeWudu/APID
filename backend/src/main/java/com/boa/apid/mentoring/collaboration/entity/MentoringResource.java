@@ -3,6 +3,7 @@ package com.boa.apid.mentoring.collaboration.entity;
 import com.boa.apid.common.storage.StoredFile;
 import com.boa.apid.core.authorization.entity.User;
 import com.boa.apid.mentoring.pairing.entity.MentoringRelationship;
+import com.boa.apid.mentoring.pairing.entity.MentoringSession;
 import jakarta.persistence.*;
 
 import java.time.Instant;
@@ -18,6 +19,10 @@ public class MentoringResource {
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "relationship_id", nullable = false)
     private MentoringRelationship relationship;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "session_id")
+    private MentoringSession session;
 
     @Column(nullable = false, length = 180)
     private String title;
@@ -50,6 +55,8 @@ public class MentoringResource {
     public Long getId() { return id; }
     public MentoringRelationship getRelationship() { return relationship; }
     public void setRelationship(MentoringRelationship relationship) { this.relationship = relationship; }
+    public MentoringSession getSession() { return session; }
+    public void setSession(MentoringSession session) { this.session = session; }
     public String getTitle() { return title; }
     public void setTitle(String title) { this.title = title; }
     public MentoringResourceType getResourceType() { return resourceType; }

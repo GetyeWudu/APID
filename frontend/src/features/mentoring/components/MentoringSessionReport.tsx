@@ -80,8 +80,9 @@ export function MentoringSessionReport({
 
   const reportIsDue =
     session.status === 'CONFIRMED' && Number.isFinite(scheduledEnd) && now >= scheduledEnd;
-  if (!reportIsDue) return null;
+  if (session.status !== 'CONFIRMED') return null;
   if (!isMentor) {
+    if (!reportIsDue) return null;
     return (
       <p className="boa-muted" role="status">
         The end-of-session report is waiting for the mentor.
@@ -92,8 +93,15 @@ export function MentoringSessionReport({
   return (
     <form className="apid-card boa-stack" onSubmit={submitReport}>
       <div>
-        <h4 className="boa-card-title">Session report due</h4>
-        <p className="boa-card-subtitle">Submit a brief report to mark this session complete.</p>
+        <h4 className="boa-card-title">{reportIsDue ? 'Session report due' : 'Session report'}</h4>
+        <p className="boa-card-subtitle">
+          {reportIsDue
+            ? 'Submit a brief report to mark this session complete.'
+            : `Report writing opens after ${new Intl.DateTimeFormat(undefined, {
+              dateStyle: 'medium',
+              timeStyle: 'short',
+            }).format(new Date(session.scheduledEnd))}.`}
+        </p>
       </div>
       <label>
         Session report
@@ -104,16 +112,20 @@ export function MentoringSessionReport({
           value={reportNote}
           onChange={(event) => setReportNote(event.target.value)}
           required
-          disabled={reportMutation.isPending}
+          disabled={!reportIsDue || reportMutation.isPending}
         />
       </label>
       <div>
         <button
           type="submit"
           className="apid-btn apid-btn-primary apid-btn-sm"
-          disabled={!reportNote.trim() || reportMutation.isPending}
+          disabled={!reportIsDue || !reportNote.trim() || reportMutation.isPending}
         >
-          {reportMutation.isPending ? 'Submitting...' : 'Submit report and complete session'}
+          {reportMutation.isPending
+            ? 'Submitting...'
+            : reportIsDue
+              ? 'Submit report and complete session'
+              : 'Available after session end'}
         </button>
       </div>
     </form>

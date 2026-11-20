@@ -75,6 +75,54 @@ public class MentoringRelationshipManagementController {
                 .body(loaded.resource());
     }
 
+    @GetMapping("/sessions/{sessionId}/resources")
+    public ApiResponse<List<MentoringResourceDto>> listSessionResources(
+            @PathVariable Long relationshipId,
+            @PathVariable Long sessionId,
+            @AuthenticationPrincipal ApidUserPrincipal actor
+    ) {
+        return ApiResponse.ok(
+                relationshipManagementService.listSessionResources(relationshipId, sessionId, actor)
+        );
+    }
+
+    @PostMapping(value = "/sessions/{sessionId}/resources", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public ApiResponse<MentoringResourceDto> addSessionResource(
+            @PathVariable Long relationshipId,
+            @PathVariable Long sessionId,
+            @RequestParam String title,
+            @RequestParam(required = false) String externalUrl,
+            @RequestParam(required = false) MultipartFile file,
+            @AuthenticationPrincipal ApidUserPrincipal actor
+    ) {
+        return ApiResponse.ok(
+                "Session resource shared",
+                relationshipManagementService.addSessionResource(
+                        relationshipId, sessionId, title, externalUrl, file, actor
+                )
+        );
+    }
+
+    @GetMapping("/sessions/{sessionId}/resources/{resourceId}/file")
+    public ResponseEntity<Resource> downloadSessionResource(
+            @PathVariable Long relationshipId,
+            @PathVariable Long sessionId,
+            @PathVariable Long resourceId,
+            @AuthenticationPrincipal ApidUserPrincipal actor
+    ) {
+        FileStorageService.LoadedFile loaded =
+                relationshipManagementService.downloadSessionResource(
+                        relationshipId, sessionId, resourceId, actor
+                );
+        return ResponseEntity.ok()
+                .contentType(MediaType.APPLICATION_OCTET_STREAM)
+                .header(HttpHeaders.CONTENT_DISPOSITION, ContentDisposition.attachment()
+                        .filename(loaded.metadata().originalFilename(), StandardCharsets.UTF_8)
+                        .build()
+                        .toString())
+                .body(loaded.resource());
+    }
+
     @GetMapping("/progress-notes")
     public ApiResponse<List<MentoringProgressNoteDto>> listProgressNotes(
             @PathVariable Long relationshipId,

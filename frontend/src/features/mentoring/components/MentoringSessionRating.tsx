@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Star } from 'lucide-react';
 import { useAuth } from '../../../app/AuthContext';
@@ -10,24 +10,41 @@ interface MentoringSessionRatingProps {
   relationshipId: number;
   sessionId: number;
   isMentee: boolean;
-  isCompleted: boolean;
+  sessionStatus: string;
+  scheduledEnd: string;
 }
 
 export function MentoringSessionRating({
   relationshipId,
   sessionId,
   isMentee,
-  isCompleted,
+  sessionStatus,
+  scheduledEnd,
 }: MentoringSessionRatingProps) {
   const [selectedRating, setSelectedRating] = useState(0);
+  const [now, setNow] = useState(() => Date.now());
   const { user } = useAuth();
   const queryClient = useQueryClient();
   const { pushToast } = useToast();
+  const endTime = new Date(scheduledEnd).getTime();
+  const canRate = Number.isFinite(endTime)
+    && now >= endTime
+    && (sessionStatus === 'CONFIRMED' || sessionStatus === 'COMPLETED');
   const ratingQueryKey = ['mentoring', 'session-rating', user?.id, relationshipId, sessionId];
+
+  useEffect(() => {
+    if (!Number.isFinite(endTime) || now >= endTime) return undefined;
+    const timeout = setTimeout(
+      () => setNow(Date.now()),
+      Math.min(Math.max(0, endTime - Date.now()), 2_147_483_647)
+    );
+    return () => clearTimeout(timeout);
+  }, [endTime, now]);
+
   const ratingQuery = useQuery({
     queryKey: ratingQueryKey,
     queryFn: () => mentoringPairingApi.getMySessionRating(relationshipId, sessionId),
-    enabled: isMentee && isCompleted && user != null,
+    enabled: isMentee && canRate && user != null,
   });
   const ratingMutation = useMutation({
     mutationFn: () =>
@@ -50,7 +67,17 @@ export function MentoringSessionRating({
     }),
   });
 
-  if (!isMentee || !isCompleted) return null;
+  if (!isMentee || (sessionStatus !== 'CONFIRMED' && sessionStatus !== 'COMPLETED')) return null;
+  if (!canRate) {
+    return (
+      <section className="apid-card" aria-label="Session rating">
+        <strong>Session rating</strong>
+        <p className="boa-muted" style={{ margin: '0.35rem 0 0' }}>
+          Rating opens after the scheduled session end.
+        </p>
+      </section>
+    );
+  }
   if (ratingQuery.isLoading) {
     return <p className="boa-muted" role="status">Loading your private session rating...</p>;
   }

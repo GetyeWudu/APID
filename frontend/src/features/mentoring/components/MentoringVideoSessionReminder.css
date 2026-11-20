@@ -1,0 +1,105 @@
+.mentoring-video-reminder-stack {
+  position: fixed;
+  z-index: 45;
+  top: calc(var(--topbar-height, 64px) + 0.75rem);
+  right: 1rem;
+  display: grid;
+  gap: 0.65rem;
+  width: min(390px, calc(100vw - 2rem));
+  max-height: calc(100vh - var(--topbar-height, 64px) - 2rem);
+  overflow-y: auto;
+  padding: 0.15rem;
+  pointer-events: none;
+  overscroll-behavior: contain;
+}
+
+.mentoring-video-reminder {
+  position: relative;
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+  padding: 1rem 2.8rem 1rem 1rem;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-left: 4px solid var(--primary, #2563eb);
+  border-radius: 12px;
+  box-shadow: 0 12px 32px rgba(15, 23, 42, 0.2);
+  pointer-events: auto;
+}
+
+.mentoring-video-reminder-icon {
+  display: grid;
+  flex: 0 0 auto;
+  width: 2.35rem;
+  height: 2.35rem;
+  place-items: center;
+  color: var(--primary, #2563eb);
+  background: var(--muted);
+  border-radius: 0.7rem;
+}
+
+.mentoring-video-reminder-content {
+  min-width: 0;
+  flex: 1;
+}
+
+.mentoring-video-reminder-kicker {
+  margin: 0 0 0.2rem;
+  color: var(--text-subtle);
+  font-size: 0.7rem;
+  font-weight: 750;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.mentoring-video-reminder-content h2 {
+  margin: 0;
+  overflow: hidden;
+  font-size: 0.96rem;
+  line-height: 1.35;
+  text-overflow: ellipsis;
+}
+
+.mentoring-video-reminder-time {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  margin: 0.35rem 0 0.7rem;
+  color: var(--text-subtle);
+  font-size: 0.8rem;
+}
+
+.mentoring-video-reminder-dismiss {
+  position: absolute;
+  top: 0.55rem;
+  right: 0.55rem;
+  display: grid;
+  width: 1.9rem;
+  height: 1.9rem;
+  place-items: center;
+  padding: 0;
+  color: var(--text-subtle);
+  background: transparent;
+  border: 0;
+  border-radius: 50%;
+  cursor: pointer;
+}
+
+.mentoring-video-reminder-dismiss:hover {
+  color: var(--text);
+  background: var(--muted);
+}
+
+.mentoring-video-reminder-dismiss:focus-visible {
+  outline: 2px solid var(--primary, #2563eb);
+  outline-offset: 2px;
+}
+
+@media (max-width: 640px) {
+  .mentoring-video-reminder-stack {
+    top: calc(var(--topbar-height, 64px) + 0.4rem);
+    right: 0.5rem;
+    width: calc(100vw - 1rem);
+    max-height: 55vh;
+  }
+}

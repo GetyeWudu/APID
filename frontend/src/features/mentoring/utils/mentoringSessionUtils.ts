@@ -1,3 +1,5 @@
+import type { MentoringDeliveryMode } from '../api/mentoringPairingApi';
+
 export function getMentoringSessionDaysRemaining(scheduledStart: string, now = new Date()): number | null {
   const sessionDate = new Date(scheduledStart);
   if (Number.isNaN(sessionDate.getTime())) return null;
@@ -9,4 +11,10 @@ export function getMentoringSessionDaysRemaining(scheduledStart: string, now = n
 
 export function isMentoringSessionDay(scheduledStart: string, now = new Date()): boolean {
   return getMentoringSessionDaysRemaining(scheduledStart, now) === 0;
+}
+
+export function getMentoringDeliveryModeLabel(deliveryMode: MentoringDeliveryMode): string {
+  if (deliveryMode === 'ONLINE') return 'Video only';
+  if (deliveryMode === 'HYBRID') return 'Hybrid: in person and video';
+  return 'In person';
 }

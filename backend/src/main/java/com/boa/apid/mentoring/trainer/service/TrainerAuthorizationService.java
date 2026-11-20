@@ -1186,9 +1186,9 @@ public class TrainerAuthorizationService {
         int pending = (int) recipientRepository.countByMentorAndStatus(
                 user.getId(), MentoringRequestRecipientStatus.PENDING);
         long ratedSessionCount =
-                sessionRatingRepository.countCompletedSessionsWithRatingsByMentorUserId(user.getId());
+                sessionRatingRepository.countEndedSessionsWithRatingsByMentorUserId(user.getId());
         Double averageRating = ratedSessionCount >= 5
-                ? sessionRatingRepository.averageCompletedByMentorUserId(user.getId())
+                ? sessionRatingRepository.averageEndedByMentorUserId(user.getId())
                 : null;
         MentorApplication sourceApplication = authorization.getSourceApplication();
         if (sourceApplication != null

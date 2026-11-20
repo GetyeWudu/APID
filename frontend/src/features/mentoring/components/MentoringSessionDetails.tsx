@@ -1,58 +1,54 @@
-import { useState } from 'react';
+import type { ReactNode } from 'react';
+import { X } from 'lucide-react';
 import type { MentoringSession } from '../api/mentoringPairingApi';
-import { getMentoringSessionDaysRemaining } from '../utils/mentoringSessionUtils';
+import './MentoringSessionList.css';
 
-const deliveryModeLabels: Record<MentoringSession['deliveryMode'], string> = {
-  ONLINE: 'Video only',
-  IN_PERSON: 'In person',
-  HYBRID: 'Hybrid: in person and video',
-};
-
-function getDaysRemainingLabel(daysRemaining: number | null) {
-  if (daysRemaining === null) return 'Unavailable';
-  if (daysRemaining < 0) {
-    const daysAgo = Math.abs(daysRemaining);
-    return `${daysAgo} day${daysAgo === 1 ? '' : 's'} ago`;
-  }
-  if (daysRemaining === 0) return 'Today';
-  return `${daysRemaining} day${daysRemaining === 1 ? '' : 's'} remaining`;
+interface MentoringSessionDetailsProps {
+  session: MentoringSession;
+  isOpen: boolean;
+  onClose: () => void;
+  children: ReactNode;
 }
 
-export function MentoringSessionDetails({ session }: { session: MentoringSession }) {
-  const [isOpen, setIsOpen] = useState(false);
-  const detailsId = `mentoring-session-${session.id}-details`;
-  const daysRemaining = getMentoringSessionDaysRemaining(session.scheduledStart);
+export function MentoringSessionDetails({
+  session,
+  isOpen,
+  onClose,
+  children,
+}: MentoringSessionDetailsProps) {
+  if (!isOpen) return null;
 
   return (
-    <div>
-      <button
-        type="button"
-        className="apid-btn apid-btn-outline apid-btn-sm"
-        aria-expanded={isOpen}
-        aria-controls={detailsId}
-        onClick={() => setIsOpen((open) => !open)}
+    <div
+      className="apid-modal-backdrop"
+      role="presentation"
+      onMouseDown={(event) => {
+        if (event.target === event.currentTarget) onClose();
+      }}
+    >
+      <section
+        className="mentoring-session-details-modal"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={`mentoring-session-details-title-${session.id}`}
+        onMouseDown={(event) => event.stopPropagation()}
       >
-        {isOpen ? 'Hide session details' : 'Session details'}
-      </button>
-      {isOpen && (
-        <div
-          id={detailsId}
-          className="apid-card"
-          style={{ marginTop: '0.6rem', border: '1px solid var(--border)' }}
-        >
-          <p style={{ margin: 0 }}>
-            <strong>Session type:</strong> {deliveryModeLabels[session.deliveryMode]}
-          </p>
-          <p className="boa-muted" style={{ margin: '0.35rem 0 0' }}>
-            <strong>Days until session:</strong> {getDaysRemainingLabel(daysRemaining)}
-          </p>
-          {session.location && (
-            <p className="boa-muted" style={{ margin: '0.35rem 0 0' }}>
-              <strong>Location:</strong> {session.location}
-            </p>
-          )}
-        </div>
-      )}
+        <header className="mentoring-session-details-header">
+          <div className="mentoring-session-details-heading">
+            <span className="mentoring-session-details-eyebrow">Session details</span>
+            <h2 id={`mentoring-session-details-title-${session.id}`}>{session.title}</h2>
+          </div>
+          <button
+            type="button"
+            className="mentoring-session-details-close"
+            onClick={onClose}
+            aria-label="Close session details"
+          >
+            <X size={16} />
+          </button>
+        </header>
+        <div className="mentoring-session-details-body">{children}</div>
+      </section>
     </div>
   );
 }
