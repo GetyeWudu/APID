@@ -48,13 +48,14 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
     ) throws ServletException, IOException {
 
         String header = request.getHeader("Authorization");
-        if (header == null || !header.startsWith("Bearer ")) {
-            filterChain.doFilter(request, response);
-            return;
+        String token = null;
+        if (header != null && header.startsWith("Bearer ")) {
+            token = header.substring(7).trim();
+        } else if (request.getParameter("token") != null && !request.getParameter("token").isBlank()) {
+            token = request.getParameter("token").trim();
         }
 
-        String token = header.substring(7).trim();
-        if (token.isEmpty()) {
+        if (token == null || token.isEmpty()) {
             filterChain.doFilter(request, response);
             return;
         }

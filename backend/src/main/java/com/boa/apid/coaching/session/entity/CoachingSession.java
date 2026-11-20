@@ -96,6 +96,24 @@ public class CoachingSession {
     @Column(name = "is_extension_session", nullable = false)
     private boolean isExtensionSession = false;
 
+    @Column(name = "prep_notes", columnDefinition = "TEXT")
+    private String prepNotes;
+
+    @Column(name = "reference_materials", columnDefinition = "TEXT")
+    private String referenceMaterials = "[]";
+
+    @Column(name = "ai_summarization_enabled", nullable = false)
+    private boolean aiSummarizationEnabled = true;
+
+    @Column(name = "ai_agent_enabled", nullable = false)
+    private boolean aiAgentEnabled = false;
+
+    @Column(name = "minutes_synthesis_status", length = 30)
+    private String minutesSynthesisStatus = "IDLE"; // 'IDLE', 'SYNTHESIZING', 'DRAFT_READY', 'FINALIZED'
+
+    @Column(name = "minutes_synthesized_at")
+    private Instant minutesSynthesizedAt;
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
 
@@ -209,6 +227,26 @@ public class CoachingSession {
 
     public boolean isExtensionSession() { return isExtensionSession; }
     public void setExtensionSession(boolean extensionSession) { isExtensionSession = extensionSession; }
+
+    public String getMinutesSynthesisStatus() { return minutesSynthesisStatus; }
+    public void setMinutesSynthesisStatus(String minutesSynthesisStatus) { this.minutesSynthesisStatus = minutesSynthesisStatus; }
+
+    public Instant getMinutesSynthesizedAt() { return minutesSynthesizedAt; }
+    public void setMinutesSynthesizedAt(Instant minutesSynthesizedAt) { this.minutesSynthesizedAt = minutesSynthesizedAt; }
+
+    public String getPrepNotes() { return prepNotes; }
+    public void setPrepNotes(String prepNotes) { this.prepNotes = prepNotes; }
+
+    public String getReferenceMaterials() { return referenceMaterials; }
+    public void setReferenceMaterials(String referenceMaterials) { this.referenceMaterials = referenceMaterials; }
+
+    public boolean isAiSummarizationEnabled() { return aiSummarizationEnabled; }
+    public boolean getAiSummarizationEnabled() { return aiSummarizationEnabled; }
+    public void setAiSummarizationEnabled(boolean aiSummarizationEnabled) { this.aiSummarizationEnabled = aiSummarizationEnabled; }
+
+    public boolean isAiAgentEnabled() { return aiAgentEnabled; }
+    public boolean getAiAgentEnabled() { return aiAgentEnabled; }
+    public void setAiAgentEnabled(boolean aiAgentEnabled) { this.aiAgentEnabled = aiAgentEnabled; }
 
     public Instant getCreatedAt() { return createdAt; }
     public Instant getUpdatedAt() { return updatedAt; }

@@ -31,7 +31,7 @@ export const RescheduleModal: React.FC<RescheduleModalProps> = ({
 }) => {
   if (!isOpen || !session) return null;
 
-  const rescheduleScope = publicConfig?.coachingRescheduleScope || 'SAME_WEEK';
+  const rescheduleScope = publicConfig?.coachingRescheduleScope || 'ACTIVE_QUARTER';
   const minNoticeHours = publicConfig?.coachingMinRescheduleNoticeHours ?? 4;
   const maxReschedules = publicConfig?.coachingMaxReschedulesPerSession ?? 2;
   const allowSaturday = publicConfig?.coachingAllowSaturdayScheduling ?? true;
@@ -85,7 +85,11 @@ export const RescheduleModal: React.FC<RescheduleModalProps> = ({
   const minDate = useMemo(() => {
     if (rescheduleScope === 'SAME_DAY_ONLY') return sessionDate;
     if (rescheduleScope === 'SAME_WEEK') return weekMondayStr;
-    return activeQuarter?.startDate || new Date().toISOString().split('T')[0];
+    const todayStr = new Date().toISOString().split('T')[0];
+    if (activeQuarter?.startDate && activeQuarter.startDate > todayStr) {
+      return activeQuarter.startDate;
+    }
+    return todayStr;
   }, [rescheduleScope, sessionDate, weekMondayStr, activeQuarter]);
 
   const maxDate = useMemo(() => {

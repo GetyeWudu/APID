@@ -12,6 +12,8 @@ public interface PmsPerformanceRecordRepository extends JpaRepository<PmsPerform
 
     Optional<PmsPerformanceRecord> findFirstByEmployeeIdOrderByCreatedAtDesc(Long employeeId);
 
+    java.util.List<PmsPerformanceRecord> findAllByEmployeeIdOrderByPerformanceFiscalQuarterIdDesc(Long employeeId);
+
     boolean existsByBatchId(Long batchId);
 }
 

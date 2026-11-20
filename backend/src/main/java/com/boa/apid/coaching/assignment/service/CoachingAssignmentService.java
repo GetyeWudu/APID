@@ -63,6 +63,8 @@ public class CoachingAssignmentService {
     private final AuditService auditService;
     private final com.boa.apid.coaching.communication.service.ConversationAccessService conversationAccessService;
     private final com.boa.apid.coaching.communication.service.CoachingCommunicationService coachingCommunicationService;
+    private final com.boa.apid.coaching.session.repository.CoachingSessionRepository sessionRepository;
+    private final com.boa.apid.coaching.governance.repository.CoachingSessionTargetRepository sessionTargetRepository;
 
     public CoachingAssignmentService(
             CoachingAssignmentRepository assignmentRepository,
@@ -77,7 +79,9 @@ public class CoachingAssignmentService {
             NotificationService notificationService,
             AuditService auditService,
             com.boa.apid.coaching.communication.service.ConversationAccessService conversationAccessService,
-            com.boa.apid.coaching.communication.service.CoachingCommunicationService coachingCommunicationService
+            com.boa.apid.coaching.communication.service.CoachingCommunicationService coachingCommunicationService,
+            com.boa.apid.coaching.session.repository.CoachingSessionRepository sessionRepository,
+            com.boa.apid.coaching.governance.repository.CoachingSessionTargetRepository sessionTargetRepository
     ) {
         this.assignmentRepository = assignmentRepository;
         this.participantRepository = participantRepository;
@@ -92,6 +96,8 @@ public class CoachingAssignmentService {
         this.auditService = auditService;
         this.conversationAccessService = conversationAccessService;
         this.coachingCommunicationService = coachingCommunicationService;
+        this.sessionRepository = sessionRepository;
+        this.sessionTargetRepository = sessionTargetRepository;
     }
 
     // ─────────────────────────── 1. ROSTER SEARCH ───────────────────────────
@@ -778,6 +784,13 @@ public class CoachingAssignmentService {
                 goalCount = goalLineRepository.findAllByPerformanceRecordIdOrderBySourceRowNumberAsc(rec.getId()).size();
             }
 
+            int completedSessions = sessionRepository.countCompletedSessionsForAssignment(a.getId(), a.getCoacheeEmployeeId());
+            com.boa.apid.coaching.governance.entity.CoachingSessionTarget target = sessionTargetRepository.findByAssignmentId(a.getId()).orElse(null);
+            BigDecimal rating = rec != null ? rec.getOverallFinalRating() : BigDecimal.valueOf(2.5);
+            int requiredTarget = (target != null && target.getApprovedTarget() > 0)
+                    ? target.getApprovedTarget()
+                    : (rating != null && rating.compareTo(BigDecimal.valueOf(2.0)) < 0 ? 8 : 5);
+
             return new MyCoacheeItemDto(
                     a.getId(),
                     a.getCoacheeEmployeeId(),
@@ -794,7 +807,9 @@ public class CoachingAssignmentService {
                     quarterLabels.getOrDefault(a.getCoachingFiscalQuarterId(), "Quarter #" + a.getCoachingFiscalQuarterId()),
                     goalCount,
                     a.getLastActivityAt(),
-                    a.getCreatedAt()
+                    a.getCreatedAt(),
+                    completedSessions,
+                    requiredTarget
             );
         }).toList();
     }

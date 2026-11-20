@@ -17,5 +17,9 @@ public record CreateSessionRequest(
         @NotNull SessionMeetingMode meetingMode,
         String meetingLocation,
         Long targetPmsGoalId,
-        List<Long> additionalAssignmentIds
+        List<Long> additionalAssignmentIds,
+        String prepNotes,
+        String referenceMaterials,
+        Boolean aiSummarizationEnabled,
+        Boolean aiAgentEnabled
 ) {}

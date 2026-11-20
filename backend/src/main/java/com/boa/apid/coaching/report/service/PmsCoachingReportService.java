@@ -126,8 +126,8 @@ public class PmsCoachingReportService {
             totalApprovedSessions += approvedTarget;
             dirSummary.approvedSessions += approvedTarget;
 
-            // Sessions
-            List<CoachingSession> sessions = sessionRepository.findAllByAssignmentId(a.getId());
+            // Sessions (supports multi-coachee joint sessions via participant link)
+            List<CoachingSession> sessions = sessionRepository.findAllSessionsForAssignment(a.getId());
             int completedSessions = 0;
             CoachAssessment latestAssessment = null;
             Instant lastCompletedDate = null;
@@ -273,8 +273,8 @@ public class PmsCoachingReportService {
                     ? target.getApprovedTarget()
                     : (rating.compareTo(BigDecimal.valueOf(2.0)) < 0 ? 10 : 6);
 
-            // Sessions
-            List<CoachingSession> sessions = sessionRepository.findAllByAssignmentId(a.getId());
+            // Sessions (supports multi-coachee joint sessions via participant link)
+            List<CoachingSession> sessions = sessionRepository.findAllSessionsForAssignment(a.getId());
             int completedSessions = 0;
             int totalLoggedSessions = sessions.size();
             CoachAssessment latestAssessment = null;
@@ -435,8 +435,8 @@ public class PmsCoachingReportService {
             }
         }
 
-        // Load sessions and session logs
-        List<CoachingSession> sessions = sessionRepository.findAllByAssignmentIdOrderByScheduledStartTimeDesc(a.getId());
+        // Load sessions and session logs (supports multi-coachee joint sessions via participant link)
+        List<CoachingSession> sessions = sessionRepository.findAllSessionsForAssignment(a.getId());
         // Reverse to chronological order (earliest first)
         Collections.reverse(sessions);
 

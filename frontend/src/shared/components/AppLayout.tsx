@@ -25,6 +25,7 @@ import {
   MessageSquare,
   RefreshCw,
   Settings2,
+  ShieldAlert,
   ShieldCheck,
   SlidersHorizontal,
   TrendingUp,
@@ -271,6 +272,16 @@ export function AppLayout({ children }: { children: ReactNode }) {
                 'COACHING_INITIATIVE_CREATE',
                 'COACHING_REPORT_VIEW_ALL',
               ],
+            },
+            {
+              to: '/coaching/pms?tab=referrals',
+              label: 'Persistent Referrals (< 3.0)',
+              icon: <ShieldAlert size={17} />,
+              requiredAnyPermissions: [
+                'COACHING_ASSIGNMENT_VIEW_ALL',
+                'COACHING_COACH_REPLACE',
+              ],
+              matchSearch: '?tab=referrals',
             },
             {
               to: '/coaching/pms?tab=uploads',

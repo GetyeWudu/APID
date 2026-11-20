@@ -17,6 +17,9 @@ public class SessionParticipant {
     @Column(name = "employee_id", nullable = false)
     private Long employeeId;
 
+    @Column(name = "assignment_id")
+    private Long assignmentId;
+
     @Enumerated(EnumType.STRING)
     @Column(name = "role", nullable = false, length = 20)
     private ParticipantRole role;
@@ -89,6 +92,9 @@ public class SessionParticipant {
 
     public Long getEmployeeId() { return employeeId; }
     public void setEmployeeId(Long employeeId) { this.employeeId = employeeId; }
+
+    public Long getAssignmentId() { return assignmentId; }
+    public void setAssignmentId(Long assignmentId) { this.assignmentId = assignmentId; }
 
     public ParticipantRole getRole() { return role; }
     public void setRole(ParticipantRole role) { this.role = role; }

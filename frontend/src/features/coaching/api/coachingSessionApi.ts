@@ -52,6 +52,13 @@ export interface RescheduleProposalItem {
   createdAt: string;
 }
 
+export interface ReferenceMaterialItem {
+  type: 'BOOK' | 'URL' | 'DOCUMENT';
+  title: string;
+  url?: string;
+  notes?: string;
+}
+
 export interface CoachingSessionItem {
   id: number;
   assignmentId: number | null;
@@ -83,6 +90,10 @@ export interface CoachingSessionItem {
   sequenceNumber?: number | null;
   isExtensionSession?: boolean;
   rescheduleCount?: number;
+  prepNotes?: string | null;
+  referenceMaterials?: string | ReferenceMaterialItem[] | null;
+  aiSummarizationEnabled?: boolean;
+  aiAgentEnabled?: boolean;
   createdAt: string;
 }
 
@@ -94,6 +105,10 @@ export interface UpdateSessionPayload {
   meetingLocation?: string;
   targetPmsGoalId?: number;
   reason?: string;
+  prepNotes?: string;
+  referenceMaterials?: string;
+  aiSummarizationEnabled?: boolean;
+  aiAgentEnabled?: boolean;
 }
 
 export interface CreateSessionPayload {
@@ -106,6 +121,10 @@ export interface CreateSessionPayload {
   meetingLocation?: string;
   targetPmsGoalId?: number;
   additionalAssignmentIds?: number[];
+  prepNotes?: string;
+  referenceMaterials?: string;
+  aiSummarizationEnabled?: boolean;
+  aiAgentEnabled?: boolean;
 }
 
 export interface CompleteSessionPayload {
@@ -122,6 +141,13 @@ export interface CompleteSessionPayload {
 export interface SubmitFeedbackPayload {
   rating: number;
   comment?: string;
+}
+
+export interface GeneratedMinutesResponse {
+  sessionNotesMinutes: string;
+  actionItems: string;
+  keyTopics: string[];
+  rawCandidates?: Record<string, string>;
 }
 
 export interface SessionJoinToken {
@@ -192,6 +218,21 @@ export const coachingSessionApi = {
     const res = await apiClient.post<ApiResponse<CoachingSessionItem>>(
       `/coaching/sessions/${id}/complete`,
       payload
+    );
+    return res.data.data;
+  },
+
+  async generateMinutes(sessionId: number, audioFile: File): Promise<GeneratedMinutesResponse> {
+    const formData = new FormData();
+    formData.append('file', audioFile);
+    const res = await apiClient.post<ApiResponse<GeneratedMinutesResponse>>(
+      `/coaching/sessions/${sessionId}/generate-minutes`,
+      formData,
+      {
+        headers: {
+          'Content-Type': 'multipart/form-data',
+        },
+      }
     );
     return res.data.data;
   },

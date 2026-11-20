@@ -154,8 +154,8 @@ describe('Phase 5.3: Skill-Development Coaching Requests & Approvals', () => {
     const justificationInput = screen.getByPlaceholderText(/Explain the capability gap/i);
     fireEvent.change(justificationInput, { target: { value: 'Critical operational improvement needed' } });
 
-    // Submit form
-    const submitBtn = screen.getByRole('button', { name: /Submit Request/i });
+    // Submit form (Line manager direct coaching cohort)
+    const submitBtn = screen.getByRole('button', { name: /(?:Start Coaching Cohort|Submit Request)/i });
     fireEvent.click(submitBtn);
 
     await waitFor(() => {

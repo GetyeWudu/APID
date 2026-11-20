@@ -37,5 +37,9 @@ public record CoachingSessionDto(
         Long seriesId,
         Integer sequenceNumber,
         Boolean isExtensionSession,
-        Integer rescheduleCount
+        Integer rescheduleCount,
+        String prepNotes,
+        String referenceMaterials,
+        Boolean aiSummarizationEnabled,
+        Boolean aiAgentEnabled
 ) {}

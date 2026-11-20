@@ -448,7 +448,7 @@ public class CoachingGovernanceService {
         // Calculate planned and completed sessions
         List<com.boa.apid.coaching.session.entity.CoachingSession> sessions;
         if (t.getAssignmentId() != null) {
-            sessions = sessionRepository.findAllByAssignmentId(t.getAssignmentId());
+            sessions = sessionRepository.findAllSessionsForAssignment(t.getAssignmentId());
         } else if (t.getSkillRequestId() != null) {
             sessions = sessionRepository.findAllBySkillRequestId(t.getSkillRequestId());
         } else {

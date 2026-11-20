@@ -68,5 +68,17 @@ public interface UserRepository extends JpaRepository<User, Long>, JpaSpecificat
               AND u.status = com.boa.apid.core.authorization.entity.UserStatus.ACTIVE
             """)
     long countActiveSuperAdmins();
+
+    @Query("""
+            SELECT DISTINCT u.id
+            FROM UserRole ur
+            JOIN ur.user u
+            JOIN ur.role r
+            WHERE ur.active = true
+              AND r.active = true
+              AND (r.name = 'PMS Admin' OR r.name = 'Super Admin')
+              AND u.status = com.boa.apid.core.authorization.entity.UserStatus.ACTIVE
+            """)
+    List<Long> findActivePmsAdminUserIds();
 }
 

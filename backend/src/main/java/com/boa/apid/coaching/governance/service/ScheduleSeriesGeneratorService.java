@@ -106,15 +106,7 @@ public class ScheduleSeriesGeneratorService {
         if (Boolean.FALSE.equals(publicConfig.getCoachingAllowSaturdayScheduling()) && days.contains(DayOfWeek.SATURDAY)) {
             throw new BusinessException("SATURDAY_NOT_ALLOWED", "Saturday sessions are currently disabled by Bank Coaching Policy.");
         }
-        if (Boolean.FALSE.equals(publicConfig.getCoachingAllowJointPmsGroup()) && request.additionalAssignmentIds() != null && !request.additionalAssignmentIds().isEmpty()) {
-            throw new BusinessException("JOINT_PMS_NOT_ALLOWED", "Joint PMS group remediation is currently disabled by Bank Coaching Policy.");
-        }
-        if (request.additionalAssignmentIds() != null && publicConfig.getCoachingMaxJointGroupSize() != null) {
-            int totalSelected = 1 + request.additionalAssignmentIds().size();
-            if (totalSelected > publicConfig.getCoachingMaxJointGroupSize()) {
-                throw new BusinessException("MAX_GROUP_SIZE_EXCEEDED", "Joint PMS groups cannot exceed " + publicConfig.getCoachingMaxJointGroupSize() + " talents per Bank Policy.");
-            }
-        }
+        // Flexible Multi-PMS Group Remediation: Joint PMS coaching is fully allowed per Bank policy update.
 
         // Resolve participating employees for conflict checking
         List<Long> participantEmpIds = new ArrayList<>();

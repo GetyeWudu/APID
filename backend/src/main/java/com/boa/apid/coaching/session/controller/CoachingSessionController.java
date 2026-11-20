@@ -101,6 +101,16 @@ public class CoachingSessionController {
         return ApiResponse.ok(sessionService.completeSession(id, request, actor));
     }
 
+    @PostMapping(value = "/{id:\\d+}/generate-minutes", consumes = org.springframework.http.MediaType.MULTIPART_FORM_DATA_VALUE)
+    @PreAuthorize("hasAuthority('EMPLOYEE_PORTAL_ACCESS')")
+    public ApiResponse<GeneratedMinutesDto> generateMinutes(
+            @PathVariable Long id,
+            @RequestParam("file") org.springframework.web.multipart.MultipartFile file,
+            @AuthenticationPrincipal ApidUserPrincipal actor
+    ) {
+        return ApiResponse.ok(sessionService.generateMinutes(id, file, actor));
+    }
+
     @PostMapping("/{id:\\d+}/feedback")
     @PreAuthorize("hasAuthority('EMPLOYEE_PORTAL_ACCESS')")
     public ApiResponse<CoachingSessionDto> submitFeedback(
@@ -149,6 +159,15 @@ public class CoachingSessionController {
             @AuthenticationPrincipal ApidUserPrincipal actor
     ) {
         return ApiResponse.ok(sessionService.getJoinToken(id, actor));
+    }
+
+    @GetMapping("/{id:\\d+}/turns")
+    @PreAuthorize("hasAuthority('EMPLOYEE_PORTAL_ACCESS')")
+    public ApiResponse<List<CoachingSessionTurnDto>> getSessionTurns(
+            @PathVariable Long id,
+            @AuthenticationPrincipal ApidUserPrincipal actor
+    ) {
+        return ApiResponse.ok(sessionService.getSessionTurns(id, actor));
     }
 }
 

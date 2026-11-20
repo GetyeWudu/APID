@@ -12,5 +12,9 @@ public record UpdateSessionRequest(
         SessionMeetingMode meetingMode,
         @Size(max = 255) String meetingLocation,
         Long targetPmsGoalId,
-        String reason
+        String reason,
+        String prepNotes,
+        String referenceMaterials,
+        Boolean aiSummarizationEnabled,
+        Boolean aiAgentEnabled
 ) {}
