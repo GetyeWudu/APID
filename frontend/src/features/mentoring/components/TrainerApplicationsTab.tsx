@@ -900,6 +900,32 @@ export function TrainerApplicationsTab({
                 </>
               )}
 
+              {detailTarget.applicationType === 'INITIAL' && (
+                <ApplicationDetailSection icon={<Check size={17} />} title="Mentor agreement">
+                  <dl>
+                    <div>
+                      <dt>Acceptance</dt>
+                      <dd>
+                        {detailTarget.mentorAgreementAcceptedAt
+                          ? `Accepted ${new Date(detailTarget.mentorAgreementAcceptedAt).toLocaleString()}`
+                          : 'No agreement acceptance recorded'}
+                      </dd>
+                    </div>
+                    <div>
+                      <dt>Agreement version</dt>
+                      <dd>{noteText(detailTarget.mentorAgreementVersion)}</dd>
+                    </div>
+                  </dl>
+                  {detailTarget.mentorAgreementText && (
+                    <ol className="mentor-application-agreement-snapshot">
+                      {detailTarget.mentorAgreementText.split(/\r?\n/).map((condition) => (
+                        <li key={condition}>{condition}</li>
+                      ))}
+                    </ol>
+                  )}
+                </ApplicationDetailSection>
+              )}
+
               <ApplicationDetailSection icon={<Users size={17} />} title="Review">
                 <dl>
                   <div><dt>Status</dt><dd>{renderStatus(detailTarget.status)}</dd></div>

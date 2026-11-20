@@ -110,7 +110,22 @@ class MentorApplicationServiceTest {
         when(applicationRepository.save(any(MentorApplication.class)))
                 .thenAnswer(invocation -> invocation.getArgument(0));
 
-        var result = service.submit(12L, "  Custom skill  ", "  Supporting note  ", upload, actor);
+        var result = service.submit(
+                List.of(12L),
+                "  Custom skill  ",
+                "  Supporting note  ",
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                List.of(upload),
+                List.of("Supporting evidence"),
+                true,
+                MentorAgreementPolicy.VERSION,
+                actor
+        );
 
         ArgumentCaptor<MentorApplication> applicationCaptor = ArgumentCaptor.forClass(MentorApplication.class);
         verify(applicationRepository).save(applicationCaptor.capture());
@@ -122,6 +137,9 @@ class MentorApplicationServiceTest {
         assertSame(skill, saved.getCatalogSkill());
         assertEquals("Custom skill", saved.getCustomSkill());
         assertEquals("Supporting note", saved.getNote());
+        assertEquals(MentorAgreementPolicy.VERSION, saved.getMentorAgreementVersion());
+        assertEquals(MentorAgreementPolicy.snapshot(), saved.getMentorAgreementText());
+        org.junit.jupiter.api.Assertions.assertNotNull(saved.getMentorAgreementAcceptedAt());
         assertEquals(MentorApplicationStatus.PENDING, result.status());
         assertEquals(12L, result.catalogSkillId());
     }
@@ -173,6 +191,8 @@ class MentorApplicationServiceTest {
                 3,
                 List.of(firstUpload, secondUpload),
                 List.of("Curriculum vitae", "Education background 1"),
+                true,
+                MentorAgreementPolicy.VERSION,
                 actor
         );
 
@@ -204,7 +224,88 @@ class MentorApplicationServiceTest {
 
         assertThrows(
                 BusinessException.class,
-                () -> service.submit(null, "   ", null, proofUpload(), actor)
+                () -> service.submit(
+                        List.of(),
+                        "   ",
+                        null,
+                        null,
+                        null,
+                        null,
+                        null,
+                        null,
+                        null,
+                        List.of(proofUpload()),
+                        List.of(),
+                        true,
+                        MentorAgreementPolicy.VERSION,
+                        actor
+                )
+        );
+
+        verifyNoInteractions(
+                applicationRepository,
+                userRepository,
+                skillRepository,
+                storedFileRepository,
+                fileStorageService
+        );
+    }
+
+    @Test
+    void submitRequiresExplicitAcceptanceOfCurrentMentorAgreement() {
+        ApidUserPrincipal actor = actor();
+
+        assertThrows(
+                BusinessException.class,
+                () -> service.submit(
+                        List.of(12L),
+                        null,
+                        null,
+                        null,
+                        null,
+                        null,
+                        null,
+                        null,
+                        null,
+                        List.of(proofUpload()),
+                        List.of(),
+                        false,
+                        MentorAgreementPolicy.VERSION,
+                        actor
+                )
+        );
+
+        verifyNoInteractions(
+                applicationRepository,
+                userRepository,
+                skillRepository,
+                storedFileRepository,
+                fileStorageService
+        );
+    }
+
+    @Test
+    void submitRejectsAcceptanceOfAnOutdatedMentorAgreement() {
+        ApidUserPrincipal actor = actor();
+
+        assertThrows(
+                BusinessException.class,
+                () -> service.submit(
+                        List.of(12L),
+                        null,
+                        null,
+                        null,
+                        null,
+                        null,
+                        null,
+                        null,
+                        null,
+                        List.of(proofUpload()),
+                        List.of(),
+                        true,
+                        "mentor-terms-old",
+                        actor
+                )
         );
 
         verifyNoInteractions(
@@ -230,7 +331,22 @@ class MentorApplicationServiceTest {
 
         assertThrows(
                 BusinessException.class,
-                () -> service.submit(12L, null, null, proofUpload(), actor)
+                () -> service.submit(
+                        List.of(12L),
+                        null,
+                        null,
+                        null,
+                        null,
+                        null,
+                        null,
+                        null,
+                        null,
+                        List.of(proofUpload()),
+                        List.of(),
+                        true,
+                        MentorAgreementPolicy.VERSION,
+                        actor
+                )
         );
 
         verifyNoInteractions(fileStorageService, storedFileRepository);
@@ -338,6 +454,10 @@ class MentorApplicationServiceTest {
         skill.setId(12L);
         skill.setName("Financial Analysis");
         MentorApplication application = application(applicant, skill);
+        Instant agreementAcceptedAt = Instant.parse("2026-02-01T10:00:00Z");
+        application.setMentorAgreementVersion(MentorAgreementPolicy.VERSION);
+        application.setMentorAgreementText(MentorAgreementPolicy.snapshot());
+        application.setMentorAgreementAcceptedAt(agreementAcceptedAt);
         Role mentorRole = new Role();
         mentorRole.setId(4L);
         mentorRole.setName("Mentor");
@@ -362,6 +482,9 @@ class MentorApplicationServiceTest {
         assertSame(applicant, roleCaptor.getValue().getUser());
         assertSame(mentorRole, roleCaptor.getValue().getRole());
         assertSame(reviewer, roleCaptor.getValue().getAssignedBy());
+        assertEquals(MentorAgreementPolicy.VERSION, roleCaptor.getValue().getMentorAgreementVersion());
+        assertEquals(MentorAgreementPolicy.snapshot(), roleCaptor.getValue().getMentorAgreementText());
+        assertEquals(agreementAcceptedAt, roleCaptor.getValue().getMentorAgreementAcceptedAt());
         assertEquals(MentorApplicationStatus.APPROVED, result.status());
         assertEquals("Financial Analysis", result.skillName());
         assertEquals(MentorApplicationStatus.APPROVED, application.getStatus());

@@ -48,6 +48,10 @@ function renderWithProviders(children: ReactNode) {
 describe('mentor application workflow', () => {
   beforeEach(() => {
     vi.restoreAllMocks();
+    vi.spyOn(mentorApplicationApi, 'getAgreementTerms').mockResolvedValue({
+      version: 'mentor-terms-v1',
+      conditions: ['Mentor agreement condition'],
+    });
     vi.spyOn(AuthContextModule, 'useAuth').mockReturnValue({
       user: {
         id: 7,
@@ -65,6 +69,19 @@ describe('mentor application workflow', () => {
       hasPermission: () => false,
       hasAnyPermission: () => false,
     });
+  });
+
+  it('saves a draft without submitting the application', async () => {
+    vi.spyOn(mentorApplicationApi, 'listMine').mockResolvedValue([]);
+    const submit = vi.spyOn(mentorApplicationApi, 'submit');
+    window.localStorage.removeItem('mentor-application-draft-7');
+
+    renderWithProviders(<ApplyForMentorForm activeSkills={activeSkills} currentUserId={7} />);
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Save as Draft' }));
+
+    expect(window.localStorage.getItem('mentor-application-draft-7')).toBeTruthy();
+    expect(submit).not.toHaveBeenCalled();
   });
 
   it('shows the existing initial application instead of allowing a second one', async () => {

@@ -20,6 +20,7 @@ import {
   StatusPill,
 } from '../../../shared/components/ui';
 import { mentoringPairingApi } from '../api/mentoringPairingApi';
+import './MentoringDashboard.css';
 
 type PairingFilter = 'ALL' | 'MENTOR' | 'TRAINEE';
 
@@ -77,71 +78,35 @@ export function MyPairingPage() {
   ];
 
   return (
-    <div className="boa-stack">
+    <div className="boa-stack mentoring-dashboard">
       <PageHeader
         title="My Pairing"
         subtitle="All of your mentoring relationships, whether you are the mentor or the trainee."
         source="live"
       />
 
-      <section
-        aria-label="Pairing summary"
-        style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))',
-          gap: '0.85rem',
-        }}
-      >
+      <section className="mentoring-dashboard__metrics" aria-label="Pairing summary">
         {[
           { label: 'Total pairings', value: relationships.length, icon: <HeartHandshake size={19} /> },
           { label: 'As mentor', value: mentorCount, icon: <ArrowUpRight size={19} /> },
           { label: 'As trainee', value: traineeCount, icon: <ArrowDownRight size={19} /> },
           { label: 'Active', value: activeCount, icon: <UsersRound size={19} /> },
         ].map((stat) => (
-          <div
-            key={stat.label}
-            className="apid-card"
-            style={{ padding: '1rem 1.1rem', display: 'flex', alignItems: 'center', gap: '0.85rem' }}
-          >
-            <span
-              aria-hidden="true"
-              style={{
-                width: 40,
-                height: 40,
-                borderRadius: 12,
-                display: 'grid',
-                placeItems: 'center',
-                color: 'var(--primary)',
-                background: 'var(--primary-soft, rgba(22, 101, 52, 0.1))',
-                flexShrink: 0,
-              }}
-            >
-              {stat.icon}
-            </span>
-            <div>
-              <div style={{ fontSize: '1.35rem', fontWeight: 700, lineHeight: 1.15 }}>{stat.value}</div>
-              <div className="boa-muted" style={{ fontSize: '0.82rem', marginTop: '0.2rem' }}>
-                {stat.label}
-              </div>
+          <div className="mentoring-dashboard__metric" key={stat.label}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.55rem' }}>
+              <span className="mentoring-dashboard__icon" aria-hidden="true">{stat.icon}</span>
+              <span className="mentoring-dashboard__metric-value">{stat.value}</span>
             </div>
+            <div className="mentoring-dashboard__metric-label">{stat.label}</div>
           </div>
         ))}
       </section>
 
-      <section className="apid-card">
-        <div
-          style={{
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'center',
-            gap: '0.75rem',
-            flexWrap: 'wrap',
-            marginBottom: '1rem',
-          }}
-        >
+      <section className="mentoring-dashboard__section">
+        <div className="mentoring-dashboard__section-header">
           <div>
-            <h2 className="boa-card-title">Your relationships</h2>
-            <p className="boa-card-subtitle">Pairings are loaded from your mentoring relationship records.</p>
+            <h2 className="mentoring-dashboard__section-title">Your relationships</h2>
+            <p className="mentoring-dashboard__section-description">A live view of your mentoring connections.</p>
           </div>
           <div role="group" aria-label="Filter pairings" style={{ display: 'flex', gap: '0.45rem', flexWrap: 'wrap' }}>
             {filters.map((option) => (
@@ -169,89 +134,32 @@ export function MyPairingPage() {
             description="Choose another filter to see your relationships in the other role."
           />
         ) : (
-          <div
-            style={{
-              display: 'grid',
-              gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 340px), 1fr))',
-              gap: '0.8rem',
-            }}
-          >
+          <div className="mentoring-pairing-list">
             {visibleRelationships.map((item) => {
               const isMentor = item.currentUserRole === 'MENTOR';
               const counterpartName = isMentor ? item.traineeName : item.mentorName;
               const displayStatus =
                 item.relationshipStatus === 'ACTIVE' ? item.memberStatus : item.relationshipStatus;
               return (
-                <article
-                  key={item.memberId}
-                  className="apid-card"
-                  style={{
-                    padding: '1rem',
-                    border: '1px solid var(--border)',
-                    boxShadow: '0 4px 16px rgba(15, 23, 42, 0.04)',
-                  }}
-                >
-                  <div style={{ display: 'flex', justifyContent: 'space-between', gap: '0.65rem' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', minWidth: 0 }}>
-                      <span
-                        aria-hidden="true"
-                        style={{
-                          width: 42,
-                          height: 42,
-                          borderRadius: 14,
-                          display: 'grid',
-                          placeItems: 'center',
-                          color: 'var(--primary)',
-                          background: 'var(--primary-soft, rgba(22, 101, 52, 0.1))',
-                          flexShrink: 0,
-                        }}
-                      >
-                        {isMentor ? <GraduationCap size={20} /> : <HeartHandshake size={20} />}
-                      </span>
-                      <div style={{ minWidth: 0 }}>
-                        <h3 style={{ margin: 0, overflowWrap: 'anywhere' }}>{counterpartName}</h3>
-                        <p className="boa-muted" style={{ margin: '0.2rem 0 0', fontSize: '0.82rem' }}>
-                          {isMentor ? 'You are the mentor' : 'Your mentor'}
-                        </p>
-                      </div>
+                <article key={item.memberId} className="mentoring-pairing-row">
+                  <div className="mentoring-pairing-row__main">
+                    <span className="mentoring-dashboard__icon" aria-hidden="true">
+                      {isMentor ? <GraduationCap size={20} /> : <HeartHandshake size={20} />}
+                    </span>
+                    <div className="mentoring-pairing-row__details">
+                      <h3 style={{ margin: 0, overflowWrap: 'anywhere' }}>{counterpartName}</h3>
+                      <p className="mentoring-pairing-row__meta">
+                        {isMentor ? 'You are the mentor' : 'Your mentor'} · {item.requestType === 'GROUP' ? 'Class pairing' : 'One-to-one'}
+                        {item.skillName ? ` · ${item.skillName}` : ''}
+                      </p>
                     </div>
-                    <StatusPill
-                      label={displayStatus}
-                      tone={statusTone(displayStatus)}
-                    />
                   </div>
-
-                  <div style={{ display: 'flex', gap: '0.45rem', flexWrap: 'wrap', marginTop: '0.85rem' }}>
-                    <StatusPill
-                      label={item.currentUserRole === 'MENTOR' ? 'As mentor' : 'As trainee'}
-                      tone="info"
-                    />
-                    <StatusPill
-                      label={item.requestType === 'GROUP' ? 'Class pairing' : 'One-to-one'}
-                      tone="neutral"
-                    />
-                    {item.skillName && <StatusPill label={item.skillName} tone="neutral" />}
-                  </div>
-
-                  <div
-                    className="boa-muted"
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '0.4rem',
-                      marginTop: '0.8rem',
-                      fontSize: '0.82rem',
-                    }}
-                  >
+                  <div className="mentoring-pairing-row__meta" style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
                     <CalendarDays size={15} />
                     <span>Started {formatDate(item.startedAt)}</span>
                   </div>
-                  {item.message && (
-                    <p className="boa-muted" style={{ margin: '0.7rem 0 0', fontSize: '0.84rem' }}>
-                      {item.message}
-                    </p>
-                  )}
-                  <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.9rem', alignItems: 'center', flexWrap: 'wrap' }}>
+                  <div className="mentoring-pairing-row__actions">
+                    <StatusPill label={displayStatus} tone={statusTone(displayStatus)} />
                     <Link
                       to={`/mentoring/pairing/${item.relationshipId}`}
                       className="apid-btn apid-btn-outline apid-btn-sm"

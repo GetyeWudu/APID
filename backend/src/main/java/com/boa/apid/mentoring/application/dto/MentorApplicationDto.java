@@ -33,7 +33,10 @@ public record MentorApplicationDto(
         String reviewReason,
         Integer experienceYears,
         String mentoringApproach,
-        Integer sessionsPerWeek
+        Integer sessionsPerWeek,
+        String mentorAgreementVersion,
+        String mentorAgreementText,
+        Instant mentorAgreementAcceptedAt
 ) {
 
     public static MentorApplicationDto from(MentorApplication application) {
@@ -100,7 +103,10 @@ public record MentorApplicationDto(
                 application.getReviewReason(),
                 application.getExperienceYears(),
                 application.getMentoringApproach(),
-                application.getSessionsPerWeek()
+                application.getSessionsPerWeek(),
+                application.getMentorAgreementVersion(),
+                application.getMentorAgreementText(),
+                application.getMentorAgreementAcceptedAt()
         );
     }
 

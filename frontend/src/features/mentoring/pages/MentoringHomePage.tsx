@@ -20,6 +20,7 @@ import { MentoringMatchRequestForm } from '../components/MentoringMatchRequestFo
 import { MentoringRecommendations } from '../components/MentoringRecommendations';
 import { MentorProfileForm } from '../components/MentorProfileForm';
 import { MentoringSessionsPage } from './MentoringSessionsPage';
+import './MentoringDashboard.css';
 
 type MentoringViewKey =
   | 'overview'
@@ -265,7 +266,7 @@ export function MentoringHomePage() {
           : 'Manage mentoring invitations, requests, and active pairings.';
 
     return (
-      <div className="boa-stack">
+      <div className="boa-stack mentoring-dashboard">
         <PageHeader title={title} subtitle={subtitle} source="live" />
         {activeView === 'trainer' && (
           <div>

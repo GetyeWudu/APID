@@ -17,7 +17,7 @@ import {
   X,
 } from 'lucide-react';
 import { ErrorState, LoadingSkeleton, StatusPill, useToast } from '../../../shared/components/ui';
-import type { ApiErrorPayload } from '../../../shared/api/apiClient';
+import { extractApiErrorMessage, type ApiErrorPayload } from '../../../shared/api/apiClient';
 import type { SkillItem } from '../../admin/skills/types/skills.types';
 import { mentorApplicationApi } from '../api/mentorApplicationApi';
 import './ApplyForMentorForm.css';
@@ -181,7 +181,6 @@ type ApplicationForm = {
   formats: string[];
   cv?: File;
   motivationLetter?: File;
-  confirmed: boolean;
 };
 
 const EMPTY_FORM: ApplicationForm = {
@@ -198,7 +197,6 @@ const EMPTY_FORM: ApplicationForm = {
   timeZone: DEFAULT_TIME_ZONE,
   maxMentees: '',
   formats: [],
-  confirmed: false,
 };
 
 function formatFileSize(file: File) {
@@ -754,11 +752,16 @@ export function ApplyForMentorForm({
     queryKey: ['mentoring', 'applications', 'mine', currentUserId],
     queryFn: mentorApplicationApi.listMine,
   });
+  const agreementTermsQuery = useQuery({
+    queryKey: ['mentoring', 'mentor-agreement-terms'],
+    queryFn: mentorApplicationApi.getAgreementTerms,
+  });
   const [form, setForm] = useState<ApplicationForm>(() => ({
     ...EMPTY_FORM,
     fullName: defaultFullName,
   }));
   const [step, setStep] = useState(0);
+  const [mentorAgreementAccepted, setMentorAgreementAccepted] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
   const [showApplicationDetails, setShowApplicationDetails] = useState(false);
@@ -798,6 +801,10 @@ export function ApplyForMentorForm({
   useEffect(() => {
     setForm((current) => ({ ...current, fullName: defaultFullName }));
   }, [defaultFullName]);
+
+  useEffect(() => {
+    setMentorAgreementAccepted(false);
+  }, [agreementTermsQuery.data?.version]);
 
   useEffect(() => {
     if (!form.photo) {
@@ -932,7 +939,7 @@ export function ApplyForMentorForm({
       window.localStorage.setItem(draftKey, JSON.stringify(draft));
       pushToast({
         title: 'Draft saved',
-        message: 'Your answers are saved on this device. Uploaded files must be selected again later.',
+        message: 'Your draft was saved on this device. The application was not submitted. Uploaded files must be selected again if you reopen it.',
         tone: 'ok',
       });
     } catch (error) {
@@ -1057,6 +1064,13 @@ export function ApplyForMentorForm({
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    if (step !== STEPS.length - 1) {
+      return;
+    }
+    if (!agreementTermsQuery.data || !mentorAgreementAccepted) {
+      setFieldError('Review and accept the mentor agreement before submitting.');
+      return;
+    }
     setIsSubmitting(true);
     try {
       const details = applicationDetails();
@@ -1070,6 +1084,8 @@ export function ApplyForMentorForm({
         ...form.professionalCertificates.map((certificate) => certificate.customSkill.trim()),
       ].filter(Boolean))];
       await mentorApplicationApi.submit({
+        mentorAgreementAccepted: true,
+        mentorAgreementVersion: agreementTermsQuery.data.version,
         supportingEvidence: evidence.files,
         supportingEvidenceContexts: evidence.contexts,
         catalogSkillIds: selectedSkillIds,
@@ -1695,13 +1711,50 @@ export function ApplyForMentorForm({
             ? `${form.motivationLetter.name} · ${formatFileSize(form.motivationLetter)}`
             : 'Not provided'}</p>
         </SummarySection>
-        <div className="apid-field">
-          <label style={{ display: 'flex', alignItems: 'flex-start', gap: '0.5rem' }}>
-            <input type="checkbox" checked={form.confirmed} disabled={isSubmitting}
-              onChange={(event) => update({ confirmed: event.target.checked })} />
-            I confirm that the information provided is accurate and complete (optional).
-          </label>
-        </div>
+        <section className="mentor-agreement" aria-labelledby="mentor-agreement-title">
+          <div className="mentor-agreement-heading">
+            <div>
+              <h4 id="mentor-agreement-title">Mentor Agreement</h4>
+              <p>Review these shared responsibilities before submitting your application.</p>
+            </div>
+            {agreementTermsQuery.data && (
+              <span>Version {agreementTermsQuery.data.version}</span>
+            )}
+          </div>
+          {agreementTermsQuery.isLoading ? (
+            <LoadingSkeleton rows={4} height={24} />
+          ) : agreementTermsQuery.isError || !agreementTermsQuery.data ? (
+            <ErrorState
+              message={extractApiErrorMessage(
+                agreementTermsQuery.error,
+                'Unable to load the mentor agreement.'
+              )}
+              onRetry={() => void agreementTermsQuery.refetch()}
+            />
+          ) : (
+            <>
+              <ol className="mentor-agreement-conditions">
+                {agreementTermsQuery.data.conditions.map((condition) => (
+                  <li key={condition}>{condition}</li>
+                ))}
+              </ol>
+              <label className="mentor-agreement-acceptance">
+                <input
+                  type="checkbox"
+                  checked={mentorAgreementAccepted}
+                  disabled={isSubmitting}
+                  onChange={(event) => {
+                    setMentorAgreementAccepted(event.target.checked);
+                    setFieldError('');
+                  }}
+                />
+                <span>
+                  I have read and agree to the Mentor Agreement. I understand my acceptance will be saved with my mentor role if approved.
+                </span>
+              </label>
+            </>
+          )}
+        </section>
       </div>
     );
   };
@@ -1712,7 +1765,7 @@ export function ApplyForMentorForm({
         <div>
           <h3 className="boa-card-title">Mentor Application</h3>
           <p className="boa-card-subtitle">
-            All fields are optional while you review the form. Your mentor profile is created only after administrator approval.
+            Complete your application and accept the mentor agreement before submission. Your mentor profile is created only after administrator approval.
           </p>
         </div>
         <StatusPill label={`STEP ${step + 1} OF ${STEPS.length}`} tone="neutral" />
@@ -1779,7 +1832,16 @@ export function ApplyForMentorForm({
             <ChevronLeft size={16} /> Previous
           </button>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem', marginLeft: 'auto' }}>
-            <button type="button" className="apid-btn apid-btn-outline" onClick={saveDraft} disabled={isSubmitting}>
+            <button
+              type="button"
+              className="apid-btn apid-btn-outline"
+              onClick={(event) => {
+                event.preventDefault();
+                event.stopPropagation();
+                saveDraft();
+              }}
+              disabled={isSubmitting}
+            >
               Save as Draft
             </button>
             {step < STEPS.length - 1 ? (
@@ -1793,7 +1855,12 @@ export function ApplyForMentorForm({
               </button>
             ) : (
               <button type="submit" className="apid-btn apid-btn-primary"
-                disabled={isSubmitting}>
+                disabled={
+                  isSubmitting
+                  || !mentorAgreementAccepted
+                  || !agreementTermsQuery.data
+                  || agreementTermsQuery.isError
+                }>
                 {isSubmitting ? 'Submitting…' : 'Submit Application'}
               </button>
             )}

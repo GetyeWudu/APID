@@ -77,98 +77,121 @@ export function MentoringRequestsPanel({
         (view === 'trainee' && item.traineeUserId === currentUserId))
   );
 
+  const summary = [
+    { label: 'Incoming', value: incoming.length },
+    { label: 'Sent', value: outgoing.length },
+    { label: 'Active', value: active.length },
+    { label: 'Declined', value: declined.length },
+  ];
+
   const requestCard = (item: MentoringPairing, canRespond: boolean) => (
     <article
       key={item.id}
-      className="apid-card"
-      style={{ border: '1px solid var(--border)', marginBottom: 0 }}
+        className="mentoring-request-row"
     >
-      <div style={{ display: 'flex', justifyContent: 'space-between', gap: '0.75rem', flexWrap: 'wrap' }}>
-        <div>
+        <div className="mentoring-request-row__main">
+          <span className="mentoring-dashboard__icon" aria-hidden="true">
+            <span style={{ fontSize: '1.1rem', fontWeight: 700 }}>
+              {item.requestType === 'GROUP' ? 'G' : '1:1'}
+          </span>
+          </span>
+          <div className="mentoring-request-row__details">
           <strong>
             {item.requestType === 'GROUP' ? 'Mentoring class' : 'One-to-one mentoring'}
           </strong>
-          <div className="boa-muted" style={{ fontSize: '0.82rem', marginTop: '0.2rem' }}>
+            <div className="mentoring-request-row__meta">
             {item.mentorName} → {item.traineeName}
             {item.skillName ? ` · ${item.skillName}` : ''}
           </div>
+            {item.message && (
+              <div className="mentoring-request-row__meta">{item.message}</div>
+            )}
         </div>
-        <StatusPill
-          label={item.status}
-          tone={item.status === 'ACCEPTED' ? 'ok' : item.status === 'PENDING' ? 'warn' : 'neutral'}
-        />
-      </div>
-      {item.message && (
-        <p className="boa-muted" style={{ margin: '0.6rem 0 0', fontSize: '0.84rem' }}>
-          {item.message}
-        </p>
-      )}
-      {canRespond && (
-        <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.75rem' }}>
-          <button
-            type="button"
-            className="apid-btn apid-btn-primary apid-btn-sm"
-            disabled={responseMutation.isPending}
-            onClick={() => responseMutation.mutate({ id: item.id, decision: 'ACCEPTED' })}
-          >
-            Accept
-          </button>
-          <button
-            type="button"
-            className="apid-btn apid-btn-outline apid-btn-sm"
-            disabled={responseMutation.isPending}
-            onClick={() => responseMutation.mutate({ id: item.id, decision: 'DECLINED' })}
-          >
-            Decline
-          </button>
         </div>
-      )}
+        <div className="mentoring-request-row__actions">
+          <StatusPill
+            label={item.status}
+            tone={item.status === 'ACCEPTED' ? 'ok' : item.status === 'PENDING' ? 'warn' : 'neutral'}
+          />
+          {canRespond && (
+            <>
+              <button
+                type="button"
+                className="apid-btn apid-btn-primary apid-btn-sm"
+                disabled={responseMutation.isPending}
+                onClick={() => responseMutation.mutate({ id: item.id, decision: 'ACCEPTED' })}
+              >
+                Accept
+              </button>
+              <button
+                type="button"
+                className="apid-btn apid-btn-outline apid-btn-sm"
+                disabled={responseMutation.isPending}
+                onClick={() => responseMutation.mutate({ id: item.id, decision: 'DECLINED' })}
+              >
+                Decline
+              </button>
+            </>
+          )}
+        </div>
     </article>
   );
 
   return (
-    <div className="boa-stack">
-      <section className="apid-card">
-        <div className="boa-card-header">
+    <div className="boa-stack mentoring-requests">
+      <section className="mentoring-dashboard__metrics" aria-label="Mentoring request summary">
+        {summary.map((item) => (
+          <div className="mentoring-dashboard__metric" key={item.label}>
+            <div className="mentoring-dashboard__metric-value">{item.value}</div>
+            <div className="mentoring-dashboard__metric-label">{item.label} requests</div>
+          </div>
+        ))}
+      </section>
+
+      <section className="mentoring-dashboard__section">
+        <div className="mentoring-dashboard__section-header">
           <div>
-            <h3 className="boa-card-title">{view === 'mentor' ? 'Trainee Requests' : 'Incoming Requests'}</h3>
-            <p className="boa-card-subtitle">
+            <h3 className="mentoring-dashboard__section-title">{view === 'mentor' ? 'Trainee Requests' : 'Incoming Requests'}</h3>
+            <p className="mentoring-dashboard__section-description">
               Accept or decline each invitation or mentorship request.
             </p>
           </div>
+          <span className="mentoring-dashboard__count" aria-label={`${incoming.length} incoming requests`}>{incoming.length}</span>
         </div>
         {incoming.length === 0 ? (
           <EmptyState title="No Incoming Requests" description="New mentoring requests will appear here." />
         ) : (
-          <div className="boa-grid-2" style={{ marginBottom: 0 }}>
+          <div className="mentoring-request-list">
             {incoming.map((item) => requestCard(item, true))}
           </div>
         )}
       </section>
 
-      <section className="apid-card">
-        <div className="boa-card-header">
+      <section className="mentoring-dashboard__section">
+        <div className="mentoring-dashboard__section-header">
           <div>
-            <h3 className="boa-card-title">Sent Requests</h3>
-            <p className="boa-card-subtitle">Track invitations and requests you have sent.</p>
+            <h3 className="mentoring-dashboard__section-title">Sent Requests</h3>
+            <p className="mentoring-dashboard__section-description">Track invitations and requests you have sent.</p>
           </div>
+          <span className="mentoring-dashboard__count" aria-label={`${outgoing.length} sent requests`}>{outgoing.length}</span>
         </div>
         {outgoing.length === 0 ? (
           <EmptyState title="No Sent Requests" description="Requests you send will be tracked here." />
         ) : (
-          <div className="boa-grid-2" style={{ marginBottom: 0 }}>
+          <div className="mentoring-request-list">
             {outgoing.map((item) => requestCard(item, false))}
           </div>
         )}
       </section>
 
       {showActive && (
-        <section className="apid-card">
-          <div className="boa-card-header">
+        <section className="mentoring-dashboard__section">
+          <div className="mentoring-dashboard__section-header">
             <div>
-              <h3 className="boa-card-title">{view === 'mentor' ? 'Active Trainees' : 'Active Mentoring'}</h3>
-              <p className="boa-card-subtitle">Approved pairings and accepted class memberships.</p>
+              <h3 className="mentoring-dashboard__section-title">{view === 'mentor' ? 'Active Trainees' : 'Active Mentoring'}</h3>
+              <p className="mentoring-dashboard__section-description">Approved pairings and accepted class memberships.</p>
             </div>
+            <span className="mentoring-dashboard__count" aria-label={`${active.length} active relationships`}>{active.length}</span>
           </div>
           {active.length === 0 ? (
             <EmptyState
@@ -176,24 +199,25 @@ export function MentoringRequestsPanel({
               description="Accepted one-to-one pairings and class memberships will appear here."
             />
           ) : (
-            <div className="boa-grid-2" style={{ marginBottom: 0 }}>
+            <div className="mentoring-request-list">
               {active.map((item) => requestCard(item, false))}
             </div>
           )}
         </section>
       )}
 
-      <section className="apid-card">
-        <div className="boa-card-header">
+      <section className="mentoring-dashboard__section">
+        <div className="mentoring-dashboard__section-header">
           <div>
-            <h3 className="boa-card-title">Declined Requests</h3>
-            <p className="boa-card-subtitle">Requests you sent or received that were declined.</p>
+            <h3 className="mentoring-dashboard__section-title">Declined Requests</h3>
+            <p className="mentoring-dashboard__section-description">Requests you sent or received that were declined.</p>
           </div>
+          <span className="mentoring-dashboard__count" aria-label={`${declined.length} declined requests`}>{declined.length}</span>
         </div>
         {declined.length === 0 ? (
           <EmptyState title="No Declined Requests" description="Declined mentoring requests will appear here." />
         ) : (
-          <div className="boa-grid-2" style={{ marginBottom: 0 }}>
+          <div className="mentoring-request-list">
             {declined.map((item) => requestCard(item, false))}
           </div>
         )}

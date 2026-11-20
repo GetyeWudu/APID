@@ -5,6 +5,7 @@ import com.boa.apid.core.auth.security.ApidUserPrincipal;
 import com.boa.apid.mentoring.application.dto.MentorApplicationDto;
 import com.boa.apid.mentoring.application.dto.MentorApplicationReviewRequest;
 import com.boa.apid.mentoring.application.dto.MentorApplicationSubmittedDto;
+import com.boa.apid.mentoring.application.dto.MentorAgreementTermsDto;
 import com.boa.apid.mentoring.application.dto.MentorProfileUpdateRequest;
 import com.boa.apid.mentoring.application.service.MentorApplicationService;
 import jakarta.validation.Valid;
@@ -35,6 +36,12 @@ public class MentorApplicationController {
         this.mentorApplicationService = mentorApplicationService;
     }
 
+    @GetMapping("/agreement-terms")
+    @PreAuthorize("hasAuthority('EMPLOYEE_PORTAL_ACCESS')")
+    public ApiResponse<MentorAgreementTermsDto> agreementTerms() {
+        return ApiResponse.ok(mentorApplicationService.getAgreementTerms());
+    }
+
     @PostMapping(consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     @PreAuthorize("hasAuthority('EMPLOYEE_PORTAL_ACCESS')")
     public ApiResponse<MentorApplicationSubmittedDto> submit(
@@ -48,6 +55,8 @@ public class MentorApplicationController {
             @RequestParam(value = "mentoringApproach", required = false) String mentoringApproach,
             @RequestParam(value = "sessionsPerWeek", required = false) Integer sessionsPerWeek,
             @RequestParam(value = "maxConcurrentTrainees", required = false) Integer maxConcurrentTrainees,
+            @RequestParam(value = "mentorAgreementAccepted", required = false) Boolean mentorAgreementAccepted,
+            @RequestParam(value = "mentorAgreementVersion", required = false) String mentorAgreementVersion,
             @RequestParam(value = "proofDocument", required = false) MultipartFile proofDocument,
             @RequestParam(value = "supportingEvidence", required = false) List<MultipartFile> supportingEvidence,
             @RequestParam(value = "supportingEvidenceContext", required = false) List<String> supportingEvidenceContexts,
@@ -86,6 +95,8 @@ public class MentorApplicationController {
                         maxConcurrentTrainees,
                         evidenceFiles,
                         evidenceContexts,
+                        mentorAgreementAccepted,
+                        mentorAgreementVersion,
                         actor
                 )
         );

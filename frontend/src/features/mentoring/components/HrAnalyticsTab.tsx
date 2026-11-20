@@ -7,13 +7,13 @@ import {
   ErrorState,
   LoadingSkeleton,
   SlideOverDrawer,
-  StatCard,
   StatusPill,
   SvgHorizontalBarChart,
   useToast,
 } from '../../../shared/components/ui';
 import { mentoringTrainerApi } from '../api/mentoringTrainerApi';
 import { SkillSupplyDemandCard } from './SkillSupplyDemandCard';
+import '../pages/MentoringDashboard.css';
 import type {
   MentoringHrOverview,
   MentoringPairingReportSummary,
@@ -99,10 +99,42 @@ export function HrAnalyticsTab({
   const selectedPairing = pairingReportsQuery.data?.pairings.find(
     (item) => item.relationshipId === selectedRelationshipId
   );
+  const overviewMetrics = [
+    {
+      label: 'Trainer applications',
+      value: totalApplications,
+      detail: `${overview.pendingApplications} pending · ${overview.approvedApplications} approved · ${overview.declinedApplications} declined`,
+      icon: <Award size={18} />,
+    },
+    {
+      label: 'Active trainers',
+      value: overview.activeTrainers,
+      detail: `${overview.suspendedTrainers} suspended · ${overview.revokedTrainers} revoked`,
+      icon: <Users size={18} />,
+    },
+    {
+      label: 'Relationships completed',
+      value: `${overview.completionRatePct}%`,
+      detail: `${overview.completedRelationships} completed overall`,
+      icon: <CheckCircle2 size={18} />,
+    },
+    {
+      label: 'Sessions conducted',
+      value: overview.completedSessions,
+      detail: `${overview.totalSessions} total scheduled`,
+      icon: <CheckCircle2 size={18} />,
+    },
+    {
+      label: 'Average trainee feedback',
+      value: overview.averageFeedbackRating ? `${overview.averageFeedbackRating.toFixed(1)} / 5` : 'Not rated',
+      detail: 'From completed mentoring relationships',
+      icon: <Award size={18} />,
+    },
+  ];
 
   return (
-    <div className="boa-stack">
-      <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.5rem' }}>
+    <div className="boa-stack mentoring-dashboard mentoring-analytics">
+      <div className="mentoring-dashboard__toolbar">
         <button
           type="button"
           className="apid-btn apid-btn-outline apid-btn-sm"
@@ -120,43 +152,22 @@ export function HrAnalyticsTab({
           <Download size={14} /> {exportingFormat === 'pdf' ? 'Exporting…' : 'Export PDF'}
         </button>
       </div>
-      <div className="boa-kpi-grid" style={{ marginBottom: 0 }}>
-        <StatCard
-          label="Trainer Applications"
-          value={totalApplications}
-          subtext={`${overview.pendingApplications} pending · ${overview.approvedApplications} approved · ${overview.declinedApplications} declined`}
-          icon={<Award size={16} />}
-        />
-        <StatCard
-          label="Trainer Pipeline"
-          value={overview.activeTrainers}
-          subtext={`${overview.suspendedTrainers} suspended · ${overview.revokedTrainers} revoked`}
-          badge="ACTIVE"
-          badgeTone="ok"
-          icon={<Users size={16} />}
-        />
-        <StatCard
-          label="Relationships Completed"
-          value={`${overview.completionRatePct}%`}
-          subtext={`${overview.completedRelationships} completed relationships overall`}
-          icon={<CheckCircle2 size={16} />}
-        />
-        <StatCard
-          label="Sessions Conducted"
-          value={overview.completedSessions}
-          subtext={`${overview.totalSessions} total scheduled sessions`}
-          icon={<CheckCircle2 size={16} />}
-        />
-        <StatCard
-          label="Average Trainee Feedback"
-          value={overview.averageFeedbackRating ? `${overview.averageFeedbackRating.toFixed(1)} / 5` : 'Not rated'}
-          subtext="From completed mentoring relationships"
-          icon={<Award size={16} />}
-        />
+      <div className="mentoring-dashboard__metrics mentoring-analytics__metrics" aria-label="Mentoring program summary">
+        {overviewMetrics.map((metric) => (
+          <div className="mentoring-dashboard__metric" key={metric.label}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: 'var(--mentoring-accent)' }}>
+              <span aria-hidden="true">{metric.icon}</span>
+              <span className="mentoring-dashboard__metric-value">{metric.value}</span>
+            </div>
+            <div className="mentoring-dashboard__metric-label">{metric.label}</div>
+            <div className="mentoring-dashboard__section-description">{metric.detail}</div>
+          </div>
+        ))}
       </div>
-      <section className="apid-card">
-        <h3 className="boa-card-title">Trainer Utilization</h3>
-        <p className="boa-card-subtitle">Active trainees and pending requests compared with each trainer&apos;s approved capacity.</p>
+      <div className="mentoring-analytics__charts">
+      <section className="mentoring-analytics__chart">
+        <h3 className="mentoring-dashboard__section-title">Trainer Utilization</h3>
+        <p className="mentoring-dashboard__section-description">Active trainees and pending requests compared with each trainer&apos;s approved capacity.</p>
         <SvgHorizontalBarChart
           title="Active trainees by trainer"
           description="Trainees in active relationships compared to approved capacity"
@@ -173,11 +184,12 @@ export function HrAnalyticsTab({
         liveSkillNames={overview.skillSupplyDemand.map((row) => row.skillName)}
         skillSupplyDemand={overview.skillSupplyDemand}
       />
-      <section className="apid-card">
-        <div className="boa-card-header">
+      </div>
+      <section className="mentoring-dashboard__section">
+        <div className="mentoring-dashboard__section-header">
           <div>
-            <h3 className="boa-card-title">Pairing Reports</h3>
-            <p className="boa-card-subtitle">
+            <h3 className="mentoring-dashboard__section-title">Pairing Reports</h3>
+            <p className="mentoring-dashboard__section-description">
               Overall pairing and session completion, with session and completion notes for each pairing.
             </p>
           </div>
@@ -191,68 +203,72 @@ export function HrAnalyticsTab({
           />
         ) : (
           <>
-            <div className="boa-kpi-grid" style={{ marginBottom: '1rem' }}>
-              <StatCard
-                label="Total Pairings"
-                value={pairingReportsQuery.data.totalPairings}
-                subtext={`${pairingReportsQuery.data.completedPairings} completed`}
-                icon={<Users size={16} />}
-              />
-              <StatCard
-                label="Pairing Completion"
-                value={`${pairingReportsQuery.data.pairingCompletionRatePct}%`}
-                subtext={`${pairingReportsQuery.data.completedPairings} of ${pairingReportsQuery.data.totalPairings} pairings`}
-                icon={<CheckCircle2 size={16} />}
-              />
-              <StatCard
-                label="Total Sessions"
-                value={pairingReportsQuery.data.totalSessions}
-                subtext={`${pairingReportsQuery.data.completedSessions} completed`}
-                icon={<CalendarDays size={16} />}
-              />
-              <StatCard
-                label="Session Completion"
-                value={`${pairingReportsQuery.data.sessionCompletionRatePct}%`}
-                subtext={`${pairingReportsQuery.data.completedSessions} of ${pairingReportsQuery.data.totalSessions} sessions`}
-                icon={<CheckCircle2 size={16} />}
-              />
+            <div className="mentoring-dashboard__metrics" aria-label="Pairing report summary">
+              {[
+                {
+                  label: 'Total pairings',
+                  value: pairingReportsQuery.data.totalPairings,
+                  detail: `${pairingReportsQuery.data.completedPairings} completed`,
+                  icon: <Users size={18} />,
+                },
+                {
+                  label: 'Pairing completion',
+                  value: `${pairingReportsQuery.data.pairingCompletionRatePct}%`,
+                  detail: `${pairingReportsQuery.data.completedPairings} of ${pairingReportsQuery.data.totalPairings}`,
+                  icon: <CheckCircle2 size={18} />,
+                },
+                {
+                  label: 'Total sessions',
+                  value: pairingReportsQuery.data.totalSessions,
+                  detail: `${pairingReportsQuery.data.completedSessions} completed`,
+                  icon: <CalendarDays size={18} />,
+                },
+                {
+                  label: 'Session completion',
+                  value: `${pairingReportsQuery.data.sessionCompletionRatePct}%`,
+                  detail: `${pairingReportsQuery.data.completedSessions} of ${pairingReportsQuery.data.totalSessions}`,
+                  icon: <CheckCircle2 size={18} />,
+                },
+              ].map((metric) => (
+                <div className="mentoring-dashboard__metric" key={metric.label}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: 'var(--mentoring-accent)' }}>
+                    <span aria-hidden="true">{metric.icon}</span>
+                    <span className="mentoring-dashboard__metric-value">{metric.value}</span>
+                  </div>
+                  <div className="mentoring-dashboard__metric-label">{metric.label}</div>
+                  <div className="mentoring-dashboard__section-description">{metric.detail}</div>
+                </div>
+              ))}
             </div>
             {pairingReportsQuery.data.pairings.length === 0 ? (
               <EmptyState title="No Mentoring Pairings" description="Pairing reports will appear here when relationships are created." />
             ) : (
-              <div className="boa-stack" style={{ gap: '0.5rem' }}>
+              <div className="mentoring-report-list">
                 {pairingReportsQuery.data.pairings.map((pairing) => (
                   <button
                     key={pairing.relationshipId}
                     type="button"
-                    className="apid-card"
+                    className="mentoring-analytics__report-row"
                     aria-expanded={selectedRelationshipId === pairing.relationshipId}
                     onClick={() =>
                       setSelectedRelationshipId((current) =>
                         current === pairing.relationshipId ? null : pairing.relationshipId
                       )
                     }
-                    style={{
-                      width: '100%',
-                      textAlign: 'left',
-                      cursor: 'pointer',
-                      border: selectedRelationshipId === pairing.relationshipId
-                        ? '2px solid var(--primary)'
-                        : '1px solid var(--border)',
-                    }}
                   >
-                    <div style={{ display: 'flex', justifyContent: 'space-between', gap: '0.75rem', flexWrap: 'wrap' }}>
-                      <div>
+                    <div className="mentoring-analytics__report-main">
                         <strong>
                           {pairing.requestType === 'GROUP' ? 'Mentoring class' : 'One-to-one mentoring'}
                         </strong>
-                        <p className="boa-muted" style={{ margin: '0.25rem 0', fontSize: '0.85rem' }}>
+                        <div className="mentoring-analytics__report-meta">
                           {pairing.mentorName} → {pairing.traineeNames.join(', ') || 'Trainee not available'}
-                        </p>
-                        <span className="boa-muted" style={{ fontSize: '0.8rem' }}>
-                          {pairing.skillName ?? 'No skill specified'} · {pairing.completedSessions}/{pairing.totalSessions} sessions completed ({pairing.sessionCompletionRatePct}%)
-                        </span>
-                      </div>
+                          · {pairing.skillName ?? 'No skill specified'}
+                        </div>
+                    </div>
+                    <span className="mentoring-analytics__report-progress">
+                      {pairing.completedSessions}/{pairing.totalSessions} sessions · {pairing.sessionCompletionRatePct}%
+                    </span>
+                    <div>
                       <StatusPill label={pairing.status} tone={relationshipStatusTone(pairing.status)} />
                     </div>
                   </button>

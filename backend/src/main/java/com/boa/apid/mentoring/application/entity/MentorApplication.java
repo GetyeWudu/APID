@@ -92,6 +92,15 @@ public class MentorApplication {
     @Column(name = "max_concurrent_trainees")
     private Integer maxConcurrentTrainees;
 
+    @Column(name = "mentor_agreement_version", length = 40)
+    private String mentorAgreementVersion;
+
+    @Column(name = "mentor_agreement_text", columnDefinition = "TEXT")
+    private String mentorAgreementText;
+
+    @Column(name = "mentor_agreement_accepted_at")
+    private Instant mentorAgreementAcceptedAt;
+
     @Column(name = "submitted_at", nullable = false, updatable = false)
     private Instant submittedAt;
 
@@ -167,6 +176,19 @@ public class MentorApplication {
 
     public Integer getMaxConcurrentTrainees() { return maxConcurrentTrainees; }
     public void setMaxConcurrentTrainees(Integer maxConcurrentTrainees) { this.maxConcurrentTrainees = maxConcurrentTrainees; }
+
+    public String getMentorAgreementVersion() { return mentorAgreementVersion; }
+    public void setMentorAgreementVersion(String mentorAgreementVersion) {
+        this.mentorAgreementVersion = mentorAgreementVersion;
+    }
+
+    public String getMentorAgreementText() { return mentorAgreementText; }
+    public void setMentorAgreementText(String mentorAgreementText) { this.mentorAgreementText = mentorAgreementText; }
+
+    public Instant getMentorAgreementAcceptedAt() { return mentorAgreementAcceptedAt; }
+    public void setMentorAgreementAcceptedAt(Instant mentorAgreementAcceptedAt) {
+        this.mentorAgreementAcceptedAt = mentorAgreementAcceptedAt;
+    }
 
     public Instant getSubmittedAt() { return submittedAt; }
 }

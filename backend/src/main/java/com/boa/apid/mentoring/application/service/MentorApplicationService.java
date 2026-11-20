@@ -25,6 +25,7 @@ import com.boa.apid.core.skills.service.SkillCacheInvalidationEvent;
 import com.boa.apid.mentoring.application.dto.MentorApplicationDto;
 import com.boa.apid.mentoring.application.dto.MentorApplicationReviewRequest;
 import com.boa.apid.mentoring.application.dto.MentorApplicationSubmittedDto;
+import com.boa.apid.mentoring.application.dto.MentorAgreementTermsDto;
 import com.boa.apid.mentoring.application.dto.MentorProfileUpdateRequest;
 import com.boa.apid.mentoring.application.entity.MentorApplication;
 import com.boa.apid.mentoring.application.entity.MentorApplicationStatus;
@@ -88,6 +89,11 @@ public class MentorApplicationService {
         this.notificationService = notificationService;
         this.eventPublisher = eventPublisher;
         this.trainerAuthorizationService = trainerAuthorizationService;
+    }
+
+    @Transactional(readOnly = true)
+    public MentorAgreementTermsDto getAgreementTerms() {
+        return MentorAgreementPolicy.terms();
     }
 
     @Transactional
@@ -184,6 +190,41 @@ public class MentorApplicationService {
             List<String> supportingEvidenceContexts,
             ApidUserPrincipal actor
     ) {
+        return submit(
+                catalogSkillIds,
+                customSkill,
+                note,
+                expertiseSummary,
+                availabilityNotes,
+                experienceYears,
+                mentoringApproach,
+                sessionsPerWeek,
+                maxConcurrentTrainees,
+                supportingEvidence,
+                supportingEvidenceContexts,
+                false,
+                null,
+                actor
+        );
+    }
+
+    @Transactional
+    public MentorApplicationSubmittedDto submit(
+            List<Long> catalogSkillIds,
+            String customSkill,
+            String note,
+            String expertiseSummary,
+            String availabilityNotes,
+            Integer experienceYears,
+            String mentoringApproach,
+            Integer sessionsPerWeek,
+            Integer maxConcurrentTrainees,
+            List<MultipartFile> supportingEvidence,
+            List<String> supportingEvidenceContexts,
+            Boolean mentorAgreementAccepted,
+            String mentorAgreementVersion,
+            ApidUserPrincipal actor
+    ) {
         return submitApplication(
                 catalogSkillIds,
                 customSkill,
@@ -197,7 +238,9 @@ public class MentorApplicationService {
                 supportingEvidence,
                 supportingEvidenceContexts,
                 actor,
-                MentorApplicationType.INITIAL
+                MentorApplicationType.INITIAL,
+                mentorAgreementAccepted,
+                mentorAgreementVersion
         );
     }
 
@@ -222,7 +265,9 @@ public class MentorApplicationService {
                 supportingEvidence,
                 List.of(),
                 actor,
-                MentorApplicationType.SKILL_ADDITION
+                MentorApplicationType.SKILL_ADDITION,
+                false,
+                null
         );
     }
 
@@ -437,8 +482,26 @@ public class MentorApplicationService {
             List<MultipartFile> supportingEvidence,
             List<String> supportingEvidenceContexts,
             ApidUserPrincipal actor,
-            MentorApplicationType applicationType
+            MentorApplicationType applicationType,
+            Boolean mentorAgreementAccepted,
+            String mentorAgreementVersion
     ) {
+        if (applicationType == MentorApplicationType.INITIAL) {
+            if (!Boolean.TRUE.equals(mentorAgreementAccepted)) {
+                throw new BusinessException(
+                        "MENTOR_AGREEMENT_REQUIRED",
+                        "You must accept the mentor agreement before submitting your application."
+                );
+            }
+            if (!MentorAgreementPolicy.VERSION.equals(mentorAgreementVersion)) {
+                throw new BusinessException(
+                        "MENTOR_AGREEMENT_VERSION_OUTDATED",
+                        "The mentor agreement has changed. Review and accept the current terms before submitting.",
+                        HttpStatus.CONFLICT
+                );
+            }
+        }
+
         List<String> customSkillNames = normalizeCustomSkills(customSkill);
         String normalizedCustomSkill = customSkillNames.isEmpty()
                 ? null
@@ -619,6 +682,11 @@ public class MentorApplicationService {
         application.setMentoringApproach(normalizedApproach);
         application.setSessionsPerWeek(sessionsPerWeek);
         application.setMaxConcurrentTrainees(maxConcurrentTrainees);
+        if (applicationType == MentorApplicationType.INITIAL) {
+            application.setMentorAgreementVersion(MentorAgreementPolicy.VERSION);
+            application.setMentorAgreementText(MentorAgreementPolicy.snapshot());
+            application.setMentorAgreementAcceptedAt(Instant.now());
+        }
 
         MentorApplication saved = applicationRepository.save(application);
         return new MentorApplicationSubmittedDto(
@@ -787,15 +855,32 @@ public class MentorApplicationService {
                         "The active Mentor role is not configured.",
                         HttpStatus.INTERNAL_SERVER_ERROR
                 ));
-        boolean alreadyMentor = userRoleRepository.findActiveByUserIdWithRole(applicant.getId()).stream()
-                .anyMatch(userRole -> userRole.getRole().getId().equals(mentorRole.getId()));
-        if (!alreadyMentor) {
-            UserRole userRole = new UserRole();
-            userRole.setUser(applicant);
-            userRole.setRole(mentorRole);
-            userRole.setAssignedBy(userRepository.getReferenceById(actor.getUserId()));
-            userRole.setActive(true);
-            userRoleRepository.save(userRole);
+        List<UserRole> activeRoles = userRoleRepository.findActiveByUserIdWithRole(applicant.getId());
+        UserRole mentorUserRole = activeRoles.stream()
+                .filter(userRole -> userRole.getRole().getId().equals(mentorRole.getId()))
+                .findFirst()
+                .orElse(null);
+        boolean roleCreated = mentorUserRole == null;
+        if (roleCreated) {
+            mentorUserRole = new UserRole();
+            mentorUserRole.setUser(applicant);
+            mentorUserRole.setRole(mentorRole);
+            mentorUserRole.setAssignedBy(userRepository.getReferenceById(actor.getUserId()));
+            mentorUserRole.setActive(true);
+        }
+        if (application.getApplicationType() == MentorApplicationType.INITIAL
+                && application.getMentorAgreementVersion() != null
+                && application.getMentorAgreementText() != null
+                && application.getMentorAgreementAcceptedAt() != null) {
+            mentorUserRole.setMentorAgreementVersion(application.getMentorAgreementVersion());
+            mentorUserRole.setMentorAgreementText(application.getMentorAgreementText());
+            mentorUserRole.setMentorAgreementAcceptedAt(application.getMentorAgreementAcceptedAt());
+        }
+        if (roleCreated || (application.getApplicationType() == MentorApplicationType.INITIAL
+                && application.getMentorAgreementAcceptedAt() != null)) {
+            userRoleRepository.save(mentorUserRole);
+        }
+        if (roleCreated) {
             eventPublisher.publishEvent(PermissionCacheInvalidationEvent.forUser(applicant.getId()));
         }
 

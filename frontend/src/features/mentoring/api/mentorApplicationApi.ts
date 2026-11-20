@@ -1,6 +1,8 @@
 import { apiClient, type ApiResponse } from '../../../shared/api/apiClient';
 
 export interface SubmitMentorApplicationPayload {
+  mentorAgreementAccepted: boolean;
+  mentorAgreementVersion: string;
   proofDocument?: File;
   supportingEvidence?: File[];
   supportingEvidenceContexts?: string[];
@@ -14,6 +16,11 @@ export interface SubmitMentorApplicationPayload {
   expertiseSummary?: string;
   availabilityNotes?: string;
   maxConcurrentTrainees?: number;
+}
+
+export interface MentorAgreementTerms {
+  version: string;
+  conditions: string[];
 }
 
 export interface SubmittedMentorApplication {
@@ -49,6 +56,9 @@ export interface MentorApplication {
   reviewedByUsername: string | null;
   reviewedAt: string | null;
   reviewReason: string | null;
+  mentorAgreementVersion?: string | null;
+  mentorAgreementText?: string | null;
+  mentorAgreementAcceptedAt?: string | null;
 }
 
 export interface MentorApplicationDocumentSummary {
@@ -59,7 +69,7 @@ export interface MentorApplicationDocumentSummary {
   sourceTruncated: boolean;
 }
 
-function buildApplicationFormData(payload: SubmitMentorApplicationPayload) {
+function buildApplicationFormData(payload: Partial<SubmitMentorApplicationPayload>) {
   const formData = new FormData();
   if (payload.supportingEvidence?.length) {
     payload.supportingEvidence.forEach((file) => formData.append('supportingEvidence', file));
@@ -100,6 +110,12 @@ function buildApplicationFormData(payload: SubmitMentorApplicationPayload) {
   if (payload.maxConcurrentTrainees !== undefined) {
     formData.append('maxConcurrentTrainees', String(payload.maxConcurrentTrainees));
   }
+  if (payload.mentorAgreementAccepted !== undefined) {
+    formData.append('mentorAgreementAccepted', String(payload.mentorAgreementAccepted));
+  }
+  if (payload.mentorAgreementVersion) {
+    formData.append('mentorAgreementVersion', payload.mentorAgreementVersion);
+  }
   return formData;
 }
 
@@ -109,6 +125,13 @@ export interface ReviewMentorApplicationPayload {
 }
 
 export const mentorApplicationApi = {
+  async getAgreementTerms(): Promise<MentorAgreementTerms> {
+    const response = await apiClient.get<ApiResponse<MentorAgreementTerms>>(
+      '/mentoring/applications/agreement-terms'
+    );
+    return response.data.data;
+  },
+
   async listMine(): Promise<MentorApplication[]> {
     const response = await apiClient.get<ApiResponse<MentorApplication[]>>(
       '/mentoring/applications/mine'

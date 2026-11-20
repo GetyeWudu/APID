@@ -20,6 +20,7 @@ import { HrDirectMatchingTab } from '../components/HrDirectMatchingTab';
 import { HrMatchingTab } from '../components/HrMatchingTab';
 import { TrainerApplicationsTab } from '../components/TrainerApplicationsTab';
 import { TrainerRosterTab } from '../components/TrainerRosterTab';
+import './MentoringDashboard.css';
 
 type HrTabKey = 'applications' | 'trainers' | 'badge-removal-requests' | 'direct-matching' | 'matching' | 'analytics';
 
@@ -158,7 +159,7 @@ export function HrMentoringDashboardPage() {
   const activeSkills = skillsQuery.data ?? [];
 
   return (
-    <div className="boa-stack">
+    <div className="boa-stack mentoring-dashboard">
       <PageHeader
         title={visibleTabs.find((tab) => tab.key === activeTab)?.label ?? 'Mentoring'}
         subtitle="Manage trainer applications, authorizations, HR matching, and mentoring outcomes."

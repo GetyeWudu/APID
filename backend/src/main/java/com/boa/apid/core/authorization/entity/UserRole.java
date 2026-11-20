@@ -32,6 +32,15 @@ public class UserRole {
     @Column(name = "active", nullable = false)
     private boolean active = true;
 
+    @Column(name = "mentor_agreement_version", length = 40)
+    private String mentorAgreementVersion;
+
+    @Column(name = "mentor_agreement_text", columnDefinition = "TEXT")
+    private String mentorAgreementText;
+
+    @Column(name = "mentor_agreement_accepted_at")
+    private Instant mentorAgreementAcceptedAt;
+
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "revoked_by")
     private User revokedBy;
@@ -62,6 +71,19 @@ public class UserRole {
 
     public boolean isActive() { return active; }
     public void setActive(boolean active) { this.active = active; }
+
+    public String getMentorAgreementVersion() { return mentorAgreementVersion; }
+    public void setMentorAgreementVersion(String mentorAgreementVersion) {
+        this.mentorAgreementVersion = mentorAgreementVersion;
+    }
+
+    public String getMentorAgreementText() { return mentorAgreementText; }
+    public void setMentorAgreementText(String mentorAgreementText) { this.mentorAgreementText = mentorAgreementText; }
+
+    public Instant getMentorAgreementAcceptedAt() { return mentorAgreementAcceptedAt; }
+    public void setMentorAgreementAcceptedAt(Instant mentorAgreementAcceptedAt) {
+        this.mentorAgreementAcceptedAt = mentorAgreementAcceptedAt;
+    }
 
     public User getRevokedBy() { return revokedBy; }
     public void setRevokedBy(User revokedBy) { this.revokedBy = revokedBy; }
