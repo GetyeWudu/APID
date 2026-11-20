@@ -191,7 +191,7 @@ export function MentoringRecommendations({
                   <article className="ai-mentor-card" key={mentor.userId}>
                     <div className="ai-mentor-card-top">
                       <span className="ai-mentor-rank">#{recommendation.rank} recommendation</span>
-                      {mentor.averageRating > 0 && (
+                      {mentor.averageRating != null && mentor.averageRating > 0 && (
                         <span className="ai-mentor-rating"><Star size={14} /> {mentor.averageRating.toFixed(1)}</span>
                       )}
                     </div>

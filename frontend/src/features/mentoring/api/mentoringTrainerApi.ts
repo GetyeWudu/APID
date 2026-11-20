@@ -61,7 +61,7 @@ export interface TrainerDirectoryItem {
   sessionsPerWeek?: number | null;
   activeTrainees: number;
   remainingCapacity: number;
-  averageRating: number;
+  averageRating: number | null;
   skills: TrainerSkill[];
   education?: Array<{
     educationLevel: string | null;

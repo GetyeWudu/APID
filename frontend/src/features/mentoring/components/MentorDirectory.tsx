@@ -451,7 +451,9 @@ export function MentorDirectory({
                 {profileMentor.sessionsPerWeek ?? 'Not provided'}
               </strong></div>
               <div><span>Average rating</span><strong>
-                {profileMentor.averageRating > 0 ? profileMentor.averageRating.toFixed(1) : 'Not rated yet'}
+                {profileMentor.averageRating != null && profileMentor.averageRating > 0
+                  ? profileMentor.averageRating.toFixed(1)
+                  : 'Not rated yet'}
               </strong></div>
             </div>
             <section className="mentor-directory-profile-section">

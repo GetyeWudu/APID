@@ -31,6 +31,7 @@ import {
 import { MentoringDailyVideoModal } from '../components/MentoringDailyVideoModal';
 import { MentoringSessionDetails } from '../components/MentoringSessionDetails';
 import { MentoringSessionReport } from '../components/MentoringSessionReport';
+import { MentoringSessionRating } from '../components/MentoringSessionRating';
 import {
   BANK_OPERATING_TIME_OPTIONS,
   toEthiopianTime,
@@ -745,6 +746,12 @@ export function MentoringSessionsPage({ view }: { view: SessionView }) {
 
                 <MentoringSessionDetails session={session} />
                 <MentoringSessionReport session={session} isMentor={isMentor} />
+                <MentoringSessionRating
+                  relationshipId={session.relationshipId}
+                  sessionId={session.id}
+                  isMentee={isTrainee}
+                  isCompleted={session.status === 'COMPLETED'}
+                />
 
                 {/* Ethiopian Dual Clock Time Banner */}
                 <div

@@ -12,7 +12,7 @@ public record TrainerDirectoryDto(
         String availabilityNotes,
         int activeTrainees,
         int remainingCapacity,
-        double averageRating,
+        Double averageRating,
         List<TrainerSkillDto> skills,
         Integer experienceYears,
         String mentoringApproach,

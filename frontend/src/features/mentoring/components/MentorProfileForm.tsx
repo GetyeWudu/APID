@@ -19,6 +19,7 @@ import {
 import type { ApiErrorPayload } from '../../../shared/api/apiClient';
 import type { SkillItem } from '../../admin/skills/types/skills.types';
 import { mentorApplicationApi } from '../api/mentorApplicationApi';
+import { mentoringPairingApi } from '../api/mentoringPairingApi';
 import { mentoringTrainerApi } from '../api/mentoringTrainerApi';
 import { ErrorState, LoadingSkeleton, StatusPill, useToast } from '../../../shared/components/ui';
 import './MentorProfileForm.css';
@@ -178,6 +179,11 @@ export function MentorProfileForm({
   const applicationsQuery = useQuery({
     queryKey: ['mentoring', 'applications', 'mine', currentUserId],
     queryFn: mentorApplicationApi.listMine,
+  });
+  const mentorRatingQuery = useQuery({
+    queryKey: ['mentoring', 'mentor-session-rating', currentUserId],
+    queryFn: mentoringPairingApi.getMyMentorRating,
+    enabled: profileQuery.data?.status === 'ACTIVE',
   });
   const badgeRemovalQuery = useQuery({
     queryKey: ['mentoring', 'badge-removal-request', currentUserId],
@@ -566,6 +572,18 @@ export function MentorProfileForm({
           />
         </label>
       </section>
+
+      {mentorRatingQuery.isError && (
+        <ErrorState
+          message="Unable to load your session rating."
+          onRetry={() => void mentorRatingQuery.refetch()}
+        />
+      )}
+      {mentorRatingQuery.data?.averageRating != null && (
+        <section className="apid-card" aria-label="Your mentor rating">
+          <strong>Session rating: {mentorRatingQuery.data.averageRating.toFixed(1)} / 5</strong>
+        </section>
+      )}
 
       <section className="mentor-profile-stats" aria-label="Mentor overview">
         <article><span>Approved skills</span><strong>{profile.skills.length}</strong><small>Active mentoring areas</small></article>

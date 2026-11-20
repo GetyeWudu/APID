@@ -166,6 +166,15 @@ export interface MentoringFeedback {
   ratedAt: string;
 }
 
+export interface MentoringSessionRating {
+  rating: number;
+  ratedAt: string;
+}
+
+export interface MentorSessionRatingSummary {
+  averageRating: number | null;
+}
+
 export interface SessionJoinToken {
   roomName: string;
   token: string;
@@ -245,6 +254,35 @@ export const mentoringPairingApi = {
     const response = await apiClient.post<ApiResponse<MentoringSession>>(
       `/mentoring/pairing/relationships/${relationshipId}/sessions/${sessionId}/report`,
       { reportNote }
+    );
+    return response.data.data;
+  },
+
+  async getMySessionRating(
+    relationshipId: number,
+    sessionId: number
+  ): Promise<MentoringSessionRating | null> {
+    const response = await apiClient.get<ApiResponse<MentoringSessionRating | null>>(
+      `/mentoring/pairing/relationships/${relationshipId}/sessions/${sessionId}/rating`
+    );
+    return response.data.data;
+  },
+
+  async submitSessionRating(
+    relationshipId: number,
+    sessionId: number,
+    rating: number
+  ): Promise<MentoringSessionRating> {
+    const response = await apiClient.post<ApiResponse<MentoringSessionRating>>(
+      `/mentoring/pairing/relationships/${relationshipId}/sessions/${sessionId}/rating`,
+      { rating }
+    );
+    return response.data.data;
+  },
+
+  async getMyMentorRating(): Promise<MentorSessionRatingSummary> {
+    const response = await apiClient.get<ApiResponse<MentorSessionRatingSummary>>(
+      '/mentoring/pairing/mentor-rating/me'
     );
     return response.data.data;
   },

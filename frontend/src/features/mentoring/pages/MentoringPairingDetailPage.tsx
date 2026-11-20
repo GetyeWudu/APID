@@ -16,6 +16,7 @@ import { mentoringPairingApi, type MentoringSession } from '../api/mentoringPair
 import { MentoringDailyVideoModal } from '../components/MentoringDailyVideoModal';
 import { MentoringSessionDetails } from '../components/MentoringSessionDetails';
 import { MentoringSessionReport } from '../components/MentoringSessionReport';
+import { MentoringSessionRating } from '../components/MentoringSessionRating';
 import {
   MentoringFeedbackForm,
   MentoringProgressPanel,
@@ -247,6 +248,12 @@ export function MentoringPairingDetailPage() {
           <MentoringSessionReport
             session={session}
             isMentor={detail.currentUserRole === 'MENTOR'}
+          />
+          <MentoringSessionRating
+            relationshipId={relationshipId}
+            sessionId={session.id}
+            isMentee={detail.currentUserRole === 'TRAINEE'}
+            isCompleted={session.status === 'COMPLETED'}
           />
           {session.agenda && <p className="boa-muted">{session.agenda}</p>}
           {session.status === 'DECLINED' && (

@@ -41,6 +41,7 @@ import com.boa.apid.mentoring.pairing.entity.MentoringSession;
 import com.boa.apid.mentoring.pairing.repository.MentoringRelationshipMemberRepository;
 import com.boa.apid.mentoring.pairing.repository.MentoringRelationshipRepository;
 import com.boa.apid.mentoring.pairing.repository.MentoringRequestRecipientRepository;
+import com.boa.apid.mentoring.pairing.repository.MentoringSessionRatingRepository;
 import com.boa.apid.mentoring.pairing.repository.MentoringSessionRepository;
 import com.boa.apid.mentoring.pairing.entity.MentoringSessionStatus;
 import com.boa.apid.mentoring.trainer.dto.MentorBadgeRemovalDecisionRequest;
@@ -106,6 +107,7 @@ public class TrainerAuthorizationService {
     private final MentoringRelationshipMemberRepository memberRepository;
     private final MentoringRequestRecipientRepository recipientRepository;
     private final MentoringSessionRepository sessionRepository;
+    private final MentoringSessionRatingRepository sessionRatingRepository;
     private final MentoringRelationshipFeedbackRepository feedbackRepository;
     private final MentoringMatchRequestRepository matchRequestRepository;
     private final CoreConfigService configService;
@@ -132,6 +134,7 @@ public class TrainerAuthorizationService {
             MentoringRelationshipMemberRepository memberRepository,
             MentoringRequestRecipientRepository recipientRepository,
             MentoringSessionRepository sessionRepository,
+            MentoringSessionRatingRepository sessionRatingRepository,
             MentoringRelationshipFeedbackRepository feedbackRepository,
             MentoringMatchRequestRepository matchRequestRepository,
             CoreConfigService configService,
@@ -157,6 +160,7 @@ public class TrainerAuthorizationService {
         this.memberRepository = memberRepository;
         this.recipientRepository = recipientRepository;
         this.sessionRepository = sessionRepository;
+        this.sessionRatingRepository = sessionRatingRepository;
         this.feedbackRepository = feedbackRepository;
         this.matchRequestRepository = matchRequestRepository;
         this.configService = configService;
@@ -206,7 +210,10 @@ public class TrainerAuthorizationService {
                         .reversed()
                         .thenComparing(Comparator.comparingInt(TrainerDirectoryDto::remainingCapacity).reversed())
                         .thenComparingInt(TrainerDirectoryDto::activeTrainees)
-                        .thenComparing(Comparator.comparingDouble(TrainerDirectoryDto::averageRating).reversed())
+                        .thenComparing(
+                                TrainerDirectoryDto::averageRating,
+                                Comparator.nullsLast(Comparator.reverseOrder())
+                        )
                         .thenComparing(TrainerDirectoryDto::fullName, String.CASE_INSENSITIVE_ORDER))
                 .toList();
     }
@@ -1178,7 +1185,11 @@ public class TrainerAuthorizationService {
                 user.getId(), MentoringRelationshipStatus.ACTIVE);
         int pending = (int) recipientRepository.countByMentorAndStatus(
                 user.getId(), MentoringRequestRecipientStatus.PENDING);
-        Double averageRating = feedbackRepository.averageRatingByMentorUserId(user.getId());
+        long ratedSessionCount =
+                sessionRatingRepository.countCompletedSessionsWithRatingsByMentorUserId(user.getId());
+        Double averageRating = ratedSessionCount >= 5
+                ? sessionRatingRepository.averageCompletedByMentorUserId(user.getId())
+                : null;
         MentorApplication sourceApplication = authorization.getSourceApplication();
         if (sourceApplication != null
                 && sourceApplication.getApplicationType() != MentorApplicationType.INITIAL) {
@@ -1198,7 +1209,7 @@ public class TrainerAuthorizationService {
                 authorization.getAvailabilityNotes(),
                 active,
                 Math.max(0, authorization.getMaxConcurrentTrainees() - active - pending),
-                averageRating == null ? 0 : averageRating,
+                averageRating,
                 skills(authorization, true),
                 authorization.getExperienceYears(),
                 authorization.getMentoringApproach(),

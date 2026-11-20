@@ -719,12 +719,11 @@ export function AppLayout({ children }: { children: ReactNode }) {
           </div>
 
           <div className="boa-topbar-right">
-            <span
-              className="boa-quarter-pill"
-              title="Active fiscal quarter"
-            >
-              {activeQuarterLabel}
-            </span>
+            {activeModule === 'coaching' && (
+              <span className="boa-quarter-pill" title="Active fiscal quarter">
+                {activeQuarterLabel}
+              </span>
+            )}
 
             <NotificationBellPopover />
 
