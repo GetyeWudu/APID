@@ -20,7 +20,7 @@ import com.boa.apid.core.notifications.entity.NotificationModule;
 import com.boa.apid.core.notifications.service.NotificationService;
 import com.boa.apid.core.organization.entity.Employee;
 import com.boa.apid.core.organization.repository.EmployeeRepository;
-import com.boa.apid.core.security.ApidUserPrincipal;
+import com.boa.apid.core.auth.security.ApidUserPrincipal;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -206,7 +206,6 @@ public class PmsReferralService {
                 CoachingAssignment assignment = assignmentRepository.findById(referral.getAssignmentId()).orElse(null);
                 if (assignment != null) {
                     assignment.setCoachEmployeeId(newCoach.getId());
-                    assignment.setUpdatedAt(Instant.now());
                     assignmentRepository.save(assignment);
                 }
             }
@@ -298,8 +297,8 @@ public class PmsReferralService {
                 r.getCoacheeEmployeeId(),
                 coachee != null ? coachee.getEmployeeNumber() : "",
                 coachee != null ? coachee.getFullName() : "Unknown Employee",
-                coachee != null ? coachee.getDepartment() : "",
-                coachee != null ? coachee.getJobTitle() : "",
+                coachee != null && coachee.getDepartment() != null ? coachee.getDepartment().getName() : "",
+                coachee != null ? coachee.getJob() : "",
                 r.getCurrentCoachEmployeeId(),
                 currentCoach != null ? currentCoach.getFullName() : "None",
                 r.getAssignmentId(),
