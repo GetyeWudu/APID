@@ -358,13 +358,6 @@ export function AppLayout({ children }: { children: ReactNode }) {
                     matchSearch: '?view=trainer',
                   },
                   {
-                    to: '/mentoring?view=find-trainee',
-                    label: 'Find Trainee',
-                    icon: <UserPlus size={17} />,
-                    requiredAnyPermissions: EMPLOYEE_WORKSPACE_PERMISSIONS,
-                    matchSearch: '?view=find-trainee',
-                  },
-                  {
                     to: '/mentoring?view=trainer-profile',
                     label: 'Mentor Profile',
                     icon: <UserRound size={17} />,

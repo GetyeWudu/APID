@@ -14,7 +14,6 @@ import { mentoringPairingApi } from '../api/mentoringPairingApi';
 import { mentorDirectoryApi } from '../api/mentorDirectoryApi';
 import { ApplyForMentorForm } from '../components/ApplyForMentorForm';
 import { MentorDirectory } from '../components/MentorDirectory';
-import { MentorInvitationForm } from '../components/MentorInvitationForm';
 import { MentoringRequestsPanel } from '../components/MentoringRequestsPanel';
 import { MentoringMatchRequestForm } from '../components/MentoringMatchRequestForm';
 import { MentoringRecommendations } from '../components/MentoringRecommendations';
@@ -28,7 +27,6 @@ type MentoringViewKey =
   | 'trainee'
   | 'trainee-sessions'
   | 'trainer'
-  | 'find-trainee'
   | 'trainer-profile'
   | 'trainer-sessions'
   | 'apply';
@@ -53,7 +51,6 @@ export function MentoringHomePage() {
     requestedView === 'trainee' ||
     requestedView === 'trainee-sessions' ||
     requestedView === 'trainer' ||
-    requestedView === 'find-trainee' ||
     requestedView === 'trainer-profile' ||
     requestedView === 'trainer-sessions' ||
     requestedView === 'apply'
@@ -78,7 +75,6 @@ export function MentoringHomePage() {
     enabled:
       hasAnyPermission(EMPLOYEE_WORKSPACE_PERMISSIONS) &&
       activeView !== 'trainer-profile' &&
-      activeView !== 'find-trainee' &&
       activeView !== 'trainer-sessions' &&
       activeView !== 'trainee-sessions',
   });
@@ -198,33 +194,6 @@ export function MentoringHomePage() {
     );
   }
 
-  if (activeView === 'find-trainee') {
-    if (!isMentor) {
-      return (
-        <div className="boa-stack">
-          <PageHeader title="Find Trainee" subtitle="Invite employees to mentoring." source="live" />
-          <div className="apid-card">
-            <EmptyState
-              title="Mentor Access Required"
-              description="Only approved mentors can invite employees to mentoring."
-            />
-          </div>
-        </div>
-      );
-    }
-
-    return (
-      <div className="boa-stack">
-        <PageHeader
-          title="Find Trainee"
-          subtitle="Invite employees to one-to-one mentoring or a class. Each employee decides individually."
-          source="live"
-        />
-        {user?.id && <MentorInvitationForm currentUserId={user.id} />}
-      </div>
-    );
-  }
-
   if (activeView === 'overview' || activeView === 'trainee' || activeView === 'trainer') {
     if (pairingRequestsQuery.isLoading) {
       return <LoadingSkeleton rows={6} height={28} />;
@@ -240,11 +209,11 @@ export function MentoringHomePage() {
     if (activeView === 'trainer' && !isMentor) {
       return (
         <div className="boa-stack">
-          <PageHeader title="My Trainees" subtitle="Mentor invitations and requests." source="live" />
+          <PageHeader title="My Trainees" subtitle="Review mentoring requests from mentees." source="live" />
           <div className="apid-card">
             <EmptyState
               title="Mentor Access Required"
-              description="Only approved mentors can invite employees or respond to trainee requests."
+              description="Only approved mentors can review and respond to mentoring requests from trainees."
             />
           </div>
         </div>
@@ -260,31 +229,19 @@ export function MentoringHomePage() {
           : 'Mentoring';
     const subtitle =
       activeView === 'trainer'
-        ? 'Review trainee requests, manage active pairings, and respond to invitations.'
+        ? 'Review trainee requests, manage active pairings, and respond to mentee requests.'
         : activeView === 'trainee'
-          ? 'View invitations from mentors, requests you sent, active mentoring, and declined requests.'
-          : 'Manage mentoring invitations, requests, and active pairings.';
+          ? 'Request a mentor, track your requests, and manage active mentoring.'
+          : 'Request a mentor or manage your active mentoring relationships.';
 
     return (
       <div className="boa-stack mentoring-dashboard">
         <PageHeader title={title} subtitle={subtitle} source="live" />
-        {activeView === 'trainer' && (
-          <div>
-            <Link to="/mentoring?view=find-trainee" className="apid-btn apid-btn-primary apid-btn-sm">
-              Find Trainee
-            </Link>
-          </div>
-        )}
         {activeView === 'overview' && (
           <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
             <Link to="/mentoring?view=directory" className="apid-btn apid-btn-outline apid-btn-sm">
               Find a Mentor
             </Link>
-            {isMentor && (
-              <Link to="/mentoring?view=find-trainee" className="apid-btn apid-btn-outline apid-btn-sm">
-                Find Trainee
-              </Link>
-            )}
           </div>
         )}
         <MentoringRequestsPanel

@@ -14,7 +14,6 @@ import com.boa.apid.core.organization.entity.EmploymentStatus;
 import com.boa.apid.core.organization.repository.EmployeeRepository;
 import com.boa.apid.core.skills.entity.Skill;
 import com.boa.apid.mentoring.pairing.dto.MentorInvitationRequest;
-import com.boa.apid.mentoring.pairing.dto.MentoringEmployeeCandidateDto;
 import com.boa.apid.mentoring.pairing.dto.MentoringPairingDto;
 import com.boa.apid.mentoring.pairing.dto.MentoringRelationshipPairDto;
 import com.boa.apid.mentoring.pairing.dto.MentoringRequestDecision;
@@ -42,13 +41,10 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
-import java.util.ArrayList;
 import java.util.Collection;
 import java.util.LinkedHashMap;
-import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 
 @Service
 public class MentoringPairingService {
@@ -89,32 +85,6 @@ public class MentoringPairingService {
         this.trainerAuthorizationRepository = trainerAuthorizationRepository;
         this.skillStatusRepository = skillStatusRepository;
         this.availabilityService = availabilityService;
-    }
-
-    @Transactional(readOnly = true)
-    public List<MentoringEmployeeCandidateDto> listEmployeeCandidates(ApidUserPrincipal actor) {
-        requireActiveMentor(actor.getUserId());
-
-        List<Employee> employees = employeeRepository.findActiveLinkedEmployeesExceptUserId(actor.getUserId());
-        if (employees.isEmpty()) {
-            return List.of();
-        }
-
-        Set<Long> userIds = employees.stream().map(Employee::getUserId).collect(java.util.stream.Collectors.toSet());
-        Map<Long, User> activeUsers = new LinkedHashMap<>();
-        userRepository.findAllById(userIds).stream()
-                .filter(user -> user.getStatus() == UserStatus.ACTIVE)
-                .forEach(user -> activeUsers.put(user.getId(), user));
-
-        return employees.stream()
-                .filter(employee -> activeUsers.containsKey(employee.getUserId()))
-                .map(employee -> new MentoringEmployeeCandidateDto(
-                        employee.getUserId(),
-                        employee.getEmployeeNumber(),
-                        employee.getFullName(),
-                        employee.getDepartmentName()
-                ))
-                .toList();
     }
 
     @Transactional(readOnly = true)
@@ -179,87 +149,11 @@ public class MentoringPairingService {
 
     @Transactional
     public List<MentoringPairingDto> inviteTrainees(MentorInvitationRequest body, ApidUserPrincipal actor) {
-        if (body == null || body.requestType() == null || body.traineeUserIds() == null) {
-            throw new BusinessException("INVALID_MENTORING_INVITATION", "Choose a relationship type and at least one employee.");
-        }
-
-        User mentor = userRepository.findByIdForUpdate(actor.getUserId())
-                .orElseThrow(() -> new ResourceNotFoundException("Mentor account not found"));
-        ensureActiveMentor(mentor);
-        TrainerAuthorization authorization = requireActiveAuthorization(mentor.getId());
-
-        List<Long> traineeIds = new ArrayList<>(new LinkedHashSet<>(body.traineeUserIds()));
-        if (traineeIds.size() != body.traineeUserIds().size()) {
-            throw new BusinessException("DUPLICATE_MENTORING_RECIPIENT", "An employee can only be selected once.");
-        }
-        if (traineeIds.contains(null)) {
-            throw new BusinessException("INVALID_MENTORING_RECIPIENT", "Choose valid employee accounts.");
-        }
-        if (body.requestType() == MentoringRequestType.INDIVIDUAL && traineeIds.size() != 1) {
-            throw new BusinessException("INVALID_MENTORING_GROUP_SIZE", "An individual invitation must target one employee.");
-        }
-        if (body.requestType() == MentoringRequestType.GROUP && traineeIds.size() < 2) {
-            throw new BusinessException("INVALID_MENTORING_GROUP_SIZE", "A class invitation must target at least two employees.");
-        }
-        if (traineeIds.isEmpty()) {
-            throw new BusinessException("MENTORING_RECIPIENT_REQUIRED", "Select at least one employee.");
-        }
-
-        Skill skill = resolveMentorSkill(mentor, body.skillId());
-        String message = normalizeMessage(body.message());
-        Map<Long, User> trainees = loadActiveEmployees(traineeIds, mentor.getId());
-        for (Long traineeId : traineeIds) {
-            ensureNoExistingPairRequest(mentor.getId(), traineeId, skill == null ? null : skill.getId());
-        }
-        long activeTrainees = relationshipRepository.countActiveTraineesByMentorUserId(
-                mentor.getId(), MentoringRelationshipStatus.ACTIVE
+        throw new BusinessException(
+                "MENTOR_INITIATED_REQUEST_DISABLED",
+                "Mentors cannot initiate requests for trainees. Employees must request a mentor themselves.",
+                HttpStatus.FORBIDDEN
         );
-        long pendingInvitations = recipientRepository.countByMentorAndStatus(
-                mentor.getId(), MentoringRequestRecipientStatus.PENDING
-        );
-        if (activeTrainees + pendingInvitations + traineeIds.size()
-                > authorization.getMaxConcurrentTrainees()) {
-            throw new BusinessException(
-                    "MENTOR_CAPACITY_REACHED",
-                    "There is not enough remaining capacity to invite the selected employees.",
-                    HttpStatus.CONFLICT
-            );
-        }
-
-        MentoringRequest request = new MentoringRequest();
-        request.setMentorUser(mentor);
-        request.setInitiatedByUser(mentor);
-        request.setRequestType(body.requestType());
-        request.setSkill(skill);
-        request.setMessage(message);
-        MentoringRequest savedRequest = requestRepository.save(request);
-
-        String mentorName = employeeName(mentor.getId(), mentor);
-        for (Long traineeId : traineeIds) {
-            User trainee = trainees.get(traineeId);
-            MentoringRequestRecipient recipient = new MentoringRequestRecipient();
-            recipient.setRequest(savedRequest);
-            recipient.setRecipientUser(trainee);
-            recipient.setTraineeUser(trainee);
-            recipientRepository.save(recipient);
-
-            String relationshipLabel = body.requestType() == MentoringRequestType.GROUP
-                    ? "a mentoring class"
-                    : "one-to-one mentoring";
-            notificationService.notify(
-                    traineeId,
-                    NotificationModule.MENTORING,
-                    "MENTORING_PAIRING_REQUESTED",
-                    body.requestType() == MentoringRequestType.GROUP ? "Mentoring class invitation" : "Mentoring invitation",
-                    mentorName + " invited you to " + relationshipLabel
-                            + (skill == null ? "." : " for " + skill.getName() + "."),
-                    "/mentoring?view=trainee"
-            );
-        }
-
-        return listMyRequests(actor).stream()
-                .filter(item -> item.requestId().equals(savedRequest.getId()))
-                .toList();
     }
 
     @Transactional
@@ -424,24 +318,6 @@ public class MentoringPairingService {
         );
 
         return toDto(recipient, actor.getUserId(), loadEmployees(List.of(mentor.getId(), trainee.getId())));
-    }
-
-    private Map<Long, User> loadActiveEmployees(List<Long> userIds, Long excludedUserId) {
-        Map<Long, User> users = new LinkedHashMap<>();
-        userRepository.findAllById(userIds).stream()
-                .filter(user -> user.getStatus() == UserStatus.ACTIVE)
-                .forEach(user -> users.put(user.getId(), user));
-
-        for (Long userId : userIds) {
-            if (userId.equals(excludedUserId)) {
-                throw new BusinessException("SELF_MENTORING_REQUEST", "You cannot invite yourself.");
-            }
-            if (!users.containsKey(userId)
-                    || !employeeRepository.existsByUserIdAndEmploymentStatus(userId, EmploymentStatus.ACTIVE)) {
-                throw new ResourceNotFoundException("An active employee account could not be found.");
-            }
-        }
-        return users;
     }
 
     private void ensureNoExistingPairRequest(Long mentorUserId, Long traineeUserId, Long skillId) {

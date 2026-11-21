@@ -48,6 +48,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -119,60 +120,23 @@ class MentoringPairingServiceTest {
     }
 
     @Test
-    void mentorCanInviteAGroupAndEachTraineeGetsAnIndividualResponseRecordAndNotification() {
-        User mentor = user(1L, "mentor");
-        User traineeOne = user(2L, "trainee.one");
-        User traineeTwo = user(3L, "trainee.two");
-        ApidUserPrincipal actor = actor(1L, "mentor");
-
-        when(userRepository.findByIdForUpdate(1L)).thenReturn(Optional.of(mentor));
-        when(userRoleRepository.existsActiveMentorRoleByUserId(1L)).thenReturn(true);
-        when(employeeRepository.existsByUserIdAndEmploymentStatus(1L, EmploymentStatus.ACTIVE)).thenReturn(true);
-        when(userRepository.findAllById(any())).thenReturn(List.of(traineeOne, traineeTwo));
-        when(employeeRepository.existsByUserIdAndEmploymentStatus(2L, EmploymentStatus.ACTIVE)).thenReturn(true);
-        when(employeeRepository.existsByUserIdAndEmploymentStatus(3L, EmploymentStatus.ACTIVE)).thenReturn(true);
-        when(relationshipRepository.countActiveTraineesByMentorUserId(1L, MentoringRelationshipStatus.ACTIVE))
-                .thenReturn(0L);
-        when(recipientRepository.countByMentorAndStatus(1L, MentoringRequestRecipientStatus.PENDING)).thenReturn(0L);
-        when(requestRepository.save(any(MentoringRequest.class))).thenAnswer(invocation -> {
-            MentoringRequest request = invocation.getArgument(0);
-            request.setId(50L);
-            return request;
-        });
-        when(employeeRepository.findDetailedByUserId(1L)).thenReturn(Optional.empty());
-        when(recipientRepository.findVisibleToUser(1L)).thenReturn(List.of());
-
-        service.inviteTrainees(
-                new MentorInvitationRequest(MentoringRequestType.GROUP, List.of(2L, 3L), null, "Join my class"),
-                actor
+    void mentorCannotInitiateAMentoringRequestForATrainee() {
+        BusinessException exception = assertThrows(
+                BusinessException.class,
+                () -> service.inviteTrainees(
+                        new MentorInvitationRequest(
+                                MentoringRequestType.INDIVIDUAL,
+                                List.of(2L),
+                                null,
+                                "Join my mentoring"
+                        ),
+                        actor(1L, "mentor")
+                )
         );
 
-        ArgumentCaptor<MentoringRequest> requestCaptor = ArgumentCaptor.forClass(MentoringRequest.class);
-        verify(requestRepository).save(requestCaptor.capture());
-        assertEquals(MentoringRequestType.GROUP, requestCaptor.getValue().getRequestType());
-        ArgumentCaptor<MentoringRequestRecipient> recipientCaptor =
-                ArgumentCaptor.forClass(MentoringRequestRecipient.class);
-        verify(recipientRepository, org.mockito.Mockito.times(2)).save(recipientCaptor.capture());
-        assertEquals(
-                Set.of(2L, 3L),
-                recipientCaptor.getAllValues().stream()
-                        .map(recipient -> recipient.getRecipientUser().getId())
-                        .collect(java.util.stream.Collectors.toSet())
-        );
-        assertEquals(
-                List.of(2L, 3L),
-                recipientCaptor.getAllValues().stream()
-                        .map(recipient -> recipient.getTraineeUser().getId())
-                        .toList()
-        );
-        verify(notificationService, org.mockito.Mockito.times(2)).notify(
-                any(Long.class),
-                org.mockito.ArgumentMatchers.eq(NotificationModule.MENTORING),
-                org.mockito.ArgumentMatchers.eq("MENTORING_PAIRING_REQUESTED"),
-                org.mockito.ArgumentMatchers.eq("Mentoring class invitation"),
-                any(String.class),
-                org.mockito.ArgumentMatchers.eq("/mentoring?view=trainee")
-        );
+        assertEquals("MENTOR_INITIATED_REQUEST_DISABLED", exception.getErrorCode());
+        assertEquals(org.springframework.http.HttpStatus.FORBIDDEN, exception.getStatus());
+        verifyNoInteractions(userRepository, requestRepository, recipientRepository, notificationService);
     }
 
     @Test

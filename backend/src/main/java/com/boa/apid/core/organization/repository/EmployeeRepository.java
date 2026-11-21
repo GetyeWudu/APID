@@ -107,17 +107,6 @@ public interface EmployeeRepository extends JpaRepository<Employee, Long>, JpaSp
             """)
     List<Employee> findAllWithDetails();
 
-    @Query("""
-            SELECT e FROM Employee e
-            LEFT JOIN FETCH e.department d
-            LEFT JOIN FETCH d.parentDepartment
-            WHERE e.userId IS NOT NULL
-              AND e.userId <> :excludedUserId
-              AND e.employmentStatus = com.boa.apid.core.organization.entity.EmploymentStatus.ACTIVE
-            ORDER BY e.fullName
-            """)
-    List<Employee> findActiveLinkedEmployeesExceptUserId(@Param("excludedUserId") Long excludedUserId);
-
     boolean existsByUserIdAndEmploymentStatus(Long userId, EmploymentStatus employmentStatus);
 
     @Query("SELECT e.userId FROM Employee e WHERE e.userId IS NOT NULL")

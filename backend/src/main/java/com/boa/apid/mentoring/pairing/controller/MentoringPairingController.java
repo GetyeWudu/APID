@@ -3,7 +3,6 @@ package com.boa.apid.mentoring.pairing.controller;
 import com.boa.apid.common.response.ApiResponse;
 import com.boa.apid.core.auth.security.ApidUserPrincipal;
 import com.boa.apid.mentoring.pairing.dto.MentorInvitationRequest;
-import com.boa.apid.mentoring.pairing.dto.MentoringEmployeeCandidateDto;
 import com.boa.apid.mentoring.pairing.dto.MentoringPairingDto;
 import com.boa.apid.mentoring.pairing.dto.MentoringRelationshipPairDto;
 import com.boa.apid.mentoring.pairing.dto.MentoringRequestDecision;
@@ -24,13 +23,6 @@ public class MentoringPairingController {
 
     public MentoringPairingController(MentoringPairingService pairingService) {
         this.pairingService = pairingService;
-    }
-
-    @GetMapping("/employees")
-    public ApiResponse<List<MentoringEmployeeCandidateDto>> listEmployeeCandidates(
-            @AuthenticationPrincipal ApidUserPrincipal actor
-    ) {
-        return ApiResponse.ok(pairingService.listEmployeeCandidates(actor));
     }
 
     @GetMapping("/requests")

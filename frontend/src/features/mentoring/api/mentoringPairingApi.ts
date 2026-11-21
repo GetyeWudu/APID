@@ -20,13 +20,6 @@ export interface EligibleMentoringPeerDto {
 export type MentoringRequestType = 'INDIVIDUAL' | 'GROUP';
 export type MentoringRequestStatus = 'PENDING' | 'ACCEPTED' | 'DECLINED' | 'CANCELLED';
 
-export interface MentoringEmployeeCandidate {
-  userId: number;
-  employeeNumber: string;
-  fullName: string;
-  departmentName: string | null;
-}
-
 export interface MentoringPairing {
   id: number;
   requestId: number;
@@ -477,26 +470,6 @@ export const mentoringPairingApi = {
       `/mentoring/pairing/relationships/${relationshipId}/status`,
       input
     );
-  },
-
-  async listEmployeeCandidates(): Promise<MentoringEmployeeCandidate[]> {
-    const response = await apiClient.get<ApiResponse<MentoringEmployeeCandidate[]>>(
-      '/mentoring/pairing/employees'
-    );
-    return response.data.data;
-  },
-
-  async inviteTrainees(input: {
-    requestType: MentoringRequestType;
-    traineeUserIds: number[];
-    skillId?: number;
-    message?: string;
-  }): Promise<MentoringPairing[]> {
-    const response = await apiClient.post<ApiResponse<MentoringPairing[]>>(
-      '/mentoring/pairing/requests/invitations',
-      input
-    );
-    return response.data.data;
   },
 
   async requestMentor(input: {

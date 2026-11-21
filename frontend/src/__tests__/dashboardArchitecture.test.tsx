@@ -496,14 +496,14 @@ describe('Mentor directory self-exclusion', () => {
     expect(await screen.findByText('Mentorship request sent')).toBeInTheDocument();
   });
 
-  it('approves an incoming mentor invitation through the pairing API', async () => {
+  it('approves a mentee-initiated mentorship request as the mentor', async () => {
     const request = vi.spyOn(apiClient, 'post').mockResolvedValue({
       data: { data: { status: 'ACCEPTED' } },
     } as never);
     renderWithProviders(
       <MentoringRequestsPanel
-        currentUserId={2}
-        view="trainee"
+        currentUserId={1}
+        view="mentor"
         requests={[
           {
             id: 20,
@@ -511,7 +511,7 @@ describe('Mentor directory self-exclusion', () => {
             requestType: 'INDIVIDUAL',
             status: 'PENDING',
             incoming: true,
-            initiatedByMentor: true,
+            initiatedByMentor: false,
             mentorUserId: 1,
             mentorName: 'Mentor One',
             traineeUserId: 2,
@@ -527,7 +527,7 @@ describe('Mentor directory self-exclusion', () => {
       />
     );
 
-    fireEvent.click(screen.getByRole('button', { name: 'Approve' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Accept' }));
 
     await waitFor(() =>
       expect(request).toHaveBeenCalledWith('/mentoring/pairing/requests/20/decision', {
