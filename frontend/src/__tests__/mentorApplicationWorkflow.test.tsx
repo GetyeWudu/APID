@@ -241,12 +241,12 @@ describe('mentor application workflow', () => {
     expect(screen.getByText('5')).toBeInTheDocument();
   });
 
-  it('summarizes an uploaded application document in the details modal', async () => {
+  it('summarizes an uploaded application image in the details modal', async () => {
     const summarizeDocument = vi.spyOn(mentorApplicationApi, 'summarizeDocument').mockResolvedValue({
       applicationId: 23,
-      fileId: 61,
-      fileName: 'resume.pdf',
-      summary: 'The document describes the applicant’s software engineering experience.',
+      fileId: 62,
+      fileName: 'scan.png',
+      summary: 'OCR extracted the applicant’s qualification details.',
       sourceTruncated: false,
     });
 
@@ -263,7 +263,7 @@ describe('mentor application workflow', () => {
       proofFileName: 'letter.doc',
       evidenceFiles: [
         { fileId: 61, fileName: 'resume.pdf', context: 'Curriculum vitae' },
-        { fileId: 62, fileName: 'portrait.png', context: 'Profile picture' },
+        { fileId: 62, fileName: 'scan.png', context: 'Supporting evidence' },
       ],
       note: null,
       expertiseSummary: null,
@@ -277,15 +277,13 @@ describe('mentor application workflow', () => {
     fireEvent.click(screen.getByRole('button', { name: /^view$/i }));
     const summaryButtons = await screen.findAllByRole('button', { name: 'AI summary' });
     expect(summaryButtons[0]).toBeEnabled();
-    expect(summaryButtons[1]).toBeDisabled();
+    expect(summaryButtons[1]).toBeEnabled();
     expect(summaryButtons[2]).toBeEnabled();
     expect(screen.getByText('letter.doc')).toBeInTheDocument();
-    fireEvent.click(summaryButtons[0]);
+    fireEvent.click(summaryButtons[1]);
 
-    expect(await screen.findByText(
-      'The document describes the applicant’s software engineering experience.'
-    )).toBeInTheDocument();
-    expect(summarizeDocument).toHaveBeenCalledWith(23, 61);
+    expect(await screen.findByText('OCR extracted the applicant’s qualification details.')).toBeInTheDocument();
+    expect(summarizeDocument).toHaveBeenCalledWith(23, 62);
   });
 
   it('shows requested mentor profile changes in HR review details', async () => {

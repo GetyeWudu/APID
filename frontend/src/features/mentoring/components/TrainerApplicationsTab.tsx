@@ -55,7 +55,7 @@ function documentName(value: string | undefined) {
 }
 
 function supportsAiSummary(fileName: string) {
-  return /\.(pdf|doc|docx)$/i.test(fileName);
+  return /\.(pdf|doc|docx|png|jpe?g)$/i.test(fileName);
 }
 
 function evidenceContextFromNote(note: string | null, fileName: string) {
@@ -563,7 +563,7 @@ export function TrainerApplicationsTab({
               className="apid-btn apid-btn-outline apid-btn-sm"
               disabled={summarizingId !== null || !supportsAiSummary(evidence.fileName)}
               title={!supportsAiSummary(evidence.fileName)
-                ? 'AI summaries support PDF, DOC, and DOCX files.'
+                ? 'AI summaries support PDF, DOC, DOCX, PNG, JPG, and JPEG files.'
                 : undefined}
               onClick={() => void handleSummarizeEvidence(application.id, evidence.fileId)}
             >

@@ -12,6 +12,12 @@ spring:
       port: ${TEST_REDIS_PORT:6380}
       database: 1
 
+mentoring:
+  ai:
+    ollama:
+      chat-url: ${MENTORING_AI_OLLAMA_CHAT_URL:}
+      model: olmo2:13b
+
 apid:
   jwt:
     secret: test-jwt-secret-key-at-least-32-bytes-long-2026

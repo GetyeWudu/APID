@@ -25,12 +25,18 @@ import java.util.Set;
 public class MentoringDocumentTextExtractor {
 
     private static final Logger log = LoggerFactory.getLogger(MentoringDocumentTextExtractor.class);
-    private static final Set<String> SUPPORTED_EXTENSIONS = Set.of("pdf", "doc", "docx");
+    private static final int MAX_IMAGE_BYTES = 10 * 1024 * 1024;
+    private static final Set<String> SUPPORTED_EXTENSIONS = Set.of("pdf", "doc", "docx", "png", "jpg", "jpeg");
 
     private final FileStorageService fileStorageService;
+    private final PaddleOcrClient paddleOcrClient;
 
-    public MentoringDocumentTextExtractor(FileStorageService fileStorageService) {
+    public MentoringDocumentTextExtractor(
+            FileStorageService fileStorageService,
+            PaddleOcrClient paddleOcrClient
+    ) {
         this.fileStorageService = fileStorageService;
+        this.paddleOcrClient = paddleOcrClient;
     }
 
     public boolean supports(String filename) {
@@ -41,7 +47,7 @@ public class MentoringDocumentTextExtractor {
         if (!supports(filename)) {
             throw new BusinessException(
                     "MENTOR_DOCUMENT_UNSUPPORTED_FORMAT",
-                    "AI summaries are supported for PDF, DOC, and DOCX files only.",
+                    "AI summaries are supported for PDF, DOC, DOCX, PNG, JPG, and JPEG files.",
                     HttpStatus.UNSUPPORTED_MEDIA_TYPE
             );
         }
@@ -56,6 +62,7 @@ public class MentoringDocumentTextExtractor {
                 case "pdf" -> extractPdf(input, maxCharacters);
                 case "doc" -> limit(extractDoc(input), maxCharacters);
                 case "docx" -> limit(extractDocx(input), maxCharacters);
+                case "png", "jpg", "jpeg" -> extractImage(input, extension, maxCharacters);
                 default -> throw new IllegalStateException("Unsupported document extension.");
             };
         } catch (IOException | ExceptionConverter | POIXMLException | IllegalArgumentException error) {
@@ -105,6 +112,20 @@ public class MentoringDocumentTextExtractor {
              XWPFWordExtractor extractor = new XWPFWordExtractor(document)) {
             return extractor.getText();
         }
+    }
+
+    private ExtractedDocumentText extractImage(InputStream input, String extension, int maxCharacters)
+            throws IOException {
+        byte[] image = input.readNBytes(MAX_IMAGE_BYTES + 1);
+        if (image.length > MAX_IMAGE_BYTES) {
+            throw new BusinessException(
+                    "MENTOR_DOCUMENT_IMAGE_TOO_LARGE",
+                    "Image documents must be 10 MB or smaller for text extraction.",
+                    HttpStatus.PAYLOAD_TOO_LARGE
+            );
+        }
+        String contentType = extension.equals("png") ? "image/png" : "image/jpeg";
+        return limit(paddleOcrClient.extractText(image, contentType), maxCharacters);
     }
 
     private ExtractedDocumentText limit(String text, int maxCharacters) {

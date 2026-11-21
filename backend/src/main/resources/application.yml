@@ -78,6 +78,13 @@ apid:
     webhook-secret: ${DAILY_WEBHOOK_SECRET:}
     domain-name: ${DAILY_DOMAIN_NAME:amakari}
 
+mentoring:
+  ocr:
+    url: ${PADDLE_OCR_URL:http://localhost:8001/ocr}
+  ai:
+    ollama:
+      chat-url: ${MENTORING_AI_OLLAMA_CHAT_URL}
+      model: ${MENTORING_AI_OLLAMA_MODEL:olmo2:13b}
 daily:
   api-base-url: ${DAILY_API_BASE_URL:https://api.daily.co/v1}
   api-key: ${DAILY_API_KEY:}

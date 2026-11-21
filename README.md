@@ -43,8 +43,11 @@ APID/
    ```
 2. **During active backend development** (run DB + Redis in Docker, run Spring Boot from IDE):
    ```bash
-   docker compose up -d postgres redis
+   docker compose up -d postgres redis paddle-ocr
    ```
+   When launching Spring Boot from the IDE, set `MENTORING_AI_OLLAMA_CHAT_URL` and
+   `MENTORING_AI_OLLAMA_MODEL` from `.env` in the run configuration; Spring does not load `.env` automatically.
+   The PaddleOCR service listens on `localhost:8001` for the IDE-launched backend. Its first startup downloads OCR models.
 3. **Full containerized backend** (PostgreSQL + Redis + Spring Boot API):
    ```bash
    docker compose up --build -d

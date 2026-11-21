@@ -36,6 +36,25 @@ services:
       timeout: 5s
       retries: 5
 
+  paddle-ocr:
+    build:
+      context: ./ocr
+      dockerfile: Dockerfile
+    container_name: apid-paddle-ocr
+    restart: unless-stopped
+    environment:
+      PADDLE_OCR_LANG: ${PADDLE_OCR_LANG:-en}
+    ports:
+      - "127.0.0.1:${PADDLE_OCR_PORT:-8001}:8000"
+    volumes:
+      - paddle_ocr_models:/root/.paddleocr
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health', timeout=3)"]
+      interval: 30s
+      timeout: 5s
+      retries: 10
+      start_period: 180s
+
   backend:
     build:
       context: ./backend
@@ -69,10 +88,14 @@ services:
       DAILY_API_KEY: ${DAILY_API_KEY:-}
       DAILY_DOMAIN_NAME: ${DAILY_DOMAIN_NAME:-amakari}
       DAILY_WEBHOOK_SECRET: ${DAILY_WEBHOOK_SECRET:-}
+      MENTORING_AI_OLLAMA_CHAT_URL: ${MENTORING_AI_OLLAMA_CHAT_URL:?Set MENTORING_AI_OLLAMA_CHAT_URL in .env}
+      MENTORING_AI_OLLAMA_MODEL: ${MENTORING_AI_OLLAMA_MODEL:-olmo2:13b}
+      PADDLE_OCR_URL: http://paddle-ocr:8000/ocr
     volumes:
       - ./uploads:/app/uploads
 
 volumes:
   postgres_data:
   redis_data:
+  paddle_ocr_models:
 

@@ -12,17 +12,26 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 
+import java.util.Arrays;
 import java.util.Comparator;
 import java.util.HashSet;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.function.Function;
 import java.util.stream.Collectors;
+import java.util.stream.IntStream;
 
 @Service
 public class MentorRecommendationService {
 
+    private static final Set<String> GENERIC_GOAL_TERMS = Set.of(
+            "about", "and", "become", "build", "can", "connect", "for", "from", "grow", "how",
+            "into", "learn", "learning", "like", "more", "my", "the", "want", "what", "with",
+            "to", "be", "of", "is", "in", "at", "on", "as", "or", "an", "by", "it"
+    );
     private final MentorRecommendationContextService contextService;
     private final MentoringAiClient ollamaClient;
     private final ObjectMapper objectMapper;
@@ -55,19 +64,87 @@ public class MentorRecommendationService {
         ModelResponse modelResponse = parseResponse(
                 ollamaClient.recommend(prompt, mentorUserIds, skillIds)
         );
+        List<ModelRecommendation> modelRecommendations = modelResponse.recommendations().isEmpty()
+                ? fallbackRecommendations(request.learningGoal(), candidates)
+                : modelResponse.recommendations();
         Map<Long, MentorCandidateContext> candidatesByUserId = candidates.stream()
                 .collect(Collectors.toMap(candidate -> candidate.mentor().userId(), Function.identity()));
 
         Set<Long> returnedMentorIds = new HashSet<>();
         Set<Integer> returnedRanks = new HashSet<>();
-        modelResponse.recommendations().forEach(recommendation -> validateRecommendation(
+        modelRecommendations.forEach(recommendation -> validateRecommendation(
                 recommendation, candidatesByUserId, returnedMentorIds, returnedRanks
         ));
-        List<MentorRecommendationDto> recommendations = modelResponse.recommendations().stream()
+        List<MentorRecommendationDto> recommendations = modelRecommendations.stream()
                 .sorted(Comparator.comparingInt(ModelRecommendation::rank))
                 .map(recommendation -> toDto(recommendation, candidatesByUserId))
                 .toList();
         return new MentorRecommendationResponse(recommendations);
+    }
+
+    private List<ModelRecommendation> fallbackRecommendations(
+            String learningGoal,
+            List<MentorCandidateContext> candidates
+    ) {
+        Set<String> goalTerms = searchableTerms(learningGoal);
+        if (goalTerms.isEmpty()) return List.of();
+
+        List<SkillMatch> matches = candidates.stream()
+                .map(candidate -> bestMatchingSkill(candidate, goalTerms))
+                .filter(match -> match != null)
+                .sorted(Comparator.comparingInt(SkillMatch::overlap).reversed()
+                        .thenComparing(
+                                Comparator.comparingInt(
+                                        (SkillMatch match) -> match.candidate().mentor().remainingCapacity()
+                                ).reversed()
+                        ))
+                .limit(5)
+                .toList();
+        return IntStream.range(0, matches.size())
+                .mapToObj(index -> {
+                    SkillMatch match = matches.get(index);
+                    return new ModelRecommendation(
+                            match.candidate().mentor().userId(),
+                            index + 1,
+                            "This mentor lists " + match.skillName() + " as a skill related to your goal.",
+                            match.skillId()
+                    );
+                })
+                .toList();
+    }
+
+    private SkillMatch bestMatchingSkill(MentorCandidateContext candidate, Set<String> goalTerms) {
+        return candidate.mentor().skills().stream()
+                .map(skill -> new SkillMatch(
+                        candidate,
+                        skill.id(),
+                        skill.name(),
+                        (int) searchableTerms(skill.name()).stream().filter(goalTerms::contains).count()
+                ))
+                .filter(match -> match.overlap() > 0)
+                .sorted(Comparator.comparingInt(SkillMatch::overlap).reversed()
+                        .thenComparing(SkillMatch::skillName))
+                .findFirst()
+                .orElse(null);
+    }
+
+    private Set<String> searchableTerms(String text) {
+        Set<String> terms = new LinkedHashSet<>();
+        Arrays.stream(text.toLowerCase(Locale.ROOT).split("[^\\p{L}\\p{N}]+"))
+                .map(this::normalizeTerm)
+                .filter(term -> term.length() > 1 && !GENERIC_GOAL_TERMS.contains(term))
+                .forEach(terms::add);
+        return terms;
+    }
+
+    private String normalizeTerm(String term) {
+        if (term.length() > 4 && term.endsWith("ies")) {
+            return term.substring(0, term.length() - 3) + "y";
+        }
+        if (term.length() > 3 && term.endsWith("s") && !term.endsWith("ss")) {
+            return term.substring(0, term.length() - 1);
+        }
+        return term;
     }
 
     private String buildPrompt(String learningGoal, List<MentorCandidateContext> candidates) {
@@ -156,5 +233,13 @@ public class MentorRecommendationService {
     }
 
     public record ModelRecommendation(Long mentorUserId, int rank, String reason, Long skillId) {
+    }
+
+    private record SkillMatch(
+            MentorCandidateContext candidate,
+            Long skillId,
+            String skillName,
+            int overlap
+    ) {
     }
 }

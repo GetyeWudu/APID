@@ -86,7 +86,22 @@ class MentorRecommendationServiceTest {
     }
 
     @Test
-    void returnsAnEmptyModelResponseWithoutFallbackRecommendations() {
+    void recommendsARelevantSkillMatchWhenTheModelReturnsNoCandidates() {
+        when(contextService.loadCandidates(7L)).thenReturn(List.of(
+                new MentorRecommendationContextService.MentorCandidateContext(mentor(), "profile")
+        ));
+        when(ollamaClient.recommend(anyString(), anyList(), anyList()))
+                .thenReturn("{\"recommendations\":[]}");
+
+        var result = service.recommend(new MentorRecommendationRequest("I want to learn how to build APIs"), 7L);
+
+        assertEquals(1, result.recommendations().size());
+        assertEquals(20L, result.recommendations().get(0).mentor().userId());
+        assertEquals(4L, result.recommendations().get(0).skillId());
+    }
+
+    @Test
+    void returnsNoRecommendationsWhenNoCandidateSkillMatchesTheGoal() {
         when(contextService.loadCandidates(7L)).thenReturn(List.of(
                 new MentorRecommendationContextService.MentorCandidateContext(mentor(), "profile")
         ));
