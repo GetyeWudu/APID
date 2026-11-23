@@ -1,6 +1,8 @@
 package com.boa.apid.mentoring.application.controller;
 
 import com.boa.apid.common.response.ApiResponse;
+import com.boa.apid.common.storage.FileStorageService;
+import com.boa.apid.common.storage.StoredFileDto;
 import com.boa.apid.core.auth.security.ApidUserPrincipal;
 import com.boa.apid.mentoring.application.dto.MentorApplicationDto;
 import com.boa.apid.mentoring.application.dto.MentorApplicationReviewRequest;
@@ -8,8 +10,13 @@ import com.boa.apid.mentoring.application.dto.MentorApplicationSubmittedDto;
 import com.boa.apid.mentoring.application.dto.MentorAgreementTermsDto;
 import com.boa.apid.mentoring.application.dto.MentorProfileUpdateRequest;
 import com.boa.apid.mentoring.application.service.MentorApplicationService;
+import com.boa.apid.mentoring.application.service.MentorApplicationDocumentService;
 import jakarta.validation.Valid;
+import org.springframework.core.io.Resource;
+import org.springframework.http.ContentDisposition;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -23,6 +30,7 @@ import org.springframework.web.bind.annotation.RequestPart;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -31,9 +39,17 @@ import java.util.List;
 public class MentorApplicationController {
 
     private final MentorApplicationService mentorApplicationService;
+    private final MentorApplicationDocumentService documentService;
+    private final FileStorageService fileStorageService;
 
-    public MentorApplicationController(MentorApplicationService mentorApplicationService) {
+    public MentorApplicationController(
+            MentorApplicationService mentorApplicationService,
+            MentorApplicationDocumentService documentService,
+            FileStorageService fileStorageService
+    ) {
         this.mentorApplicationService = mentorApplicationService;
+        this.documentService = documentService;
+        this.fileStorageService = fileStorageService;
     }
 
     @GetMapping("/agreement-terms")
@@ -145,7 +161,7 @@ public class MentorApplicationController {
             @AuthenticationPrincipal ApidUserPrincipal actor
     ) {
         return ApiResponse.ok(
-                "Mentor profile update submitted for HR review",
+                "Mentor profile update submitted for review",
                 mentorApplicationService.submitProfileUpdate(request, supportingEvidence, actor)
         );
     }
@@ -164,8 +180,35 @@ public class MentorApplicationController {
         return ApiResponse.ok(mentorApplicationService.listApplications());
     }
 
+    @GetMapping("/super-admin-review")
+    @PreAuthorize("hasAuthority('TRAINER_APPLICATION_SUPER_REVIEW')")
+    public ApiResponse<List<MentorApplicationDto>> listSuperAdminApplications() {
+        return ApiResponse.ok(mentorApplicationService.listSuperAdminApplications());
+    }
+
+    @GetMapping("/{applicationId}/evidence/{fileId}/download")
+    @PreAuthorize("hasAnyAuthority('TRAINER_APPLICATION_REVIEW', 'TRAINER_APPLICATION_SUPER_REVIEW')")
+    public ResponseEntity<Resource> downloadEvidence(
+            @PathVariable Long applicationId,
+            @PathVariable Long fileId,
+            @AuthenticationPrincipal ApidUserPrincipal actor
+    ) {
+        mentorApplicationService.authorizeApplicationReview(applicationId, actor);
+        documentService.ensureEvidenceBelongsToApplication(applicationId, fileId);
+        FileStorageService.LoadedFile loaded = fileStorageService.loadForAuthorizedModule(fileId);
+        StoredFileDto metadata = loaded.metadata();
+        return ResponseEntity.ok()
+                .header(HttpHeaders.CONTENT_DISPOSITION, ContentDisposition.attachment()
+                        .filename(metadata.originalFilename(), StandardCharsets.UTF_8)
+                        .build().toString())
+                .header("X-Content-Type-Options", "nosniff")
+                .contentType(MediaType.parseMediaType(metadata.contentType()))
+                .contentLength(metadata.sizeBytes())
+                .body(loaded.resource());
+    }
+
     @PatchMapping("/{applicationId}/review")
-    @PreAuthorize("hasAuthority('TRAINER_APPLICATION_REVIEW')")
+    @PreAuthorize("hasAnyAuthority('TRAINER_APPLICATION_REVIEW', 'TRAINER_APPLICATION_SUPER_REVIEW')")
     public ApiResponse<MentorApplicationDto> reviewApplication(
             @PathVariable Long applicationId,
             @Valid @RequestBody MentorApplicationReviewRequest request,

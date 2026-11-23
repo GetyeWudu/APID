@@ -325,7 +325,7 @@ export function TrainerApplicationsTab({
   mode = 'applications',
 }: {
   applications: MentorApplication[];
-  mode?: 'applications' | 'profile-updates';
+  mode?: 'applications' | 'profile-updates' | 'hr-admin-requests';
 }) {
   const queryClient = useQueryClient();
   const { pushToast } = useToast();
@@ -356,15 +356,16 @@ export function TrainerApplicationsTab({
     message: string;
   } | null>(null);
   const isProfileUpdateQueue = mode === 'profile-updates';
+  const isHrAdminRequestQueue = mode === 'hr-admin-requests';
 
   useEffect(() => () => {
     if (previewTarget) URL.revokeObjectURL(previewTarget.objectUrl);
   }, [previewTarget]);
 
-  const handleDownloadEvidence = async (fileId: number, fileName: string) => {
+  const handleDownloadEvidence = async (applicationId: number, fileId: number, fileName: string) => {
     setDownloadingId(fileId);
     try {
-      const blob = await mentorApplicationApi.downloadProofDocument(fileId);
+      const blob = await mentorApplicationApi.downloadApplicationEvidence(applicationId, fileId);
       const objectUrl = URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = objectUrl;
@@ -384,10 +385,10 @@ export function TrainerApplicationsTab({
     }
   };
 
-  const handleViewEvidence = async (fileId: number, fileName: string) => {
+  const handleViewEvidence = async (applicationId: number, fileId: number, fileName: string) => {
     setViewingId(fileId);
     try {
-      const blob = await mentorApplicationApi.downloadProofDocument(fileId);
+      const blob = await mentorApplicationApi.downloadApplicationEvidence(applicationId, fileId);
       setPreviewTarget({
         fileName,
         objectUrl: URL.createObjectURL(blob),
@@ -575,7 +576,7 @@ export function TrainerApplicationsTab({
               type="button"
               className="apid-btn apid-btn-outline apid-btn-sm"
               disabled={viewingId !== null}
-              onClick={() => void handleViewEvidence(evidence.fileId, evidence.fileName)}
+              onClick={() => void handleViewEvidence(application.id, evidence.fileId, evidence.fileName)}
             >
               <Eye size={13} />{viewingId === evidence.fileId ? 'Opening…' : 'View'}
             </button>
@@ -583,7 +584,7 @@ export function TrainerApplicationsTab({
               type="button"
               className="apid-btn apid-btn-outline apid-btn-sm"
               disabled={downloadingId !== null}
-              onClick={() => void handleDownloadEvidence(evidence.fileId, evidence.fileName)}
+              onClick={() => void handleDownloadEvidence(application.id, evidence.fileId, evidence.fileName)}
             >
               <Download size={13} />{downloadingId === evidence.fileId ? 'Downloading…' : 'Download'}
             </button>
@@ -631,7 +632,7 @@ export function TrainerApplicationsTab({
               type="button"
               className="apid-btn apid-btn-outline apid-btn-sm"
               disabled={viewingId !== null}
-              onClick={() => void handleViewEvidence(evidence.fileId, evidence.fileName)}
+              onClick={() => void handleViewEvidence(application.id, evidence.fileId, evidence.fileName)}
             >
               <Eye size={13} />{viewingId === evidence.fileId ? 'Opening…' : 'View file'}
             </button>
@@ -639,7 +640,7 @@ export function TrainerApplicationsTab({
               type="button"
               className="apid-btn apid-btn-outline apid-btn-sm"
               disabled={downloadingId !== null}
-              onClick={() => void handleDownloadEvidence(evidence.fileId, evidence.fileName)}
+              onClick={() => void handleDownloadEvidence(application.id, evidence.fileId, evidence.fileName)}
             >
               <Download size={13} />{downloadingId === evidence.fileId ? 'Downloading…' : 'Download'}
             </button>
@@ -677,12 +678,16 @@ export function TrainerApplicationsTab({
       <div className="boa-card-header">
         <div>
           <h3 className="boa-card-title">
-            {isProfileUpdateQueue ? 'Mentor Profile Update Requests' : 'Mentor Applications'}
+            {isProfileUpdateQueue
+              ? 'Mentor Profile Update Requests'
+              : isHrAdminRequestQueue ? 'HR Admin Mentor Requests' : 'Mentor Applications'}
           </h3>
           <p className="boa-card-subtitle">
             {isProfileUpdateQueue
               ? 'Review requested mentor profile changes and supporting evidence.'
-              : 'Scan applicants and status here; open an application to review qualifications and evidence.'}
+              : isHrAdminRequestQueue
+                ? 'Review mentor applications and profile updates submitted by HR administrators.'
+                : 'Scan applicants and status here; open an application to review qualifications and evidence.'}
           </p>
         </div>
         <DataSourceBadge source="live" />
@@ -690,10 +695,14 @@ export function TrainerApplicationsTab({
 
       {visibleApplications.length === 0 ? (
         <EmptyState
-          title={isProfileUpdateQueue ? 'No profile update requests' : 'No Mentor Applications'}
+          title={isProfileUpdateQueue
+            ? 'No profile update requests'
+            : isHrAdminRequestQueue ? 'No HR mentor requests' : 'No Mentor Applications'}
           description={isProfileUpdateQueue
             ? 'Mentor profile update requests awaiting HR review will appear here.'
-            : 'No mentor applications have been submitted.'}
+            : isHrAdminRequestQueue
+              ? 'HR Admin mentor applications and profile updates awaiting Super Admin review will appear here.'
+              : 'No mentor applications have been submitted.'}
         />
       ) : (
         <div className="mentor-application-list">

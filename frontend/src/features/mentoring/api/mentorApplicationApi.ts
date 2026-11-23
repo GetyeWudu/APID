@@ -141,6 +141,13 @@ export const mentorApplicationApi = {
     return response.data.data;
   },
 
+  async listForSuperAdmin(): Promise<MentorApplication[]> {
+    const response = await apiClient.get<ApiResponse<MentorApplication[]>>(
+      '/mentoring/applications/super-admin-review'
+    );
+    return response.data.data;
+  },
+
   async review(
     applicationId: number,
     payload: ReviewMentorApplicationPayload
@@ -156,6 +163,14 @@ export const mentorApplicationApi = {
     const response = await apiClient.get<Blob>(`/core/files/${fileId}/download`, {
       responseType: 'blob',
     });
+    return response.data;
+  },
+
+  async downloadApplicationEvidence(applicationId: number, fileId: number): Promise<Blob> {
+    const response = await apiClient.get<Blob>(
+      `/mentoring/applications/${applicationId}/evidence/${fileId}/download`,
+      { responseType: 'blob' }
+    );
     return response.data;
   },
 

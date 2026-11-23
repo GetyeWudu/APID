@@ -278,7 +278,7 @@ export function MentorProfileForm({
       setProfileUpdateModalOpen(false);
       pushToast({
         title: 'Update request sent',
-        message: 'Your complete profile and skill changes are awaiting HR review.',
+        message: 'Your complete profile and skill changes are awaiting review.',
         tone: 'ok',
       });
     },
@@ -870,10 +870,10 @@ export function MentorProfileForm({
           <FileText size={18} />
           <span>
             <strong>Profile updates</strong>
-            <small>Update your profile and skills with one HR review.</small>
+            <small>Update your profile and skills with one review.</small>
           </span>
         </div>
-        {pendingProfileUpdate && <StatusPill label="Pending HR review" tone="warn" />}
+        {pendingProfileUpdate && <StatusPill label="Pending review" tone="warn" />}
         <button type="button" onClick={() => setProfileUpdateModalOpen(true)} aria-haspopup="dialog">
           {pendingProfileUpdate ? 'View request' : 'Edit profile'}
         </button>
@@ -923,7 +923,7 @@ export function MentorProfileForm({
                 {latestProfileUpdate.reviewReason && <p>{latestProfileUpdate.reviewReason}</p>}
               </div>
             )}
-            <p>Edit any section of your application profile. Skills and all profile details are submitted together for HR review.</p>
+            <p>Edit any section of your application profile. Skills and all profile details are submitted together for review.</p>
 
             <section className="mentor-profile-editor-section">
               <h4>Mentoring expertise</h4>
@@ -1281,7 +1281,7 @@ export function MentorProfileForm({
               {profileEvidence.length} supporting file{profileEvidence.length === 1 ? '' : 's'} selected.
             </span>
             <button type="submit" disabled={profileUpdateMutation.isPending}>
-              <FileText size={15} />{profileUpdateMutation.isPending ? 'Sending request…' : 'Submit complete profile for HR review'}
+              <FileText size={15} />{profileUpdateMutation.isPending ? 'Sending request…' : 'Submit complete profile for review'}
             </button>
           </form>
         )}

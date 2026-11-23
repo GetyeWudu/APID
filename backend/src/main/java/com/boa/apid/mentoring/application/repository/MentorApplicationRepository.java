@@ -1,6 +1,7 @@
 package com.boa.apid.mentoring.application.repository;
 
 import com.boa.apid.mentoring.application.entity.MentorApplication;
+import com.boa.apid.mentoring.application.entity.MentorApplicationReviewScope;
 import com.boa.apid.mentoring.application.entity.MentorApplicationStatus;
 import com.boa.apid.mentoring.application.entity.MentorApplicationType;
 import jakarta.persistence.LockModeType;
@@ -29,6 +30,8 @@ public interface MentorApplicationRepository extends JpaRepository<MentorApplica
     );
 
     List<MentorApplication> findAllByOrderBySubmittedAtDesc();
+
+    List<MentorApplication> findAllByReviewScopeOrderBySubmittedAtDesc(MentorApplicationReviewScope reviewScope);
 
     long countByStatus(MentorApplicationStatus status);
 

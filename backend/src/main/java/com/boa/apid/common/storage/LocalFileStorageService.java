@@ -186,9 +186,7 @@ public class LocalFileStorageService implements FileStorageService {
         }
         Set<String> perms = actor.getPermissions();
         return switch (entity.getPurpose()) {
-            case TRAINER_CERT -> perms.contains("TRAINER_APPLICATION_REVIEW")
-                    || perms.contains("TRAINER_STATUS_MANAGE")
-                    || perms.contains("MENTORING_REPORT_VIEW_ALL");
+            case TRAINER_CERT -> false;
             case MENTOR_PROFILE_PHOTO -> perms.contains("TRAINER_APPLICATION_REVIEW")
                     || perms.contains("MENTORING_REPORT_VIEW_ALL");
             case MENTORING_RESOURCE -> perms.contains("MENTORING_MATCH_MANAGE")

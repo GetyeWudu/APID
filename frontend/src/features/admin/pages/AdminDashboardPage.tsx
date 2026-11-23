@@ -1,8 +1,17 @@
 import { useMemo } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { useSearchParams } from 'react-router-dom';
 import { useAuth } from '../../../app/AuthContext';
-import { EmptyState, PageHeader, PermissionGate } from '../../../shared/components/ui';
+import {
+  EmptyState,
+  ErrorState,
+  LoadingSkeleton,
+  PageHeader,
+  PermissionGate,
+} from '../../../shared/components/ui';
 import { ADMIN_MODULE_PERMISSIONS } from '../../../shared/auth/workspaceResolver';
+import { mentorApplicationApi } from '../../mentoring/api/mentorApplicationApi';
+import { TrainerApplicationsTab } from '../../mentoring/components/TrainerApplicationsTab';
 import { AuditLogsPanel } from '../audit/components/AuditLogsPanel';
 import { SystemConfigPanel } from '../config/SystemConfigPanel';
 import { OrganizationPanel } from '../organization/components/OrganizationPanel';
@@ -18,7 +27,8 @@ export type AdminTabKey =
   | 'skills'
   | 'roles'
   | 'audit'
-  | 'config';
+  | 'config'
+  | 'hr-mentor-applications';
 
 interface AdminTabMeta {
   key: AdminTabKey;
@@ -79,6 +89,13 @@ const ADMIN_TABS: AdminTabMeta[] = [
     source: 'live',
     subtitle: 'Configure fiscal quarter dates, active cycle, and system rules.',
   },
+  {
+    key: 'hr-mentor-applications',
+    label: 'HR Mentor Requests',
+    anyPermissions: ['TRAINER_APPLICATION_SUPER_REVIEW'],
+    source: 'live',
+    subtitle: 'Review mentor applications and profile updates submitted by HR administrators.',
+  },
 ];
 
 export function AdminDashboardPage() {
@@ -93,6 +110,11 @@ export function AdminDashboardPage() {
   const requestedTab = searchParams.get('tab') as AdminTabKey | null;
   const activeTabMeta =
     visibleTabs.find((t) => t.key === requestedTab) ?? visibleTabs[0] ?? null;
+  const hrMentorApplicationsQuery = useQuery({
+    queryKey: ['mentoring', 'applications', 'super-admin-review'],
+    queryFn: mentorApplicationApi.listForSuperAdmin,
+    enabled: activeTabMeta?.key === 'hr-mentor-applications',
+  });
 
   if (!activeTabMeta) {
     return (
@@ -147,6 +169,23 @@ export function AdminDashboardPage() {
       {activeTabMeta.key === 'config' && (
         <PermissionGate permission="SYSTEM_CONFIG_MANAGE">
           <SystemConfigPanel />
+        </PermissionGate>
+      )}
+      {activeTabMeta.key === 'hr-mentor-applications' && (
+        <PermissionGate permission="TRAINER_APPLICATION_SUPER_REVIEW">
+          {hrMentorApplicationsQuery.isLoading ? (
+            <LoadingSkeleton rows={6} height={28} />
+          ) : hrMentorApplicationsQuery.isError ? (
+            <ErrorState
+              message="Failed to load HR mentor requests."
+              onRetry={() => void hrMentorApplicationsQuery.refetch()}
+            />
+          ) : (
+            <TrainerApplicationsTab
+              applications={hrMentorApplicationsQuery.data ?? []}
+              mode="hr-admin-requests"
+            />
+          )}
         </PermissionGate>
       )}
     </div>

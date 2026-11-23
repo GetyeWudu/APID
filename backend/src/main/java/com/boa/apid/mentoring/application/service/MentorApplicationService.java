@@ -28,6 +28,7 @@ import com.boa.apid.mentoring.application.dto.MentorApplicationSubmittedDto;
 import com.boa.apid.mentoring.application.dto.MentorAgreementTermsDto;
 import com.boa.apid.mentoring.application.dto.MentorProfileUpdateRequest;
 import com.boa.apid.mentoring.application.entity.MentorApplication;
+import com.boa.apid.mentoring.application.entity.MentorApplicationReviewScope;
 import com.boa.apid.mentoring.application.entity.MentorApplicationStatus;
 import com.boa.apid.mentoring.application.entity.MentorApplicationType;
 import com.boa.apid.mentoring.application.repository.MentorApplicationRepository;
@@ -190,6 +191,9 @@ public class MentorApplicationService {
         TrainerRosterDto currentProfile = trainerAuthorizationService.getOwnProfile(actor);
         User applicant = userRepository.findByIdForUpdate(actor.getUserId())
                 .orElseThrow(() -> new ResourceNotFoundException("Mentor account not found"));
+        boolean hrAdminApplicant = userRoleRepository.findActiveByUserIdWithRole(applicant.getId()).stream()
+                .anyMatch(userRole -> userRole.getRole().isActive()
+                        && "HR Admin".equalsIgnoreCase(userRole.getRole().getName()));
         String approach = normalizeOptional(request.mentoringApproach());
         if (request.experienceYears() != null && request.experienceYears() < 0) {
             throw new BusinessException("INVALID_MENTOR_EXPERIENCE", "Years of experience cannot be negative.");
@@ -312,7 +316,7 @@ public class MentorApplicationService {
         if (!pendingRequests.isEmpty()) {
             throw new BusinessException(
                     "MENTOR_PROFILE_UPDATE_ALREADY_PENDING",
-                    "Your mentor profile update is already awaiting HR review.",
+                    "Your mentor profile update is already awaiting review.",
                     HttpStatus.CONFLICT
             );
         }
@@ -340,6 +344,9 @@ public class MentorApplicationService {
         MentorApplication application = new MentorApplication();
         application.setApplicant(applicant);
         application.setApplicationType(MentorApplicationType.PROFILE_UPDATE);
+        application.setReviewScope(hrAdminApplicant
+                ? MentorApplicationReviewScope.SUPER_ADMIN
+                : MentorApplicationReviewScope.HR);
         String changeNote = normalizeOptional(request.changeNote());
         application.setNote(changeNote == null
                 ? profileDetails
@@ -482,6 +489,9 @@ public class MentorApplicationService {
         boolean alreadyMentor = activeRoles.stream()
                 .anyMatch(userRole -> userRole.getRole().isActive()
                         && "mentor".equalsIgnoreCase(userRole.getRole().getName()));
+        boolean hrAdminApplicant = activeRoles.stream()
+                .anyMatch(userRole -> userRole.getRole().isActive()
+                        && "HR Admin".equalsIgnoreCase(userRole.getRole().getName()));
 
         if (applicationType == MentorApplicationType.INITIAL) {
             if (applicationRepository.existsByApplicant_IdAndApplicationTypeAndStatusIn(
@@ -562,6 +572,9 @@ public class MentorApplicationService {
         MentorApplication application = new MentorApplication();
         application.setApplicant(applicant);
         application.setApplicationType(applicationType);
+        application.setReviewScope(applicationType == MentorApplicationType.INITIAL && hrAdminApplicant
+                ? MentorApplicationReviewScope.SUPER_ADMIN
+                : MentorApplicationReviewScope.HR);
         application.setProofDocument(evidenceFiles.get(0));
         application.setSupportingEvidence(new LinkedHashSet<>(evidenceFiles));
         application.setEvidenceContexts(encodeEvidenceContexts(evidenceFiles, supportingEvidenceContexts));
@@ -594,7 +607,16 @@ public class MentorApplicationService {
 
     @Transactional(readOnly = true)
     public List<MentorApplicationDto> listApplications() {
-        return applicationRepository.findAllByOrderBySubmittedAtDesc().stream()
+        return applicationRepository
+                .findAllByReviewScopeOrderBySubmittedAtDesc(MentorApplicationReviewScope.HR).stream()
+                .map(MentorApplicationDto::from)
+                .toList();
+    }
+
+    @Transactional(readOnly = true)
+    public List<MentorApplicationDto> listSuperAdminApplications() {
+        return applicationRepository
+                .findAllByReviewScopeOrderBySubmittedAtDesc(MentorApplicationReviewScope.SUPER_ADMIN).stream()
                 .map(MentorApplicationDto::from)
                 .toList();
     }
@@ -604,6 +626,13 @@ public class MentorApplicationService {
         return applicationRepository.findAllByApplicant_IdOrderBySubmittedAtDesc(actor.getUserId()).stream()
                 .map(MentorApplicationDto::from)
                 .toList();
+    }
+
+    @Transactional(readOnly = true)
+    public void authorizeApplicationReview(Long applicationId, ApidUserPrincipal actor) {
+        MentorApplication application = applicationRepository.findById(applicationId)
+                .orElseThrow(() -> new ResourceNotFoundException("Mentor application not found"));
+        ensureReviewerCanReview(application, actor);
     }
 
     @Transactional
@@ -630,6 +659,7 @@ public class MentorApplicationService {
 
         MentorApplication application = applicationRepository.findByIdForUpdate(applicationId)
                 .orElseThrow(() -> new ResourceNotFoundException("Mentor application not found"));
+        ensureReviewerCanReview(application, actor);
         if (application.getStatus() != MentorApplicationStatus.PENDING) {
             throw new BusinessException(
                     "MENTOR_APPLICATION_ALREADY_REVIEWED",
@@ -725,6 +755,18 @@ public class MentorApplicationService {
         ));
 
         return MentorApplicationDto.from(saved);
+    }
+
+    private void ensureReviewerCanReview(MentorApplication application, ApidUserPrincipal actor) {
+        String requiredPermission = application.getReviewScope() == MentorApplicationReviewScope.SUPER_ADMIN
+                ? "TRAINER_APPLICATION_SUPER_REVIEW"
+                : "TRAINER_APPLICATION_REVIEW";
+        if (!actor.getPermissions().contains(requiredPermission)) {
+            throw new AccessDeniedException("You are not authorized to review this mentor application.");
+        }
+        if (application.getApplicant().getId().equals(actor.getUserId())) {
+            throw new AccessDeniedException("Applicants cannot review their own mentor applications.");
+        }
     }
 
     private void approveApplicant(

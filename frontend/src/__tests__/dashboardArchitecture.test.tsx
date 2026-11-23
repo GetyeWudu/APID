@@ -14,6 +14,7 @@ import { LinkUserModal } from '../features/admin/organization/components/LinkUse
 import type { UserProfile } from '../features/auth/types/auth.types';
 import { coachingPreviewAdapter } from '../features/coaching/api/coachingDashboardApi';
 import { mentoringPairingApi } from '../features/mentoring/api/mentoringPairingApi';
+import { mentorApplicationApi } from '../features/mentoring/api/mentorApplicationApi';
 import {
   classifyRating,
   isMandatoryCoachingRounded,
@@ -211,6 +212,55 @@ describe('Portal Home module cards & scoped sidebar isolation', () => {
     expect(await screen.findByTestId('module-card-coaching')).toBeInTheDocument();
     expect(screen.getByTestId('module-card-mentoring')).toBeInTheDocument();
     expect(screen.getByTestId('module-card-admin')).toBeInTheDocument();
+  });
+
+  it('limits HR mentor application management to Super Admins', async () => {
+    const authSpy = vi.spyOn(AuthContextModule, 'useAuth');
+    authSpy.mockReturnValue(
+      buildAuthMock({
+        id: 5,
+        username: 'hr.admin',
+        mustChangePassword: false,
+        roles: ['HR Admin'],
+        permissions: ['EMPLOYEE_PORTAL_ACCESS', 'SKILL_MANAGE', 'TRAINER_APPLICATION_REVIEW'],
+      })
+    );
+
+    const hrView = renderWithProviders(
+      <AppLayout>
+        <AdminDashboardPage />
+      </AppLayout>,
+      '/admin?tab=hr-mentor-applications'
+    );
+    expect(screen.queryByRole('link', { name: 'HR Mentor Requests' })).not.toBeInTheDocument();
+    expect(screen.queryByText('Review mentor applications submitted by HR administrators.')).not.toBeInTheDocument();
+    hrView.unmount();
+
+    vi.spyOn(mentorApplicationApi, 'listForSuperAdmin').mockResolvedValue([]);
+    authSpy.mockReturnValue(
+      buildAuthMock({
+        id: 1,
+        username: 'super.admin',
+        mustChangePassword: false,
+        roles: ['Super Admin'],
+        permissions: ['TRAINER_APPLICATION_REVIEW', 'TRAINER_APPLICATION_SUPER_REVIEW'],
+      })
+    );
+
+    renderWithProviders(
+      <AppLayout>
+        <AdminDashboardPage />
+      </AppLayout>,
+      '/admin?tab=hr-mentor-applications'
+    );
+
+    expect(screen.getByRole('link', { name: 'HR Mentor Requests' })).toHaveAttribute(
+      'href',
+      '/admin?tab=hr-mentor-applications'
+    );
+    expect(await screen.findByText(
+      'HR Admin mentor applications and profile updates awaiting Super Admin review will appear here.'
+    )).toBeInTheDocument();
   });
 
   it('uses the available content width for System Admin but keeps Home centered', () => {

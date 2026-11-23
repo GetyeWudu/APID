@@ -163,7 +163,12 @@ class Phase3CoreOrgSkillsFilesIntegrationTest {
     void fileStorage_uploadDownloadAuth_magicByteMismatch_softDelete() throws Exception {
         String s = suffix();
         Role reviewerRole = createCustomRole("P3_Reviewer_" + s,
-                Set.of("EMPLOYEE_PORTAL_ACCESS", "TRAINER_APPLICATION_REVIEW"));
+                Set.of(
+                        "EMPLOYEE_PORTAL_ACCESS",
+                        "TRAINER_APPLICATION_REVIEW",
+                        "TRAINER_STATUS_MANAGE",
+                        "MENTORING_REPORT_VIEW_ALL"
+                ));
 
         User uploader = createDirectUser("p3_uploader_" + s, TEST_PASS, employeeRole);
         User otherEmployee = createDirectUser("p3_other_" + s, TEST_PASS, employeeRole);
@@ -197,13 +202,11 @@ class Phase3CoreOrgSkillsFilesIntegrationTest {
                 .andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.errorCode").value("ACCESS_DENIED"));
 
-        // Reviewer with TRAINER_APPLICATION_REVIEW can download
-        MvcResult downloadResult = mockMvc.perform(get("/api/v1/core/files/" + fileId + "/download")
+        // Application reviewers must use the application-scoped evidence endpoint
+        mockMvc.perform(get("/api/v1/core/files/" + fileId + "/download")
                         .header("Authorization", "Bearer " + reviewerToken))
-                .andExpect(status().isOk())
-                .andExpect(header().string("X-Content-Type-Options", "nosniff"))
-                .andReturn();
-        assertThat(downloadResult.getResponse().getContentAsByteArray()).isEqualTo(validPdf);
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.errorCode").value("ACCESS_DENIED"));
 
         // Magic-byte mismatch (.pdf without %PDF header) rejected
         MockMultipartFile spoofedPdf = new MockMultipartFile(

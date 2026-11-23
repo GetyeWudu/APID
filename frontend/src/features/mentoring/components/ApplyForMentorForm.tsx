@@ -1196,7 +1196,7 @@ export function ApplyForMentorForm({
 
         {application?.reviewReason && (
           <div className="mentor-application-review-note">
-            <strong>HR review note</strong>
+            <strong>Review note</strong>
             <p>{application.reviewReason}</p>
           </div>
         )}

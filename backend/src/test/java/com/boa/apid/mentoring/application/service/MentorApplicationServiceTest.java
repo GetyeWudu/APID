@@ -22,6 +22,7 @@ import com.boa.apid.mentoring.application.dto.MentorApplicationDto;
 import com.boa.apid.mentoring.application.dto.MentorApplicationReviewRequest;
 import com.boa.apid.mentoring.application.dto.MentorProfileUpdateRequest;
 import com.boa.apid.mentoring.application.entity.MentorApplication;
+import com.boa.apid.mentoring.application.entity.MentorApplicationReviewScope;
 import com.boa.apid.mentoring.application.entity.MentorApplicationStatus;
 import com.boa.apid.mentoring.application.entity.MentorApplicationType;
 import com.boa.apid.mentoring.application.repository.MentorApplicationRepository;
@@ -107,6 +108,12 @@ class MentorApplicationServiceTest {
         when(fileStorageService.store(upload, FilePurpose.TRAINER_CERT, actor))
                 .thenReturn(fileDto(actor.getUserId()));
         when(storedFileRepository.findByIdAndDeletedFalse(31L)).thenReturn(Optional.of(proofFile));
+        Role hrAdminRole = new Role();
+        hrAdminRole.setName("HR Admin");
+        UserRole hrAdminAssignment = new UserRole();
+        hrAdminAssignment.setRole(hrAdminRole);
+        when(userRoleRepository.findActiveByUserIdWithRole(actor.getUserId()))
+                .thenReturn(List.of(hrAdminAssignment));
         when(applicationRepository.save(any(MentorApplication.class)))
                 .thenAnswer(invocation -> invocation.getArgument(0));
 
@@ -130,6 +137,7 @@ class MentorApplicationServiceTest {
         verify(applicationRepository).save(applicationCaptor.capture());
         MentorApplication saved = applicationCaptor.getValue();
         assertEquals(MentorApplicationType.INITIAL, saved.getApplicationType());
+        assertEquals(MentorApplicationReviewScope.SUPER_ADMIN, saved.getReviewScope());
         assertEquals(MentorApplicationStatus.PENDING, saved.getStatus());
         assertSame(applicant, saved.getApplicant());
         assertSame(proofFile, saved.getProofDocument());
@@ -428,7 +436,8 @@ class MentorApplicationServiceTest {
         application.setApplicant(applicant);
         application.setCatalogSkill(skill);
         application.setProofDocument(proofFile);
-        when(applicationRepository.findAllByOrderBySubmittedAtDesc()).thenReturn(List.of(application));
+        when(applicationRepository.findAllByReviewScopeOrderBySubmittedAtDesc(MentorApplicationReviewScope.HR))
+                .thenReturn(List.of(application));
 
         var result = service.listApplications();
 
@@ -436,6 +445,74 @@ class MentorApplicationServiceTest {
         assertEquals("mentor.applicant", result.get(0).applicantUsername());
         assertEquals("Financial Analysis", result.get(0).skillName());
         assertEquals("financial-analysis.pdf", result.get(0).proofFileName());
+    }
+
+    @Test
+    void listSuperAdminApplicationsReturnsOnlySuperAdminReviewScope() {
+        User applicant = new User();
+        applicant.setUsername("hr.admin.applicant");
+        MentorApplication application = new MentorApplication();
+        application.setApplicant(applicant);
+        application.setReviewScope(MentorApplicationReviewScope.SUPER_ADMIN);
+        when(applicationRepository
+                .findAllByReviewScopeOrderBySubmittedAtDesc(MentorApplicationReviewScope.SUPER_ADMIN))
+                .thenReturn(List.of(application));
+
+        var result = service.listSuperAdminApplications();
+
+        assertEquals(1, result.size());
+        assertEquals("hr.admin.applicant", result.get(0).applicantUsername());
+    }
+
+    @Test
+    void hrReviewerCannotReviewApplicationRoutedToSuperAdmin() {
+        User applicant = user(11L, "hr.admin.applicant");
+        MentorApplication application = application(applicant, null);
+        application.setReviewScope(MentorApplicationReviewScope.SUPER_ADMIN);
+        when(applicationRepository.findByIdForUpdate(50L)).thenReturn(Optional.of(application));
+
+        assertThrows(
+                org.springframework.security.access.AccessDeniedException.class,
+                () -> service.reviewApplication(
+                        50L,
+                        new MentorApplicationReviewRequest(MentorApplicationStatus.DECLINED, "Not approved."),
+                        actor()
+                )
+        );
+
+        verify(userRepository, org.mockito.Mockito.never()).findByIdForUpdate(11L);
+        verify(applicationRepository, org.mockito.Mockito.never()).save(any(MentorApplication.class));
+    }
+
+    @Test
+    void superAdminCanReviewApplicationRoutedToSuperAdmin() {
+        ApidUserPrincipal superAdmin = new ApidUserPrincipal(
+                7L,
+                "super.admin",
+                true,
+                false,
+                1,
+                Set.of("Super Admin"),
+                Set.of("TRAINER_APPLICATION_REVIEW", "TRAINER_APPLICATION_SUPER_REVIEW")
+        );
+        User applicant = user(11L, "hr.admin.applicant");
+        User reviewer = user(superAdmin.getUserId(), superAdmin.getUsername());
+        MentorApplication application = application(applicant, null);
+        application.setReviewScope(MentorApplicationReviewScope.SUPER_ADMIN);
+        when(applicationRepository.findByIdForUpdate(50L)).thenReturn(Optional.of(application));
+        when(userRepository.findByIdForUpdate(11L)).thenReturn(Optional.of(applicant));
+        when(userRepository.findById(superAdmin.getUserId())).thenReturn(Optional.of(reviewer));
+        when(applicationRepository.save(any(MentorApplication.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+
+        var result = service.reviewApplication(
+                50L,
+                new MentorApplicationReviewRequest(MentorApplicationStatus.DECLINED, "Not approved."),
+                superAdmin
+        );
+
+        assertEquals(MentorApplicationStatus.DECLINED, result.status());
+        assertEquals(superAdmin.getUsername(), result.reviewedByUsername());
     }
 
     @Test
@@ -617,12 +694,65 @@ class MentorApplicationServiceTest {
         verify(applicationRepository).save(applicationCaptor.capture());
         MentorApplication saved = applicationCaptor.getValue();
         assertEquals(MentorApplicationType.PROFILE_UPDATE, saved.getApplicationType());
+        assertEquals(MentorApplicationReviewScope.HR, saved.getReviewScope());
         assertEquals(MentorApplicationStatus.PENDING, saved.getStatus());
         assertNull(saved.getProofDocument());
         assertEquals("A new mentoring approach", saved.getMentoringApproach());
         assertEquals(MentorApplicationType.PROFILE_UPDATE, result.applicationType());
         assertEquals("MENTOR APPLICATION DETAILS\nEducational background: []\nMentoring interests / expertise: [\"Existing skill\"]",
                 saved.getNote());
+    }
+
+    @Test
+    void submitProfileUpdateRoutesHrAdminToSuperAdmin() {
+        ApidUserPrincipal actor = actor();
+        User applicant = user(actor.getUserId(), actor.getUsername());
+        Role hrAdminRole = new Role();
+        hrAdminRole.setName("HR Admin");
+        hrAdminRole.setActive(true);
+        UserRole activeHrAdminRole = new UserRole();
+        activeHrAdminRole.setRole(hrAdminRole);
+        Skill existingSkill = new Skill();
+        existingSkill.setId(4L);
+        existingSkill.setName("Existing skill");
+        when(trainerAuthorizationService.getOwnProfile(actor)).thenReturn(new TrainerRosterDto(
+                1L, 2L, actor.getUserId(), "EMP-7", "Mentor Applicant", "Finance", "ACTIVE",
+                TrainerAuthorizationSource.APPLICATION, TrainerAuthorizationStatus.ACTIVE, true,
+                0, 0, 3, null, List.of(new TrainerSkillDto(
+                        4L, "Existing skill", "Finance", TrainerAuthorizationStatus.ACTIVE, null
+                )), Instant.now(), Instant.now(),
+                null, null, null, null, null, null, List.of()
+        ));
+        when(userRepository.findByIdForUpdate(actor.getUserId())).thenReturn(Optional.of(applicant));
+        when(userRoleRepository.findActiveByUserIdWithRole(actor.getUserId()))
+                .thenReturn(List.of(activeHrAdminRole));
+        when(skillRepository.findByIdAndActiveTrue(4L)).thenReturn(Optional.of(existingSkill));
+        when(applicationRepository.findAllByApplicant_IdAndApplicationTypeAndStatus(
+                actor.getUserId(),
+                MentorApplicationType.PROFILE_UPDATE,
+                MentorApplicationStatus.PENDING
+        )).thenReturn(List.of());
+        when(applicationRepository.save(any(MentorApplication.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+
+        service.submitProfileUpdate(
+                new MentorProfileUpdateRequest(
+                        "MENTOR APPLICATION DETAILS\nEducational background: []\nMentoring interests / expertise: [\"Existing skill\"]",
+                        null,
+                        8,
+                        "A new mentoring approach",
+                        2,
+                        List.of(4L),
+                        null,
+                        List.of()
+                ),
+                List.of(),
+                actor
+        );
+
+        ArgumentCaptor<MentorApplication> applicationCaptor = ArgumentCaptor.forClass(MentorApplication.class);
+        verify(applicationRepository).save(applicationCaptor.capture());
+        assertEquals(MentorApplicationReviewScope.SUPER_ADMIN, applicationCaptor.getValue().getReviewScope());
     }
 
     @Test
@@ -720,7 +850,15 @@ class MentorApplicationServiceTest {
     }
 
     private static ApidUserPrincipal actor() {
-        return new ApidUserPrincipal(7L, "applicant", true, false, 1, Set.of(), Set.of());
+        return new ApidUserPrincipal(
+                7L,
+                "applicant",
+                true,
+                false,
+                1,
+                Set.of(),
+                Set.of("TRAINER_APPLICATION_REVIEW")
+        );
     }
 
     private static MockMultipartFile proofUpload() {

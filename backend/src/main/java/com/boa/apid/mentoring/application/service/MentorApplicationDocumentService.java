@@ -28,6 +28,23 @@ public class MentorApplicationDocumentService {
 
     @Transactional(readOnly = true)
     public ApplicationDocumentText extractText(Long applicationId, Long fileId) {
+        StoredFile document = findEvidenceDocument(applicationId, fileId);
+        MentoringDocumentTextExtractor.ExtractedDocumentText extracted =
+                textExtractor.extract(fileId, document.getOriginalFilename(), MAX_SUMMARY_DOCUMENT_CHARS);
+        return new ApplicationDocumentText(
+                document.getId(),
+                document.getOriginalFilename(),
+                extracted.text(),
+                extracted.truncated()
+        );
+    }
+
+    @Transactional(readOnly = true)
+    public void ensureEvidenceBelongsToApplication(Long applicationId, Long fileId) {
+        findEvidenceDocument(applicationId, fileId);
+    }
+
+    private StoredFile findEvidenceDocument(Long applicationId, Long fileId) {
         MentorApplication application = applicationRepository.findById(applicationId)
                 .orElseThrow(() -> new ResourceNotFoundException("Mentor application not found"));
         StoredFile document = application.getSupportingEvidence().stream()
@@ -40,15 +57,7 @@ public class MentorApplicationDocumentService {
         if (document == null) {
             throw new ResourceNotFoundException("Application document not found");
         }
-
-        MentoringDocumentTextExtractor.ExtractedDocumentText extracted =
-                textExtractor.extract(fileId, document.getOriginalFilename(), MAX_SUMMARY_DOCUMENT_CHARS);
-        return new ApplicationDocumentText(
-                document.getId(),
-                document.getOriginalFilename(),
-                extracted.text(),
-                extracted.truncated()
-        );
+        return document;
     }
 
     public record ApplicationDocumentText(

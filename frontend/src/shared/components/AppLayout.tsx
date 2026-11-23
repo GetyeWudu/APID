@@ -444,7 +444,15 @@ export function AppLayout({ children }: { children: ReactNode }) {
                 'AUDIT_LOG_VIEW',
                 'SKILL_MANAGE',
                 'SYSTEM_CONFIG_MANAGE',
+                'TRAINER_APPLICATION_SUPER_REVIEW',
               ],
+            },
+            {
+              to: '/admin?tab=hr-mentor-applications',
+              label: 'HR Mentor Requests',
+              icon: <ClipboardCheck size={17} />,
+              requiredAnyPermissions: ['TRAINER_APPLICATION_SUPER_REVIEW'],
+              matchSearch: '?tab=hr-mentor-applications',
             },
             {
               to: '/admin?tab=users',

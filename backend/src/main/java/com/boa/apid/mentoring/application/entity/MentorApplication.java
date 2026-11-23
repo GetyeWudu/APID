@@ -29,6 +29,10 @@ public class MentorApplication {
     @Column(name = "application_type", nullable = false, length = 30)
     private MentorApplicationType applicationType = MentorApplicationType.INITIAL;
 
+    @Enumerated(EnumType.STRING)
+    @Column(name = "review_scope", nullable = false, length = 20)
+    private MentorApplicationReviewScope reviewScope = MentorApplicationReviewScope.HR;
+
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "proof_file_id")
     private StoredFile proofDocument;
@@ -119,6 +123,11 @@ public class MentorApplication {
     public MentorApplicationType getApplicationType() { return applicationType; }
     public void setApplicationType(MentorApplicationType applicationType) {
         this.applicationType = applicationType == null ? MentorApplicationType.INITIAL : applicationType;
+    }
+
+    public MentorApplicationReviewScope getReviewScope() { return reviewScope; }
+    public void setReviewScope(MentorApplicationReviewScope reviewScope) {
+        this.reviewScope = reviewScope == null ? MentorApplicationReviewScope.HR : reviewScope;
     }
 
     public StoredFile getProofDocument() { return proofDocument; }
