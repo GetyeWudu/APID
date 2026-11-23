@@ -18,6 +18,9 @@ export interface AdminUser {
   roles: RoleSummary[];
   lastLoginAt: string | null;
   createdAt: string;
+  fullName?: string | null;
+  employeeNumber?: string | null;
+  departmentName?: string | null;
 }
 
 export interface PageResponse<T> {

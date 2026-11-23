@@ -17,8 +17,13 @@ WORKDIR /app
 
 # Create non-root user and uploads directory
 RUN addgroup -S apid && adduser -S apid -G apid \
-    && mkdir -p /app/uploads \
+    && mkdir -p /app/uploads /app/certs \
     && chown -R apid:apid /app
+
+COPY certs/ /app/certs/
+RUN if [ -f /app/certs/apid-ca.crt ]; then \
+        keytool -importcert -noprompt -alias apid-ca -keystore /opt/java/openjdk/lib/security/cacerts -storepass changeit -file /app/certs/apid-ca.crt; \
+    fi
 
 COPY --from=builder /build/target/*.jar /app/app.jar
 RUN chown apid:apid /app/app.jar

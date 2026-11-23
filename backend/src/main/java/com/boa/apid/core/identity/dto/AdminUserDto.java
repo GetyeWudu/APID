@@ -17,8 +17,10 @@ public record AdminUserDto(
         boolean mustChangePassword,
         Set<RoleSummary> roles,
         Instant lastLoginAt,
-        Instant createdAt
+        Instant createdAt,
+        String fullName,
+        String employeeNumber,
+        String departmentName
 ) {
     public record RoleSummary(Long id, String name, boolean systemProtected) {}
 }
-

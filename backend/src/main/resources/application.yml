@@ -87,6 +87,17 @@ apid:
       base-url: ${OLLAMA_BASE_URL:http://10.9.36.155:11434}
       model: ${OLLAMA_MODEL:qwen3:8b}
       timeout-seconds: ${OLLAMA_TIMEOUT_SECONDS:120}
+  ldap:
+    enabled: ${APID_LDAP_ENABLED:false}
+    url: ${APID_LDAP_URL:ldaps://10.9.82.23:636}
+    base-dn: ${APID_LDAP_BASE_DN:DC=apid,DC=test}
+    domain: ${APID_LDAP_DOMAIN:apid.test}
+    user-search-base: ${APID_LDAP_USER_SEARCH_BASE:OU=APID,DC=apid,DC=test}
+    user-search-filter: ${APID_LDAP_USER_SEARCH_FILTER:(&(objectCategory=person)(objectClass=user)(|(sAMAccountName={0})(userPrincipalName={1})(employeeID={2})))}
+    bind-dn: ${APID_LDAP_BIND_DN:CN=APID LDAP Service Account,OU=Service Accounts,OU=APID,DC=apid,DC=test}
+    bind-password: ${APID_LDAP_BIND_PASSWORD:}
+    timeout-ms: ${APID_LDAP_TIMEOUT_MS:5000}
+    trust-cert-path: ${APID_LDAP_TRUST_CERT_PATH:classpath:certs/apid-ca.crt}
 
 
 

@@ -18,6 +18,12 @@ public interface UserRepository extends JpaRepository<User, Long>, JpaSpecificat
     @Query("SELECT u FROM User u WHERE LOWER(u.username) = LOWER(:username)")
     Optional<User> findByUsernameIgnoreCase(@Param("username") String username);
 
+    Optional<User> findByExternalDirectoryId(String externalDirectoryId);
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("SELECT u FROM User u WHERE u.externalDirectoryId = :externalDirectoryId")
+    Optional<User> findByExternalDirectoryIdForUpdate(@Param("externalDirectoryId") String externalDirectoryId);
+
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("SELECT u FROM User u WHERE LOWER(u.username) = LOWER(:username)")
     Optional<User> findByUsernameLowerForUpdate(@Param("username") String username);
