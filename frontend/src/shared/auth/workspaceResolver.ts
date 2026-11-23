@@ -123,7 +123,7 @@ export function resolveAuthorizedModules(permissions: string[]): PortalModuleDef
       shortLabel: 'Mentoring',
       tagline:
         'Find a mentor, track your learning sessions, mentor trainees, and apply to become a mentor.',
-      route: hasEmployee ? '/mentoring' : '/mentoring/hr',
+      route: hasEmployee ? '/workspace' : '/mentoring/hr',
       requiredAnyPermissions: MENTORING_PORTAL_PERMISSIONS,
     });
   }

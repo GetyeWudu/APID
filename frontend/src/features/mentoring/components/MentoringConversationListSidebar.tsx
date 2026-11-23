@@ -42,11 +42,12 @@ export const MentoringConversationListSidebar: React.FC<MentoringConversationLis
       if (!search.trim()) return true;
       const q = search.trim().toLowerCase();
       const titleMatch = c.title.toLowerCase().includes(q);
+      const skillMatch = c.skillName?.toLowerCase().includes(q);
       const participantMatch = c.participants.some(
         (p) => p.fullName?.toLowerCase().includes(q) || p.employeeNumber?.toLowerCase().includes(q)
       );
       const lastMsgMatch = c.lastMessageSnippet?.toLowerCase().includes(q);
-      return titleMatch || participantMatch || lastMsgMatch;
+      return titleMatch || skillMatch || participantMatch || lastMsgMatch;
     });
   }, [conversations, filterContext, search]);
 
@@ -457,6 +458,16 @@ export const MentoringConversationListSidebar: React.FC<MentoringConversationLis
                     )}
                   </div>
                 </div>
+                {c.skillName && (
+                  <span
+                    style={{
+                      fontSize: '0.72rem',
+                      color: 'var(--text-muted, #64748b)',
+                    }}
+                  >
+                    Skill: {c.skillName}
+                  </span>
+                )}
               </div>
             );
           })

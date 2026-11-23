@@ -30,7 +30,7 @@ public interface MentoringRelationshipMemberRepository extends JpaRepository<Men
             """)
     List<MentoringRelationshipMember> findVisibleToUser(@Param("userId") Long userId);
 
-    @EntityGraph(attributePaths = {"traineeUser"})
+    @EntityGraph(attributePaths = {"traineeUser", "skill"})
     List<MentoringRelationshipMember> findByRelationship_IdOrderByJoinedAtAsc(Long relationshipId);
 
     boolean existsByRelationship_IdAndTraineeUser_IdAndStatus(

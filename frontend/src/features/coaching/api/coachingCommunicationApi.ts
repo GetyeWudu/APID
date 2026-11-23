@@ -68,6 +68,7 @@ export interface ConversationSummaryDto {
   skillRequestId?: number;
   mentoringRelationshipId?: number | null;
   skillId?: number | null;
+  skillName?: string | null;
   peerEmployeeAId?: number;
   peerEmployeeBId?: number;
   title: string;

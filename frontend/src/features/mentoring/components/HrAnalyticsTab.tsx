@@ -125,10 +125,10 @@ export function HrAnalyticsTab({
       icon: <CheckCircle2 size={18} />,
     },
     {
-      label: 'Average trainee feedback',
-      value: overview.averageFeedbackRating ? `${overview.averageFeedbackRating.toFixed(1)} / 5` : 'Not rated',
-      detail: 'From completed mentoring relationships',
-      icon: <Award size={18} />,
+      label: 'Active relationships',
+      value: overview.activeRelationships,
+      detail: 'Mentor-trainee pairings currently in progress',
+      icon: <Users size={18} />,
     },
   ];
 

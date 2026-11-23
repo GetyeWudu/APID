@@ -29,6 +29,7 @@ import { apiClient, clearRefreshSessionCache, getAccessToken } from '../shared/a
 import { AuthProvider } from '../app/AuthContext';
 import { ProtectedRoute } from '../shared/components/ProtectedRoute';
 import {
+  resolveAuthorizedModules,
   resolveLandingWorkspace,
   savePreferredWorkspace,
 } from '../shared/auth/workspaceResolver';
@@ -95,6 +96,13 @@ describe('classifyRating boundary rules', () => {
 });
 
 describe('Adaptive workspace resolver & RBAC multi-hat preferences', () => {
+  it('opens the employee Mentoring module on the employee dashboard', () => {
+    const mentoringModule = resolveAuthorizedModules(['EMPLOYEE_PORTAL_ACCESS'])
+      .find((module) => module.key === 'mentoring');
+
+    expect(mentoringModule?.route).toBe('/workspace');
+  });
+
   it('honors saved default workspace when authorized and falls back safely if revoked', () => {
     const multiHatPerms = [
       'PMS_REPORT_UPLOAD',
@@ -536,6 +544,67 @@ describe('Mentor directory self-exclusion', () => {
     );
     expect(await screen.findByText('Mentoring request approved')).toBeInTheDocument();
   });
+
+  it('switches request lists from the status tabs', () => {
+    renderWithProviders(
+      <MentoringRequestsPanel
+        currentUserId={2}
+        view="all"
+        requests={[
+          {
+            id: 20,
+            requestId: 10,
+            requestType: 'INDIVIDUAL',
+            status: 'PENDING',
+            incoming: true,
+            initiatedByMentor: false,
+            mentorUserId: 1,
+            mentorName: 'Mentor One',
+            traineeUserId: 2,
+            traineeName: 'Trainee One',
+            recipientUserId: 1,
+            skillId: null,
+            skillName: null,
+            message: 'INCOMING_ONLY',
+            createdAt: new Date().toISOString(),
+            respondedAt: null,
+          },
+          {
+            id: 21,
+            requestId: 11,
+            requestType: 'INDIVIDUAL',
+            status: 'PENDING',
+            incoming: false,
+            initiatedByMentor: false,
+            mentorUserId: 3,
+            mentorName: 'Mentor Two',
+            traineeUserId: 2,
+            traineeName: 'Trainee One',
+            recipientUserId: 2,
+            skillId: null,
+            skillName: null,
+            message: 'SENT_ONLY',
+            createdAt: new Date().toISOString(),
+            respondedAt: null,
+          },
+        ]}
+      />
+    );
+
+    expect(screen.getByRole('tab', { name: /Incoming/ })).toHaveAttribute('aria-selected', 'true');
+    expect(screen.getByText('INCOMING_ONLY')).toBeInTheDocument();
+    expect(screen.queryByText('SENT_ONLY')).not.toBeInTheDocument();
+
+    const sentTab = screen.getByRole('tab', { name: /Sent/ });
+    fireEvent.click(sentTab);
+    expect(sentTab).toHaveAttribute('aria-selected', 'true');
+    expect(screen.getByText('SENT_ONLY')).toBeInTheDocument();
+    expect(screen.queryByText('INCOMING_ONLY')).not.toBeInTheDocument();
+
+    fireEvent.keyDown(sentTab, { key: 'ArrowRight' });
+    expect(screen.getByRole('tab', { name: /Active/ })).toHaveAttribute('aria-selected', 'true');
+    expect(screen.getByText('No Active Mentoring Relationships')).toBeInTheDocument();
+  });
 });
 
 describe('Preview adapters network isolation', () => {
@@ -756,7 +825,7 @@ describe('WorkspaceDashboardPage identity-driven empty state', () => {
     expect(screen.queryByText(/Switch Preview Persona/i)).not.toBeInTheDocument();
   });
 
-  it('renders live identity banner when linked to an employee profile', async () => {
+  it('renders live identity and pairing metrics without a pairings list when linked to an employee profile', async () => {
     vi.spyOn(AuthContextModule, 'useAuth').mockReturnValue(
       buildAuthMock({
         id: 34,
@@ -866,9 +935,8 @@ describe('WorkspaceDashboardPage identity-driven empty state', () => {
     await waitFor(() => expect(screen.getByText('Abebe Bekele')).toBeInTheDocument());
     expect(screen.getByText(/BOA-4091/)).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: 'Overview' })).toBeInTheDocument();
-    expect(screen.getByText('Abebe Bekele → Trainee One')).toBeInTheDocument();
-    expect(screen.getAllByText(/One-to-one mentoring · You are the mentor · Java/)).toHaveLength(2);
-    expect(screen.getAllByRole('link', { name: 'View relationship' })).toHaveLength(2);
+    expect(screen.queryByText('Abebe Bekele → Trainee One')).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: 'View relationship' })).not.toBeInTheDocument();
     expect(screen.getByText('Total pairings').closest('.boa-stat-card')).toHaveTextContent('2');
     expect(screen.getByText('As mentor').closest('.boa-stat-card')).toHaveTextContent('2');
     expect(screen.getByText('As trainee').closest('.boa-stat-card')).toHaveTextContent('0');
@@ -883,7 +951,7 @@ describe('WorkspaceDashboardPage identity-driven empty state', () => {
     expect(pairingSummary).toContainElement(screen.getByText('As mentor'));
     expect(pairingSummary).toContainElement(screen.getByText('As trainee'));
     expect(pairingSummary).toContainElement(screen.getByText('Active', { selector: '.boa-stat-label' }));
-    expect(screen.getByRole('region', { name: 'My mentoring pairings' })).toBeInTheDocument();
+    expect(screen.queryByRole('region', { name: 'My mentoring pairings' })).not.toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Open mentor workspace' })).toBeInTheDocument();
     expect(screen.queryByRole('tab', { name: 'My Mentoring' })).not.toBeInTheDocument();
     expect(screen.queryByRole('tab', { name: 'Chat' })).not.toBeInTheDocument();

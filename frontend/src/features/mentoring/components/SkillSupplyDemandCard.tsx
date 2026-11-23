@@ -57,17 +57,24 @@ export function SkillSupplyDemandCard({
           No skills match your search.
         </p>
       ) : (
-        <SvgHorizontalBarChart
-          title="Mentoring Demand vs Trainer Slots"
-          description="Open trainee requests compared to available trainer capacity per skill"
-          items={visibleSkills.map((row) => ({
-            id: row.skillName,
-            label: row.skillName,
-            value: row.openRequests,
-            secondaryLabel: `${row.openRequests} open requests · ${row.availableTrainerSlots} trainer slots free`,
-            color: row.openRequests > row.availableTrainerSlots ? '#c97a00' : '#0f766e',
-          }))}
-        />
+        <div
+          className="mentoring-skill-chart-scroll"
+          role="region"
+          aria-label="Scrollable skill demand and trainer supply chart"
+          tabIndex={0}
+        >
+          <SvgHorizontalBarChart
+            title="Mentoring Demand vs Trainer Slots"
+            description="Open trainee requests compared to available trainer capacity per skill"
+            items={visibleSkills.map((row) => ({
+              id: row.skillName,
+              label: row.skillName,
+              value: row.openRequests,
+              secondaryLabel: `${row.openRequests} open requests · ${row.availableTrainerSlots} trainer slots free`,
+              color: row.openRequests > row.availableTrainerSlots ? '#c97a00' : '#0f766e',
+            }))}
+          />
+        </div>
       )}
       {filteredSkills.length > 8 && (
         <button

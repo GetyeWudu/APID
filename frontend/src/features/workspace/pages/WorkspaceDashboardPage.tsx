@@ -3,7 +3,6 @@ import {
   ArrowDownRight,
   ArrowUpRight,
   Building2,
-  CalendarDays,
   ClipboardCheck,
   GitPullRequest,
   HeartHandshake,
@@ -30,11 +29,6 @@ import { mentoringMatchApi } from '../../mentoring/api/mentoringMatchApi';
 import { mentoringTrainerApi } from '../../mentoring/api/mentoringTrainerApi';
 import { MentoringRequestsPanel } from '../../mentoring/components/MentoringRequestsPanel';
 import { workspaceLiveApi } from '../api/workspaceDashboardApi';
-
-function formatDate(value: string) {
-  const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? 'Date unavailable' : date.toLocaleDateString();
-}
 
 export function WorkspaceDashboardPage() {
   const { user, hasPermission, hasAnyPermission } = useAuth();
@@ -398,74 +392,6 @@ export function WorkspaceDashboardPage() {
             icon={<UsersRound size={16} />}
           />
         </div>
-      </section>
-
-      <section className="apid-card" aria-label="My mentoring pairings">
-        <div className="boa-card-header">
-          <div>
-            <h3 className="boa-card-title">My Mentoring Pairings</h3>
-            <p className="boa-card-subtitle">Your active and paused pairs, with participants, skill, status, and start date.</p>
-          </div>
-          <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
-            {mentorPairCount > 0 && (
-              <Link to="/mentoring?view=trainer-sessions" className="apid-btn apid-btn-primary apid-btn-sm">
-                <CalendarDays size={14} /> Schedule Session
-              </Link>
-            )}
-            <Link to="/mentoring?view=directory" className="apid-btn apid-btn-outline apid-btn-sm">
-              Find a Mentor
-            </Link>
-          </div>
-        </div>
-        {currentRelationships.length === 0 ? (
-          <EmptyState
-            title="No Current Mentoring Relationships"
-            description="When you join or mentor a pairing, its status and participants will appear here."
-          />
-        ) : (
-          <div className="boa-grid-2" style={{ marginBottom: 0 }}>
-            {currentRelationships.map((relationship) => {
-              return (
-                <article key={relationship.memberId} className="apid-card" style={{ border: '1px solid var(--border)' }}>
-                  <div className="boa-card-header">
-                    <div>
-                      <strong>{relationship.mentorName} → {relationship.traineeName}</strong>
-                      <p className="boa-card-subtitle">
-                        {relationship.requestType === 'GROUP' ? 'Mentoring group' : 'One-to-one mentoring'}
-                        {' · '}
-                        {relationship.currentUserRole === 'MENTOR' ? 'You are the mentor' : 'You are the trainee'}
-                        {relationship.skillName ? ` · ${relationship.skillName}` : ''}
-                      </p>
-                    </div>
-                    <StatusPill
-                      label={relationship.relationshipStatus}
-                      tone={relationship.relationshipStatus === 'ACTIVE' ? 'ok' : 'warn'}
-                    />
-                  </div>
-                  <div className="boa-muted" style={{ fontSize: '0.8rem', marginBottom: '0.75rem' }}>
-                    Started {formatDate(relationship.startedAt)}
-                  </div>
-                  <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
-                    <Link
-                      to={`/mentoring/pairing/${relationship.relationshipId}`}
-                      className="apid-btn apid-btn-outline apid-btn-sm"
-                    >
-                      View relationship
-                    </Link>
-                    {relationship.currentUserRole === 'MENTOR' && relationship.relationshipStatus === 'ACTIVE' && (
-                      <Link
-                        to={`/mentoring?view=trainer-sessions&relationshipId=${relationship.relationshipId}`}
-                        className="apid-btn apid-btn-primary apid-btn-sm"
-                      >
-                        <CalendarDays size={14} /> Schedule Session
-                      </Link>
-                    )}
-                  </div>
-                </article>
-              );
-            })}
-          </div>
-        )}
       </section>
 
       <MentoringRequestsPanel

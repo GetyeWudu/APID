@@ -7,6 +7,7 @@ public class EligibleMentoringPeerDto {
     private String fullName;
     private String email;
     private String jobTitle;
+    private Long skillId;
     private String skillName;
     private String mentorName;
     private Long relationshipId;
@@ -19,6 +20,7 @@ public class EligibleMentoringPeerDto {
             String fullName,
             String email,
             String jobTitle,
+            Long skillId,
             String skillName,
             String mentorName,
             Long relationshipId
@@ -28,6 +30,7 @@ public class EligibleMentoringPeerDto {
         this.fullName = fullName;
         this.email = email;
         this.jobTitle = jobTitle;
+        this.skillId = skillId;
         this.skillName = skillName;
         this.mentorName = mentorName;
         this.relationshipId = relationshipId;
@@ -75,6 +78,14 @@ public class EligibleMentoringPeerDto {
 
     public String getSkillName() {
         return skillName;
+    }
+
+    public Long getSkillId() {
+        return skillId;
+    }
+
+    public void setSkillId(Long skillId) {
+        this.skillId = skillId;
     }
 
     public void setSkillName(String skillName) {

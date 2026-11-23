@@ -334,6 +334,17 @@ export const MentoringChatHub: React.FC<MentoringChatHubProps> = ({
                     {' • '}
                     {activeConversation.participants.map((p) => p.fullName || p.employeeNumber).join(', ')}
                   </p>
+                  {activeConversation.skillName && (
+                    <p
+                      style={{
+                        margin: '0.15rem 0 0',
+                        fontSize: '0.75rem',
+                        color: 'var(--text-muted, #64748b)',
+                      }}
+                    >
+                      Skill: {activeConversation.skillName}
+                    </p>
+                  )}
                 </div>
               </div>
 

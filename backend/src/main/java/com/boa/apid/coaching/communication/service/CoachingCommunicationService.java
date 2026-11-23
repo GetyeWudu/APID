@@ -10,6 +10,7 @@ import com.boa.apid.coaching.skillrequest.repository.SkillCoachingRequestReposit
 import com.boa.apid.coaching.skillrequest.repository.SkillCoachingRequestTargetRepository;
 import com.boa.apid.core.organization.entity.Employee;
 import com.boa.apid.core.organization.repository.EmployeeRepository;
+import com.boa.apid.core.skills.repository.SkillRepository;
 import com.boa.apid.mentoring.pairing.entity.MentoringRelationship;
 import com.boa.apid.mentoring.pairing.entity.MentoringRelationshipMember;
 import com.boa.apid.mentoring.pairing.entity.MentoringRelationshipMemberStatus;
@@ -37,6 +38,7 @@ public class CoachingCommunicationService {
     private final ConversationReadStateRepository readStateRepository;
     private final ConversationAccessService accessService;
     private final EmployeeRepository employeeRepository;
+    private final SkillRepository skillRepository;
     private final SkillCoachingRequestRepository skillRequestRepository;
     private final SkillCoachingRequestTargetRepository skillTargetRepository;
     private final MentoringRelationshipRepository mentoringRelationshipRepository;
@@ -50,6 +52,7 @@ public class CoachingCommunicationService {
             ConversationReadStateRepository readStateRepository,
             ConversationAccessService accessService,
             EmployeeRepository employeeRepository,
+            SkillRepository skillRepository,
             SkillCoachingRequestRepository skillRequestRepository,
             SkillCoachingRequestTargetRepository skillTargetRepository,
             MentoringRelationshipRepository mentoringRelationshipRepository,
@@ -62,6 +65,7 @@ public class CoachingCommunicationService {
         this.readStateRepository = readStateRepository;
         this.accessService = accessService;
         this.employeeRepository = employeeRepository;
+        this.skillRepository = skillRepository;
         this.skillRequestRepository = skillRequestRepository;
         this.skillTargetRepository = skillTargetRepository;
         this.mentoringRelationshipRepository = mentoringRelationshipRepository;
@@ -586,6 +590,7 @@ public class CoachingCommunicationService {
                             peerEmp.getFullName(),
                             peerEmp.getEmail(),
                             peerEmp.getJob(),
+                            skillId,
                             skillName,
                             mentorName,
                             cm.getRelationship().getId()
@@ -644,6 +649,7 @@ public class CoachingCommunicationService {
         conv.setConversationType(ConversationType.DIRECT);
         conv.setContextType(ConversationContextType.MENTORING_PEER_DIRECT);
         conv.setMentoringRelationshipId(relationshipId != null ? relationshipId : (match != null ? match.getRelationshipId() : null));
+        conv.setSkillId(match != null ? match.getSkillId() : null);
         conv.setPeerEmployeeAId(empA);
         conv.setPeerEmployeeBId(empB);
         conv.setTitle("Peer Chat · " + requestingEmp.getFullName() + " & " + targetEmp.getFullName() +
@@ -672,7 +678,32 @@ public class CoachingCommunicationService {
         dto.setAssignmentId(conv.getAssignmentId());
         dto.setSkillRequestId(conv.getSkillRequestId());
         dto.setMentoringRelationshipId(conv.getMentoringRelationshipId());
-        dto.setSkillId(conv.getSkillId());
+        Long skillId = conv.getSkillId();
+        String skillName = skillId == null ? null : skillRepository.findById(skillId)
+                .map(skill -> skill.getName())
+                .orElse(null);
+        if (skillName == null && conv.getMentoringRelationshipId() != null) {
+            var relationship = mentoringRelationshipRepository
+                    .findDetailedById(conv.getMentoringRelationshipId())
+                    .orElse(null);
+            if (relationship != null && relationship.getRequest().getSkill() != null) {
+                skillId = relationship.getRequest().getSkill().getId();
+                skillName = relationship.getRequest().getSkill().getName();
+            } else {
+                MentoringRelationshipMember member = mentoringRelationshipMemberRepository
+                        .findByRelationship_IdOrderByJoinedAtAsc(conv.getMentoringRelationshipId()).stream()
+                        .filter(candidate -> candidate.getStatus() == MentoringRelationshipMemberStatus.ACTIVE)
+                        .filter(candidate -> candidate.getSkill() != null)
+                        .findFirst()
+                        .orElse(null);
+                if (member != null) {
+                    skillId = member.getSkill().getId();
+                    skillName = member.getSkill().getName();
+                }
+            }
+        }
+        dto.setSkillId(skillId);
+        dto.setSkillName(skillName);
         dto.setPeerEmployeeAId(conv.getPeerEmployeeAId());
         dto.setPeerEmployeeBId(conv.getPeerEmployeeBId());
         dto.setTitle(conv.getTitle());

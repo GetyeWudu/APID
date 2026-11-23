@@ -16,6 +16,7 @@ public class ConversationSummaryDto {
     private Long skillRequestId;
     private Long mentoringRelationshipId;
     private Long skillId;
+    private String skillName;
     private Long peerEmployeeAId;
     private Long peerEmployeeBId;
     private String title;
@@ -44,6 +45,8 @@ public class ConversationSummaryDto {
     public void setMentoringRelationshipId(Long mentoringRelationshipId) { this.mentoringRelationshipId = mentoringRelationshipId; }
     public Long getSkillId() { return skillId; }
     public void setSkillId(Long skillId) { this.skillId = skillId; }
+    public String getSkillName() { return skillName; }
+    public void setSkillName(String skillName) { this.skillName = skillName; }
     public Long getPeerEmployeeAId() { return peerEmployeeAId; }
     public void setPeerEmployeeAId(Long peerEmployeeAId) { this.peerEmployeeAId = peerEmployeeAId; }
     public Long getPeerEmployeeBId() { return peerEmployeeBId; }

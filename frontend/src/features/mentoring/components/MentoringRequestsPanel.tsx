@@ -1,3 +1,4 @@
+import { useRef, useState, type KeyboardEvent } from 'react';
 import axios from 'axios';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { mentoringPairingApi, type MentoringPairing } from '../api/mentoringPairingApi';
@@ -5,6 +6,7 @@ import type { ApiErrorPayload } from '../../../shared/api/apiClient';
 import { EmptyState, StatusPill, useToast } from '../../../shared/components/ui';
 
 type PairingView = 'all' | 'mentor' | 'trainee';
+type RequestTab = 'incoming' | 'sent' | 'active' | 'declined';
 
 export function MentoringRequestsPanel({
   requests,
@@ -19,6 +21,13 @@ export function MentoringRequestsPanel({
 }) {
   const queryClient = useQueryClient();
   const { pushToast } = useToast();
+  const [selectedTab, setSelectedTab] = useState<RequestTab>('incoming');
+  const tabRefs = useRef<Record<RequestTab, HTMLButtonElement | null>>({
+    incoming: null,
+    sent: null,
+    active: null,
+    declined: null,
+  });
   const responseMutation = useMutation({
     mutationFn: ({ id, decision }: { id: number; decision: 'ACCEPTED' | 'DECLINED' }) =>
       mentoringPairingApi.respond(id, decision),
@@ -77,12 +86,74 @@ export function MentoringRequestsPanel({
         (view === 'trainee' && item.traineeUserId === currentUserId))
   );
 
-  const summary = [
-    { label: 'Incoming', value: incoming.length },
-    { label: 'Sent', value: outgoing.length },
-    { label: 'Active', value: active.length },
-    { label: 'Declined', value: declined.length },
+  const tabs: {
+    id: RequestTab;
+    label: string;
+    title: string;
+    description: string;
+    requests: MentoringPairing[];
+    canRespond: boolean;
+    emptyTitle: string;
+    emptyDescription: string;
+  }[] = [
+    {
+      id: 'incoming',
+      label: 'Incoming',
+      title: view === 'mentor' ? 'Trainee Requests' : 'Incoming Requests',
+      description: 'Accept or decline mentoring requests from employees.',
+      requests: incoming,
+      canRespond: true,
+      emptyTitle: 'No Incoming Requests',
+      emptyDescription: 'New mentoring requests will appear here.',
+    },
+    {
+      id: 'sent',
+      label: 'Sent',
+      title: 'Sent Requests',
+      description: 'Track requests you have sent.',
+      requests: outgoing,
+      canRespond: false,
+      emptyTitle: 'No Sent Requests',
+      emptyDescription: 'Requests you send will be tracked here.',
+    },
+    ...(showActive
+      ? [{
+          id: 'active' as const,
+          label: 'Active',
+          title: view === 'mentor' ? 'Active Trainees' : 'Active Mentoring',
+          description: 'Approved pairings and accepted class memberships.',
+          requests: active,
+          canRespond: false,
+          emptyTitle: 'No Active Mentoring Relationships',
+          emptyDescription: 'Accepted pairings and class memberships will appear here.',
+        }]
+      : []),
+    {
+      id: 'declined',
+      label: 'Declined',
+      title: 'Declined Requests',
+      description: 'Requests you sent or received that were declined.',
+      requests: declined,
+      canRespond: false,
+      emptyTitle: 'No Declined Requests',
+      emptyDescription: 'Declined mentoring requests will appear here.',
+    },
   ];
+  const currentTab = tabs.find((tab) => tab.id === selectedTab) ?? tabs[0];
+
+  const handleTabKeyDown = (event: KeyboardEvent<HTMLButtonElement>, index: number) => {
+    let nextIndex: number | undefined;
+    if (event.key === 'ArrowRight') nextIndex = (index + 1) % tabs.length;
+    if (event.key === 'ArrowLeft') nextIndex = (index + tabs.length - 1) % tabs.length;
+    if (event.key === 'Home') nextIndex = 0;
+    if (event.key === 'End') nextIndex = tabs.length - 1;
+    if (nextIndex === undefined) return;
+
+    event.preventDefault();
+    const nextTab = tabs[nextIndex];
+    setSelectedTab(nextTab.id);
+    tabRefs.current[nextTab.id]?.focus();
+  };
 
   const requestCard = (item: MentoringPairing, canRespond: boolean) => (
     <article
@@ -139,86 +210,45 @@ export function MentoringRequestsPanel({
 
   return (
     <div className="boa-stack mentoring-requests">
-      <section className="mentoring-dashboard__metrics" aria-label="Mentoring request summary">
-        {summary.map((item) => (
-          <div className="mentoring-dashboard__metric" key={item.label}>
-            <div className="mentoring-dashboard__metric-value">{item.value}</div>
-            <div className="mentoring-dashboard__metric-label">{item.label} requests</div>
-          </div>
+      <div className="mentoring-requests__tabs" role="tablist" aria-label="Mentoring request status">
+        {tabs.map((tab, index) => (
+          <button
+            key={tab.id}
+            ref={(element) => { tabRefs.current[tab.id] = element; }}
+            id={`mentoring-requests-tab-${tab.id}`}
+            type="button"
+            role="tab"
+            aria-selected={currentTab.id === tab.id}
+            aria-controls="mentoring-requests-panel"
+            tabIndex={currentTab.id === tab.id ? 0 : -1}
+            className="mentoring-requests__tab"
+            onClick={() => setSelectedTab(tab.id)}
+            onKeyDown={(event) => handleTabKeyDown(event, index)}
+          >
+            <span>{tab.label}</span>
+            <span className="mentoring-requests__tab-count">{tab.requests.length}</span>
+          </button>
         ))}
-      </section>
+      </div>
 
-      <section className="mentoring-dashboard__section">
+      <section
+        id="mentoring-requests-panel"
+        className="mentoring-dashboard__section mentoring-requests__panel"
+        role="tabpanel"
+        aria-labelledby={`mentoring-requests-tab-${currentTab.id}`}
+        tabIndex={0}
+      >
         <div className="mentoring-dashboard__section-header">
           <div>
-            <h3 className="mentoring-dashboard__section-title">{view === 'mentor' ? 'Trainee Requests' : 'Incoming Requests'}</h3>
-            <p className="mentoring-dashboard__section-description">
-              Accept or decline each invitation or mentorship request.
-            </p>
+            <h3 className="mentoring-dashboard__section-title">{currentTab.title}</h3>
+            <p className="mentoring-dashboard__section-description">{currentTab.description}</p>
           </div>
-          <span className="mentoring-dashboard__count" aria-label={`${incoming.length} incoming requests`}>{incoming.length}</span>
         </div>
-        {incoming.length === 0 ? (
-          <EmptyState title="No Incoming Requests" description="New mentoring requests will appear here." />
+        {currentTab.requests.length === 0 ? (
+          <EmptyState title={currentTab.emptyTitle} description={currentTab.emptyDescription} />
         ) : (
           <div className="mentoring-request-list">
-            {incoming.map((item) => requestCard(item, true))}
-          </div>
-        )}
-      </section>
-
-      <section className="mentoring-dashboard__section">
-        <div className="mentoring-dashboard__section-header">
-          <div>
-            <h3 className="mentoring-dashboard__section-title">Sent Requests</h3>
-            <p className="mentoring-dashboard__section-description">Track invitations and requests you have sent.</p>
-          </div>
-          <span className="mentoring-dashboard__count" aria-label={`${outgoing.length} sent requests`}>{outgoing.length}</span>
-        </div>
-        {outgoing.length === 0 ? (
-          <EmptyState title="No Sent Requests" description="Requests you send will be tracked here." />
-        ) : (
-          <div className="mentoring-request-list">
-            {outgoing.map((item) => requestCard(item, false))}
-          </div>
-        )}
-      </section>
-
-      {showActive && (
-        <section className="mentoring-dashboard__section">
-          <div className="mentoring-dashboard__section-header">
-            <div>
-              <h3 className="mentoring-dashboard__section-title">{view === 'mentor' ? 'Active Trainees' : 'Active Mentoring'}</h3>
-              <p className="mentoring-dashboard__section-description">Approved pairings and accepted class memberships.</p>
-            </div>
-            <span className="mentoring-dashboard__count" aria-label={`${active.length} active relationships`}>{active.length}</span>
-          </div>
-          {active.length === 0 ? (
-            <EmptyState
-              title="No Active Mentoring Relationships"
-              description="Accepted one-to-one pairings and class memberships will appear here."
-            />
-          ) : (
-            <div className="mentoring-request-list">
-              {active.map((item) => requestCard(item, false))}
-            </div>
-          )}
-        </section>
-      )}
-
-      <section className="mentoring-dashboard__section">
-        <div className="mentoring-dashboard__section-header">
-          <div>
-            <h3 className="mentoring-dashboard__section-title">Declined Requests</h3>
-            <p className="mentoring-dashboard__section-description">Requests you sent or received that were declined.</p>
-          </div>
-          <span className="mentoring-dashboard__count" aria-label={`${declined.length} declined requests`}>{declined.length}</span>
-        </div>
-        {declined.length === 0 ? (
-          <EmptyState title="No Declined Requests" description="Declined mentoring requests will appear here." />
-        ) : (
-          <div className="mentoring-request-list">
-            {declined.map((item) => requestCard(item, false))}
+            {currentTab.requests.map((item) => requestCard(item, currentTab.canRespond))}
           </div>
         )}
       </section>

@@ -12,6 +12,7 @@ export interface EligibleMentoringPeerDto {
   fullName: string;
   email: string | null;
   jobTitle: string | null;
+  skillId: number | null;
   skillName: string | null;
   mentorName: string | null;
   relationshipId: number | null;
