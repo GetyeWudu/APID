@@ -1,6 +1,10 @@
+/* ==========================================================================
+   Mentor Profile Form — Professional Modern Redesign
+   ========================================================================== */
+
 .mentor-profile-page {
   display: grid;
-  gap: 1rem;
+  gap: 1.25rem;
   min-width: 0;
 }
 
@@ -9,47 +13,61 @@
 .mentor-profile-capacity,
 .mentor-profile-action-panel {
   min-width: 0;
-  border: 1px solid var(--border);
-  border-radius: 15px;
-  background: var(--surface);
-  box-shadow: var(--shadow-card);
+  border: 1px solid var(--border, #E5E7EB);
+  border-radius: 16px;
+  background: var(--surface, #ffffff);
+  box-shadow: 0 1px 4px rgba(13, 43, 43, 0.05), 0 4px 16px rgba(13, 43, 43, 0.03);
+  transition: box-shadow 150ms ease;
 }
+
+.mentor-profile-hero:hover,
+.mentor-profile-panel:hover,
+.mentor-profile-capacity:hover {
+  box-shadow: 0 4px 20px rgba(13, 43, 43, 0.08);
+}
+
+/* ==========================================================================
+   Hero Banner
+   ========================================================================== */
 
 .mentor-profile-hero {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 1.2rem;
-  padding: 1.3rem;
+  gap: 1.5rem;
+  padding: 1.5rem 1.75rem;
   background:
-    radial-gradient(ellipse at top right, rgba(245, 183, 0, 0.1), transparent 44%),
-    var(--surface);
+    radial-gradient(ellipse at 95% 10%, rgba(212, 175, 55, 0.16) 0%, transparent 45%),
+    linear-gradient(135deg, #FAF8F2 0%, #f0f7fb 60%, #ffffff 100%);
 }
 
 .mentor-profile-identity {
   display: flex;
   align-items: center;
-  gap: 1rem;
+  gap: 1.25rem;
   min-width: 0;
 }
 
 .mentor-profile-photo {
-  width: 84px;
-  height: 84px;
-  flex: 0 0 84px;
+  width: 88px;
+  height: 88px;
+  flex: 0 0 88px;
   object-fit: cover;
-  border: 3px solid var(--surface);
+  border: 3px solid var(--surface, #ffffff);
   border-radius: 50%;
-  box-shadow: 0 0 0 1px var(--border-strong), var(--shadow-card);
+  box-shadow: 0 0 0 2px var(--brand, #C59B27), 0 4px 12px rgba(197, 155, 39, 0.18);
 }
 
 .mentor-profile-photo-fallback {
   display: grid;
   place-items: center;
-  color: var(--brand);
-  background: var(--brand-soft);
-  font-size: 1.3rem;
-  font-weight: 800;
+  color: var(--brand, #C59B27);
+  background: color-mix(in srgb, var(--brand, #C59B27) 12%, transparent);
+  font-size: 1.45rem;
+  font-weight: 850;
+  border: 3px solid var(--surface, #ffffff);
+  border-radius: 50%;
+  box-shadow: 0 0 0 2px var(--brand, #C59B27), 0 4px 12px rgba(197, 155, 39, 0.18);
 }
 
 .mentor-profile-identity-copy {
@@ -57,31 +75,33 @@
 }
 
 .mentor-profile-eyebrow {
-  color: var(--brand);
-  font-size: 0.67rem;
+  color: var(--brand, #C59B27);
+  font-size: 0.72rem;
   font-weight: 800;
-  letter-spacing: 0.09em;
+  letter-spacing: 0.08em;
   text-transform: uppercase;
 }
 
 .mentor-profile-identity-copy h2 {
-  margin: 0.18rem 0 0;
-  color: var(--text);
-  font-size: clamp(1.2rem, 2.2vw, 1.55rem);
-  letter-spacing: -0.02em;
+  margin: 0.2rem 0 0;
+  color: var(--text, #1A1C1E);
+  font-size: clamp(1.25rem, 2.4vw, 1.65rem);
+  font-weight: 750;
+  letter-spacing: -0.03em;
 }
 
 .mentor-profile-identity-copy > p {
-  margin: 0.18rem 0 0;
-  color: var(--muted);
-  font-size: 0.8rem;
+  margin: 0.25rem 0 0;
+  color: var(--muted, #5C626A);
+  font-size: 0.84rem;
+  line-height: 1.5;
 }
 
 .mentor-profile-badges {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.4rem;
-  margin-top: 0.55rem;
+  gap: 0.45rem;
+  margin-top: 0.65rem;
 }
 
 .mentor-profile-picture-action {
@@ -90,21 +110,23 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 0.42rem;
+  gap: 0.45rem;
   flex: 0 0 auto;
-  padding: 0.55rem 0.75rem;
-  border: 1px solid var(--border);
-  border-radius: 9px;
-  color: var(--text);
-  background: var(--surface);
-  font-size: 0.78rem;
-  font-weight: 800;
+  padding: 0.55rem 0.85rem;
+  border: 1px solid var(--border, #E5E7EB);
+  border-radius: 10px;
+  color: var(--text, #1A1C1E);
+  background: var(--surface, #ffffff);
+  font-size: 0.8rem;
+  font-weight: 700;
   cursor: pointer;
+  transition: all 140ms ease;
 }
 
 .mentor-profile-picture-action:hover {
-  border-color: var(--brand-soft-border);
-  background: var(--brand-soft);
+  border-color: var(--brand, #C59B27);
+  background: color-mix(in srgb, var(--brand, #C59B27) 8%, transparent);
+  color: var(--brand, #C59B27);
 }
 
 .mentor-profile-picture-action input {
@@ -115,45 +137,61 @@
   opacity: 0;
 }
 
+/* ==========================================================================
+   Stats Strip
+   ========================================================================== */
+
 .mentor-profile-stats {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 0.65rem;
+  gap: 0.75rem;
 }
 
 .mentor-profile-stats article {
   display: grid;
-  gap: 0.18rem;
+  gap: 0.2rem;
   min-width: 0;
-  padding: 0.85rem 0.95rem;
-  border: 1px solid var(--border);
-  border-radius: 11px;
-  background: var(--surface);
-  box-shadow: var(--shadow-xs);
+  padding: 1rem 1.15rem;
+  border: 1px solid var(--border, #E5E7EB);
+  border-radius: 14px;
+  background: var(--surface, #ffffff);
+  box-shadow: 0 1px 3px rgba(13, 43, 43, 0.04);
+  transition: transform 140ms ease, box-shadow 140ms ease;
+}
+
+.mentor-profile-stats article:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(13, 43, 43, 0.08);
 }
 
 .mentor-profile-stats span {
-  color: var(--muted-soft);
-  font-size: 0.67rem;
+  color: var(--muted, #5C626A);
+  font-size: 0.7rem;
   font-weight: 800;
-  letter-spacing: 0.045em;
+  letter-spacing: 0.05em;
   text-transform: uppercase;
 }
 
 .mentor-profile-stats strong {
-  color: var(--text);
-  font-size: 1.45rem;
-  line-height: 1.2;
+  color: var(--text, #1A1C1E);
+  font-size: 1.6rem;
+  font-weight: 800;
+  line-height: 1.15;
   font-variant-numeric: tabular-nums;
+  letter-spacing: -0.03em;
 }
 
 .mentor-profile-stats small {
-  color: var(--muted);
-  font-size: 0.7rem;
+  color: var(--muted, #5C626A);
+  font-size: 0.74rem;
 }
 
+/* ==========================================================================
+   Capacity Section
+   ========================================================================== */
+
 .mentor-profile-capacity {
-  padding: 1rem 1.1rem;
+  padding: 1.25rem 1.4rem;
 }
 
 .mentor-profile-section-heading {
@@ -166,116 +204,138 @@
 .mentor-profile-section-heading h3,
 .mentor-profile-panel h3 {
   margin: 0;
-  color: var(--text);
-  font-size: 0.92rem;
+  color: var(--text, #1A1C1E);
+  font-size: 0.98rem;
+  font-weight: 750;
+  letter-spacing: -0.015em;
 }
 
 .mentor-profile-section-heading p,
 .mentor-profile-panel header p {
   margin: 0.2rem 0 0;
-  color: var(--muted);
-  font-size: 0.74rem;
-  line-height: 1.45;
+  color: var(--muted, #5C626A);
+  font-size: 0.78rem;
+  line-height: 1.5;
 }
 
 .mentor-profile-capacity-form {
   display: flex;
   align-items: center;
-  gap: 0.4rem;
+  gap: 0.5rem;
   flex: 0 0 auto;
 }
 
 .mentor-profile-capacity-form input {
-  width: 78px;
-  min-height: 36px;
-  padding: 0.4rem;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  color: var(--text);
-  background: var(--surface);
+  width: 82px;
+  min-height: 38px;
+  padding: 0.45rem 0.65rem;
+  border: 1px solid var(--border, #E5E7EB);
+  border-radius: 9px;
+  color: var(--text, #1A1C1E);
+  background: var(--surface, #ffffff);
   font: inherit;
-  font-size: 0.8rem;
+  font-size: 0.84rem;
+  text-align: center;
+  font-weight: 700;
+}
+
+.mentor-profile-capacity-form input:focus {
+  border-color: var(--brand, #C59B27);
+  outline: none;
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--brand, #C59B27) 15%, transparent);
 }
 
 .mentor-profile-capacity-form button,
 .mentor-profile-request-form > button,
 .mentor-profile-request-status button {
-  min-height: 36px;
+  min-height: 38px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 0.35rem;
-  padding: 0.5rem 0.68rem;
-  border: 1px solid var(--brand-primary);
-  border-radius: 8px;
+  gap: 0.4rem;
+  padding: 0.55rem 0.85rem;
+  border: 1px solid var(--brand, #C59B27);
+  border-radius: 9px;
   color: #fff;
-  background: var(--brand-primary);
-  font-size: 0.75rem;
-  font-weight: 800;
+  background: var(--brand, #C59B27);
+  font-size: 0.78rem;
+  font-weight: 750;
   cursor: pointer;
+  transition: all 140ms ease;
+}
+
+.mentor-profile-capacity-form button:hover:not(:disabled),
+.mentor-profile-request-form > button:hover:not(:disabled),
+.mentor-profile-request-status button:hover:not(:disabled) {
+  background: var(--brand-accent, #D4AF37);
+  transform: translateY(-1px);
 }
 
 .mentor-profile-capacity-form button:disabled,
 .mentor-profile-request-form > button:disabled {
-  border-color: var(--border);
-  color: var(--muted-soft);
-  background: var(--surface-subtle);
+  border-color: var(--border, #E5E7EB);
+  color: var(--muted, #9CA3AF);
+  background: color-mix(in srgb, var(--border, #E5E7EB) 40%, transparent);
   cursor: not-allowed;
 }
 
 .mentor-profile-capacity-track {
-  height: 8px;
+  height: 9px;
   overflow: hidden;
-  margin-top: 0.9rem;
+  margin-top: 1rem;
   border-radius: 999px;
-  background: #e9edf2;
+  background: #e6efed;
 }
 
 .mentor-profile-capacity-track span {
   display: block;
   height: 100%;
   border-radius: inherit;
-  background: linear-gradient(90deg, var(--brand-primary), var(--brand-gold-bright));
-  transition: width 180ms ease;
+  background: linear-gradient(90deg, var(--brand, #C59B27), #D4AF37);
+  transition: width 240ms ease;
 }
 
 .mentor-profile-capacity-foot {
   display: flex;
   justify-content: space-between;
-  gap: 0.6rem;
-  margin-top: 0.35rem;
-  color: var(--muted);
-  font-size: 0.72rem;
+  gap: 0.65rem;
+  margin-top: 0.45rem;
+  color: var(--muted, #5C626A);
+  font-size: 0.76rem;
 }
 
 .mentor-profile-capacity-foot strong {
-  color: var(--text);
+  color: var(--text, #1A1C1E);
 }
+
+/* ==========================================================================
+   Content Grid & Panels
+   ========================================================================== */
 
 .mentor-profile-content-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   align-items: start;
-  gap: 0.75rem;
+  gap: 0.85rem;
 }
 
 .mentor-profile-panel {
   display: grid;
   align-content: start;
-  gap: 0.65rem;
-  padding: 0.95rem;
+  gap: 0.75rem;
+  padding: 1.15rem;
 }
 
 .mentor-profile-panel > header {
   display: flex;
   align-items: flex-start;
-  gap: 0.55rem;
+  gap: 0.65rem;
 }
 
 .mentor-profile-panel > header svg {
   flex: 0 0 auto;
   margin-top: 0.1rem;
-  color: var(--brand);
+  color: var(--brand, #C59B27);
 }
 
 .mentor-profile-panel > header > div {
@@ -289,192 +349,216 @@
 .mentor-profile-tags {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.35rem;
+  gap: 0.4rem;
 }
 
 .mentor-profile-supporting-skills,
 .mentor-profile-empty {
   margin: 0;
-  color: var(--muted);
-  font-size: 0.75rem;
-  line-height: 1.45;
+  color: var(--muted, #5C626A);
+  font-size: 0.78rem;
+  line-height: 1.5;
 }
 
 .mentor-profile-record {
   display: grid;
-  gap: 0.22rem;
+  gap: 0.25rem;
   min-width: 0;
-  padding: 0.68rem;
-  border: 1px solid var(--border);
-  border-radius: 9px;
-  background: var(--surface-subtle);
+  padding: 0.8rem;
+  border: 1px solid var(--border, #E5E7EB);
+  border-radius: 11px;
+  background: color-mix(in srgb, var(--brand, #C59B27) 2%, #ffffff);
 }
 
 .mentor-profile-record strong {
-  color: var(--text);
-  font-size: 0.8rem;
+  color: var(--text, #1A1C1E);
+  font-size: 0.84rem;
+  font-weight: 750;
 }
 
 .mentor-profile-record span,
 .mentor-profile-record small,
 .mentor-profile-record p {
   margin: 0;
-  color: var(--muted);
-  font-size: 0.73rem;
-  line-height: 1.45;
+  color: var(--muted, #5C626A);
+  font-size: 0.76rem;
+  line-height: 1.5;
   overflow-wrap: anywhere;
 }
 
 .mentor-profile-record a {
   width: fit-content;
-  color: var(--brand);
-  font-size: 0.73rem;
+  color: var(--brand, #C59B27);
+  font-size: 0.76rem;
   font-weight: 700;
+  text-decoration: none;
+}
+
+.mentor-profile-record a:hover {
+  text-decoration: underline;
 }
 
 .mentor-profile-file {
   display: inline-flex;
   align-items: center;
-  gap: 0.32rem;
+  gap: 0.35rem;
 }
 
 .mentor-profile-documents {
   display: grid;
-  gap: 0.4rem;
+  gap: 0.5rem;
 }
 
 .mentor-profile-documents > div {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 0.5rem;
-  padding: 0.55rem;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  background: var(--surface-subtle);
+  gap: 0.65rem;
+  padding: 0.65rem 0.8rem;
+  border: 1px solid var(--border, #E5E7EB);
+  border-radius: 10px;
+  background: var(--surface, #ffffff);
 }
 
 .mentor-profile-documents > div > span {
   display: flex;
   align-items: flex-start;
-  gap: 0.45rem;
+  gap: 0.55rem;
   min-width: 0;
-  color: var(--brand);
+  color: var(--brand, #C59B27);
 }
 
 .mentor-profile-documents > div > span > span {
   display: grid;
-  gap: 0.12rem;
+  gap: 0.15rem;
   min-width: 0;
 }
 
 .mentor-profile-documents strong {
-  color: var(--text);
-  font-size: 0.73rem;
+  color: var(--text, #1A1C1E);
+  font-size: 0.78rem;
   overflow-wrap: anywhere;
 }
 
 .mentor-profile-documents small {
-  color: var(--muted);
-  font-size: 0.66rem;
+  color: var(--muted, #5C626A);
+  font-size: 0.7rem;
 }
 
 .mentor-profile-documents button {
-  min-height: 30px;
+  min-height: 32px;
   display: inline-flex;
   align-items: center;
-  gap: 0.3rem;
+  gap: 0.35rem;
   flex: 0 0 auto;
-  padding: 0.35rem 0.5rem;
-  border: 1px solid var(--border);
-  border-radius: 7px;
-  color: var(--text);
-  background: var(--surface);
-  font-size: 0.68rem;
+  padding: 0.4rem 0.6rem;
+  border: 1px solid var(--border, #E5E7EB);
+  border-radius: 8px;
+  color: var(--text, #1A1C1E);
+  background: var(--surface, #ffffff);
+  font-size: 0.72rem;
   font-weight: 700;
   cursor: pointer;
+  transition: all 130ms ease;
+}
+
+.mentor-profile-documents button:hover {
+  border-color: var(--brand, #C59B27);
+  color: var(--brand, #C59B27);
 }
 
 .mentor-profile-documents-summary {
   display: grid;
-  gap: 0.35rem;
-  color: var(--text);
-  font-size: 0.73rem;
-  overflow-wrap: anywhere;
+  gap: 0.4rem;
 }
 
 .mentor-profile-documents-summary p {
   margin: 0;
-  color: var(--muted);
-  font-size: 0.7rem;
+  color: var(--muted, #5C626A);
+  font-size: 0.74rem;
 }
+
+/* ==========================================================================
+   Profile Update Launcher
+   ========================================================================== */
 
 .mentor-profile-update-launcher {
   display: flex;
   align-items: center;
-  gap: 0.75rem;
+  gap: 0.85rem;
   min-width: 0;
-  padding: 0.85rem 1rem;
-  border: 1px solid var(--border);
-  border-radius: 12px;
-  background: var(--surface);
-  box-shadow: var(--shadow-card);
+  padding: 1rem 1.25rem;
+  border: 1px solid var(--border, #E5E7EB);
+  border-radius: 14px;
+  background: var(--surface, #ffffff);
+  box-shadow: 0 1px 4px rgba(13, 43, 43, 0.05);
 }
 
 .mentor-profile-update-launcher > div {
   display: flex;
   align-items: center;
-  gap: 0.6rem;
+  gap: 0.75rem;
   flex: 1;
   min-width: 0;
 }
 
 .mentor-profile-update-launcher > div > svg {
   flex: 0 0 auto;
-  color: var(--brand);
+  color: var(--brand, #C59B27);
 }
 
 .mentor-profile-update-launcher > div > span {
   display: grid;
-  gap: 0.15rem;
+  gap: 0.2rem;
   min-width: 0;
 }
 
 .mentor-profile-update-launcher strong {
-  color: var(--text);
-  font-size: 0.82rem;
+  color: var(--text, #1A1C1E);
+  font-size: 0.86rem;
+  font-weight: 750;
 }
 
 .mentor-profile-update-launcher small {
-  color: var(--muted);
-  font-size: 0.71rem;
+  color: var(--muted, #5C626A);
+  font-size: 0.74rem;
 }
 
 .mentor-profile-update-launcher > button {
-  min-height: 36px;
+  min-height: 38px;
   flex: 0 0 auto;
-  padding: 0.5rem 0.75rem;
-  border: 1px solid var(--brand-primary);
-  border-radius: 8px;
+  padding: 0.55rem 0.95rem;
+  border: 1px solid var(--brand, #C59B27);
+  border-radius: 9px;
   color: #fff;
-  background: var(--brand-primary);
-  font-size: 0.75rem;
-  font-weight: 800;
+  background: var(--brand, #C59B27);
+  font-size: 0.78rem;
+  font-weight: 750;
   cursor: pointer;
+  transition: all 140ms ease;
 }
 
 .mentor-profile-update-launcher > button:hover {
-  filter: brightness(0.96);
+  background: var(--brand-accent, #D4AF37);
+  transform: translateY(-1px);
 }
+
+/* ==========================================================================
+   Update Modal
+   ========================================================================== */
 
 .mentor-profile-update-modal {
   width: min(940px, 100%);
   max-width: 940px;
-  max-height: calc(100vh - 2rem);
+  max-height: calc(100vh - 2.5rem);
   display: flex;
   flex-direction: column;
   overflow: hidden;
   padding: 0;
+  border-radius: 20px;
+  border: 1px solid var(--border, #E5E7EB);
+  box-shadow: 0 20px 60px rgba(13, 43, 43, 0.18);
+  background: var(--surface, #ffffff);
 }
 
 .mentor-profile-update-modal-header {
@@ -484,40 +568,44 @@
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
-  gap: 1rem;
+  gap: 1.25rem;
   flex: 0 0 auto;
-  padding: 1rem 1.1rem;
-  border-bottom: 1px solid var(--border);
-  background: var(--surface);
+  padding: 1.25rem 1.4rem;
+  border-bottom: 1px solid var(--border, #E5E7EB);
+  background: var(--surface, #ffffff);
 }
 
 .mentor-profile-update-modal-header h3 {
-  margin: 0.16rem 0 0;
-  color: var(--text);
-  font-size: 1rem;
+  margin: 0.2rem 0 0;
+  color: var(--text, #1A1C1E);
+  font-size: 1.15rem;
+  font-weight: 750;
+  letter-spacing: -0.02em;
 }
 
 .mentor-profile-update-modal-header p {
   margin: 0.25rem 0 0;
-  color: var(--muted);
-  font-size: 0.74rem;
+  color: var(--muted, #5C626A);
+  font-size: 0.78rem;
 }
 
 .mentor-profile-update-close {
-  width: 34px;
-  height: 34px;
+  width: 36px;
+  height: 36px;
   display: grid;
   place-items: center;
   flex: 0 0 auto;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  color: var(--text);
-  background: var(--surface);
+  border: 1px solid var(--border, #E5E7EB);
+  border-radius: 9px;
+  color: var(--text, #1A1C1E);
+  background: var(--surface, #ffffff);
   cursor: pointer;
+  transition: all 130ms ease;
 }
 
 .mentor-profile-update-close:hover {
-  background: var(--surface-subtle);
+  background: var(--surface-subtle, #f8fbfa);
+  border-color: var(--brand, #C59B27);
 }
 
 .mentor-profile-update-modal > .mentor-profile-request-form,
@@ -528,6 +616,10 @@
   border-top: 0;
 }
 
+/* ==========================================================================
+   Action Panel & Details Accordion
+   ========================================================================== */
+
 .mentor-profile-action-panel {
   overflow: hidden;
 }
@@ -536,10 +628,16 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 0.8rem;
-  padding: 0.85rem 1rem;
+  gap: 0.85rem;
+  padding: 1rem 1.25rem;
   cursor: pointer;
   list-style: none;
+  background: var(--surface, #ffffff);
+  transition: background-color 140ms ease;
+}
+
+.mentor-profile-action-panel > summary:hover {
+  background: color-mix(in srgb, var(--brand, #C59B27) 3%, #ffffff);
 }
 
 .mentor-profile-action-panel > summary::-webkit-details-marker {
@@ -548,73 +646,74 @@
 
 .mentor-profile-action-panel > summary:focus-visible {
   outline: none;
-  box-shadow: var(--shadow-focus);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--brand, #C59B27) 20%, transparent);
 }
 
 .mentor-profile-action-panel > summary > div {
   display: flex;
   align-items: center;
-  gap: 0.55rem;
+  gap: 0.65rem;
   min-width: 0;
 }
 
 .mentor-profile-action-panel > summary svg {
   flex: 0 0 auto;
-  color: var(--brand);
+  color: var(--brand, #C59B27);
 }
 
 .mentor-profile-action-panel > summary span {
   display: grid;
-  gap: 0.12rem;
+  gap: 0.15rem;
 }
 
 .mentor-profile-action-panel > summary strong {
-  color: var(--text);
-  font-size: 0.8rem;
+  color: var(--text, #1A1C1E);
+  font-size: 0.86rem;
+  font-weight: 750;
 }
 
 .mentor-profile-action-panel > summary small {
-  color: var(--muted);
-  font-size: 0.7rem;
+  color: var(--muted, #5C626A);
+  font-size: 0.74rem;
 }
 
 .mentor-profile-summary-chevron {
-  color: var(--brand);
-  font-size: 1.2rem;
+  color: var(--brand, #C59B27);
+  font-size: 1.25rem;
   font-weight: 700;
 }
 
 .mentor-profile-request-form,
 .mentor-profile-request-status {
   display: grid;
-  gap: 0.7rem;
-  padding: 0.9rem 1rem 1rem;
-  border-top: 1px solid var(--border);
-  background: var(--surface-subtle);
+  gap: 0.85rem;
+  padding: 1.15rem 1.25rem 1.35rem;
+  border-top: 1px solid var(--border, #E5E7EB);
+  background: color-mix(in srgb, var(--brand, #C59B27) 2%, #f8fbfa);
 }
 
 .mentor-profile-request-form > p,
 .mentor-profile-request-status > p {
   margin: 0;
-  color: var(--muted);
-  font-size: 0.74rem;
-  line-height: 1.5;
+  color: var(--muted, #5C626A);
+  font-size: 0.78rem;
+  line-height: 1.55;
 }
 
 .mentor-profile-form-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 0.65rem;
+  gap: 0.85rem;
 }
 
 .mentor-profile-form-grid label,
 .mentor-profile-request-form > label,
 .mentor-profile-request-status label {
   display: grid;
-  gap: 0.28rem;
-  color: var(--text);
-  font-size: 0.72rem;
-  font-weight: 700;
+  gap: 0.35rem;
+  color: var(--text, #1A1C1E);
+  font-size: 0.76rem;
+  font-weight: 750;
 }
 
 .mentor-profile-form-grid label.is-wide {
@@ -628,13 +727,24 @@
 .mentor-profile-request-status textarea {
   width: 100%;
   min-width: 0;
-  padding: 0.55rem 0.62rem;
-  border: 1px solid var(--border-strong);
-  border-radius: 8px;
-  color: var(--text);
-  background: var(--surface);
+  padding: 0.6rem 0.75rem;
+  border: 1px solid var(--border, #E5E7EB);
+  border-radius: 9px;
+  color: var(--text, #1A1C1E);
+  background: var(--surface, #ffffff);
   font: inherit;
-  font-size: 0.76rem;
+  font-size: 0.8rem;
+  transition: border-color 140ms ease, box-shadow 140ms ease;
+}
+
+.mentor-profile-form-grid input:focus,
+.mentor-profile-form-grid textarea:focus,
+.mentor-profile-form-grid select:focus,
+.mentor-profile-request-form > label select:focus,
+.mentor-profile-request-status textarea:focus {
+  border-color: var(--brand, #C59B27);
+  outline: none;
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--brand, #C59B27) 15%, transparent);
 }
 
 .mentor-profile-form-grid textarea,
@@ -644,8 +754,8 @@
 
 .mentor-profile-form-grid small,
 .mentor-profile-request-form > label small {
-  color: var(--muted);
-  font-size: 0.67rem;
+  color: var(--muted, #5C626A);
+  font-size: 0.7rem;
   font-weight: 400;
 }
 
@@ -654,64 +764,66 @@
 }
 
 .mentor-profile-review-note {
-  padding: 0.65rem;
-  border: 1px solid var(--err-border);
-  border-radius: 8px;
-  background: var(--err-soft);
+  padding: 0.75rem 0.9rem;
+  border: 1px solid var(--err-border, #f5c6c6);
+  border-radius: 10px;
+  background: var(--err-soft, #fff5f5);
 }
 
 .mentor-profile-review-note strong,
 .mentor-profile-request-status > strong {
-  color: var(--text);
-  font-size: 0.76rem;
+  color: var(--text, #1A1C1E);
+  font-size: 0.8rem;
+  font-weight: 750;
 }
 
 .mentor-profile-review-note p {
-  margin: 0.2rem 0 0;
-  color: var(--muted);
-  font-size: 0.73rem;
+  margin: 0.25rem 0 0;
+  color: var(--muted, #5C626A);
+  font-size: 0.76rem;
 }
 
 .mentor-profile-request-status blockquote {
   margin: 0;
-  padding: 0.6rem 0.7rem;
-  border-left: 3px solid var(--brand-primary);
-  color: var(--text);
-  background: var(--surface);
-  font-size: 0.73rem;
+  padding: 0.75rem 0.85rem;
+  border-left: 3px solid var(--brand, #C59B27);
+  color: var(--text, #1A1C1E);
+  background: var(--surface, #ffffff);
+  font-size: 0.78rem;
+  border-radius: 0 8px 8px 0;
 }
 
 .mentor-profile-request-history {
   display: grid;
-  gap: 0.35rem;
-  margin: 0 1rem;
+  gap: 0.45rem;
+  margin: 0 1.25rem;
 }
 
 .mentor-profile-request-history > div {
   display: flex;
   align-items: center;
   flex-wrap: wrap;
-  gap: 0.45rem;
-  padding: 0.5rem 0.6rem;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  background: var(--surface-subtle);
+  gap: 0.55rem;
+  padding: 0.65rem 0.8rem;
+  border: 1px solid var(--border, #E5E7EB);
+  border-radius: 10px;
+  background: var(--surface, #ffffff);
 }
 
 .mentor-profile-request-history > div > span:first-child {
-  color: var(--text);
-  font-size: 0.73rem;
-  font-weight: 700;
+  color: var(--text, #1A1C1E);
+  font-size: 0.78rem;
+  font-weight: 750;
 }
 
 .mentor-profile-request-history small {
   flex-basis: 100%;
-  color: var(--muted);
-  font-size: 0.69rem;
+  color: var(--muted, #5C626A);
+  font-size: 0.72rem;
 }
 
 .mentor-profile-badge-removal .mentor-profile-request-status {
-  border-top: 1px solid var(--border);
+  border-top: 1px solid var(--border, #E5E7EB);
 }
 
 .mentor-profile-badge-removal .mentor-profile-request-status > button {
@@ -720,43 +832,44 @@
 
 .mentor-profile-editor-section {
   display: grid;
-  gap: 0.65rem;
-  padding: 0.8rem;
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  background: var(--surface);
+  gap: 0.75rem;
+  padding: 1rem;
+  border: 1px solid var(--border, #E5E7EB);
+  border-radius: 12px;
+  background: var(--surface, #ffffff);
 }
 
 .mentor-profile-editor-section h4 {
   margin: 0;
-  color: var(--text);
-  font-size: 0.8rem;
+  color: var(--text, #1A1C1E);
+  font-size: 0.86rem;
+  font-weight: 750;
 }
 
 .mentor-profile-edit-record {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 0.6rem;
+  gap: 0.75rem;
   min-width: 0;
   margin: 0;
-  padding: 0.7rem;
-  border: 1px solid var(--border);
-  border-radius: 8px;
+  padding: 0.85rem;
+  border: 1px solid var(--border, #E5E7EB);
+  border-radius: 10px;
 }
 
 .mentor-profile-edit-record legend {
-  padding: 0 0.3rem;
-  color: var(--muted);
-  font-size: 0.68rem;
-  font-weight: 700;
+  padding: 0 0.4rem;
+  color: var(--muted, #5C626A);
+  font-size: 0.72rem;
+  font-weight: 750;
 }
 
 .mentor-profile-edit-record label {
   display: grid;
-  gap: 0.25rem;
-  color: var(--text);
-  font-size: 0.7rem;
-  font-weight: 700;
+  gap: 0.3rem;
+  color: var(--text, #1A1C1E);
+  font-size: 0.74rem;
+  font-weight: 750;
 }
 
 .mentor-profile-edit-record input,
@@ -765,13 +878,13 @@
 .mentor-profile-editor-section > label select {
   width: 100%;
   min-width: 0;
-  padding: 0.5rem 0.58rem;
-  border: 1px solid var(--border-strong);
-  border-radius: 7px;
-  color: var(--text);
-  background: var(--surface);
+  padding: 0.55rem 0.65rem;
+  border: 1px solid var(--border, #E5E7EB);
+  border-radius: 8px;
+  color: var(--text, #1A1C1E);
+  background: var(--surface, #ffffff);
   font: inherit;
-  font-size: 0.74rem;
+  font-size: 0.78rem;
 }
 
 .mentor-profile-edit-record textarea {
@@ -781,22 +894,24 @@
 .mentor-profile-edit-record button,
 .mentor-profile-add-record {
   width: fit-content;
-  min-height: 31px;
+  min-height: 34px;
   align-self: end;
-  padding: 0.35rem 0.55rem;
-  border: 1px solid var(--border);
-  border-radius: 7px;
-  color: var(--text);
-  background: var(--surface-subtle);
-  font-size: 0.7rem;
-  font-weight: 700;
+  padding: 0.4rem 0.65rem;
+  border: 1px solid var(--border, #E5E7EB);
+  border-radius: 8px;
+  color: var(--text, #1A1C1E);
+  background: var(--surface, #ffffff);
+  font-size: 0.74rem;
+  font-weight: 750;
   cursor: pointer;
+  transition: all 130ms ease;
 }
 
 .mentor-profile-edit-record button:hover,
 .mentor-profile-add-record:hover {
-  border-color: var(--brand-soft-border);
-  background: var(--brand-soft);
+  border-color: var(--brand, #C59B27);
+  background: color-mix(in srgb, var(--brand, #C59B27) 8%, transparent);
+  color: var(--brand, #C59B27);
 }
 
 @media (max-width: 760px) {
@@ -825,9 +940,9 @@
   }
 
   .mentor-profile-photo {
-    width: 64px;
-    height: 64px;
-    flex-basis: 64px;
+    width: 68px;
+    height: 68px;
+    flex-basis: 68px;
   }
 
   .mentor-profile-picture-action {

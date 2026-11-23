@@ -1178,7 +1178,7 @@ export function ApplyForMentorForm({
         : 'Your application is with HR for review. We will notify you when a decision is made.';
 
     return (
-      <section className={`mentor-application-result mentor-application-result-${status.toLowerCase().replaceAll('_', '-')}`}>
+      <section className={`mentor-application-result mentor-application-result-${status.toLowerCase().replace(/_/g, '-')}`}>
         <div className="mentor-application-result-hero">
           <div className="mentor-application-result-icon" aria-hidden="true">
             {status === 'APPROVED' ? <Award size={26} /> : status === 'DECLINED' ? <X size={26} /> : <Check size={26} />}

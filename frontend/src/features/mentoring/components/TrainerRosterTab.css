@@ -1,337 +1,260 @@
+/* ============================================================
+   TrainerRosterTab.css  —  Mentoring UI redesign
+   Design tokens: see mentoring-design-spec.md
+   ============================================================ */
+
+/* ── Local token aliases ──────────────────────────────────── */
 .trainer-roster {
-  overflow: hidden;
-  border: 1px solid var(--border);
-  border-radius: 16px;
-  background: var(--surface);
-  box-shadow: var(--shadow-card);
-  padding: 1.25rem;
+  --m-ink:         #1A1C1E;
+  --m-ink-2:       #2C3036;
+  --m-muted:       #5C626A;
+  --m-soft:        #9CA3AF;
+  --m-accent:      #C59B27;
+  --m-accent-2:    #D4AF37;
+  --m-accent-glow: rgba(197, 155, 39, 0.18);
+  --m-line:        #E5E7EB;
+  --m-line-2:      #F0F2F5;
+  --m-bg:          #F7F7F7;
+  --m-surface:     #ffffff;
+  --m-surface-2:   #f8fbfa;
+  --m-warn:        #c97316;
+  --m-err:         #c0392b;
+  --m-ok:          #15803d;
+
+  /* shadows */
+  --m-shadow-card:     0 1px 4px rgba(13, 43, 43, 0.06), 0 4px 16px rgba(13, 43, 43, 0.04);
+  --m-shadow-elevated: 0 4px 20px rgba(13, 43, 43, 0.10);
+  --m-shadow-modal:    0 20px 60px rgba(13, 43, 43, 0.20);
+  --m-shadow-focus:    0 0 0 3px var(--m-accent-glow);
 }
 
+/* ── Fade-in animation ───────────────────────────────────── */
+@keyframes rosterFadeIn {
+  from { opacity: 0; transform: translateY(-4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .trainer-roster * { animation: none !important; transition: none !important; }
+}
+
+/* ============================================================
+   MAIN CONTAINER
+   ============================================================ */
+.trainer-roster {
+  overflow: hidden;
+  border: 1px solid var(--m-line);
+  border-radius: 16px;
+  background: var(--m-surface);
+  box-shadow: var(--m-shadow-card);
+  padding: 1.25rem 1.5rem;
+  animation: rosterFadeIn 200ms ease both;
+}
+
+/* ============================================================
+   HEADER  —  title + action button row
+   ============================================================ */
 .trainer-roster-header {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
   gap: 1rem;
   padding-bottom: 1rem;
-  border-bottom: 1px solid var(--border);
+  border-bottom: 1px solid var(--m-line);
 }
 
 .trainer-roster-header h3 {
   margin: 0;
-  color: var(--text);
-  font-size: 1.05rem;
+  color: var(--m-ink);
+  font-size: 1.1rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
 }
 
 .trainer-roster-header p {
   margin: 0.25rem 0 0;
-  color: var(--muted);
+  color: var(--m-muted);
   font-size: 0.82rem;
+  line-height: 1.5;
 }
 
+/* ── Appoint / primary CTA ─────────────────────────────── */
 .trainer-roster-appoint {
   min-height: 38px;
   display: inline-flex;
   align-items: center;
   gap: 0.4rem;
-  padding: 0.55rem 0.78rem;
-  border: 1px solid var(--brand-primary);
+  padding: 0.55rem 1rem;
+  border: none;
   border-radius: 9px;
   color: #fff;
-  background: var(--brand-primary);
+  background: var(--m-accent);
   font-size: 0.8rem;
-  font-weight: 800;
+  font-weight: 700;
   cursor: pointer;
+  white-space: nowrap;
+  transition: background 150ms ease, transform 150ms ease, box-shadow 150ms ease;
+  box-shadow: 0 2px 8px var(--m-accent-glow);
+}
+
+.trainer-roster-appoint:hover {
+  background: var(--m-accent-2);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 14px var(--m-accent-glow);
 }
 
 .trainer-roster-appoint:disabled {
-  border-color: var(--border);
-  color: var(--muted-soft);
-  background: var(--surface-subtle);
+  background: var(--m-line-2);
+  color: var(--m-soft);
+  box-shadow: none;
   cursor: not-allowed;
+  transform: none;
 }
 
+/* ============================================================
+   SUMMARY STAT GRID  — 4-col strip
+   ============================================================ */
 .trainer-roster-summary {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 0.55rem;
+  gap: 0.6rem;
   margin: 1rem 0;
 }
 
 .trainer-roster-summary > div {
   display: grid;
-  gap: 0.12rem;
+  gap: 0.15rem;
   min-width: 0;
-  padding: 0.75rem;
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  background: var(--surface-subtle);
+  padding: 0.85rem 1rem;
+  border: 1px solid var(--m-line);
+  border-radius: 12px;
+  background: var(--m-surface-2);
+  transition: box-shadow 150ms ease, border-color 150ms ease;
+}
+
+.trainer-roster-summary > div:hover {
+  border-color: color-mix(in srgb, var(--m-accent) 30%, transparent);
+  box-shadow: var(--m-shadow-elevated);
 }
 
 .trainer-roster-summary span {
-  color: var(--muted-soft);
-  font-size: 0.68rem;
+  color: var(--m-soft);
+  font-size: 0.7rem;
   font-weight: 700;
   text-transform: uppercase;
-  letter-spacing: 0.04em;
+  letter-spacing: 0.05em;
 }
 
 .trainer-roster-summary strong {
-  color: var(--text);
-  font-size: 1.25rem;
+  color: var(--m-ink);
+  font-size: 1.5rem;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.02em;
 }
 
+/* ============================================================
+   CONTROLS  —  search + filter bar
+   ============================================================ */
 .trainer-roster-controls {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  flex-wrap: wrap;
   gap: 0.65rem;
-  margin-bottom: 0.85rem;
+  margin-bottom: 1rem;
 }
 
+/* ── Search input ─────────────────────────────────────────── */
 .trainer-roster-search {
   flex: 1 1 280px;
   max-width: 420px;
   display: flex;
   align-items: center;
-  gap: 0.45rem;
-  min-height: 38px;
-  padding: 0 0.65rem;
-  border: 1px solid var(--border);
-  border-radius: 9px;
-  color: var(--muted-soft);
-  background: var(--surface);
+  gap: 0.5rem;
+  min-height: 40px;
+  padding: 0 0.85rem;
+  border: 1.5px solid var(--m-line);
+  border-radius: 999px;
+  color: var(--m-soft);
+  background: var(--m-surface-2);
+  transition: border-color 150ms ease, box-shadow 150ms ease;
+}
+
+.trainer-roster-search:focus-within {
+  border-color: var(--m-accent);
+  box-shadow: 0 0 0 3px var(--m-accent-glow);
+  color: var(--m-accent);
 }
 
 .trainer-roster-search input {
-  width: 100%;
+  flex: 1;
   border: 0;
   outline: 0;
-  color: var(--text);
   background: transparent;
-  font-size: 0.8rem;
+  color: var(--m-ink);
+  font-size: 0.84rem;
 }
 
+.trainer-roster-search input::placeholder {
+  color: var(--m-soft);
+}
+
+/* ── Filter pills ─────────────────────────────────────────── */
 .trainer-roster-filters {
   display: flex;
+  flex-wrap: wrap;
   gap: 0.35rem;
 }
 
 .trainer-roster-filters button {
   min-height: 36px;
-  padding: 0.45rem 0.65rem;
-  border: 1px solid var(--border);
+  padding: 0.4rem 0.8rem;
+  border: 1.5px solid var(--m-line);
   border-radius: 999px;
-  color: var(--muted);
-  background: var(--surface);
+  color: var(--m-muted);
+  background: var(--m-surface);
   font-size: 0.75rem;
   font-weight: 700;
   cursor: pointer;
+  transition: background 150ms ease, border-color 150ms ease, color 150ms ease, box-shadow 150ms ease;
+}
+
+.trainer-roster-filters button:hover {
+  border-color: color-mix(in srgb, var(--m-accent) 40%, transparent);
+  color: var(--m-ink-2);
+  background: var(--m-line-2);
 }
 
 .trainer-roster-filters button.is-active {
-  border-color: var(--brand-soft-border);
-  color: var(--brand);
-  background: var(--brand-soft);
+  border-color: var(--m-accent);
+  color: var(--m-accent);
+  background: color-mix(in srgb, var(--m-accent) 10%, transparent);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--m-accent) 20%, transparent);
 }
 
+/* ============================================================
+   CARD GRID VIEW
+   ============================================================ */
 .trainer-roster-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 0.75rem;
-}
-
-.trainer-roster-table-wrap {
-  overflow-x: auto;
-  border: 1px solid var(--border);
-  border-radius: 11px;
-}
-
-.trainer-roster-table {
-  width: 100%;
-  min-width: 720px;
-  border-collapse: collapse;
-}
-
-.trainer-roster-table th {
-  padding: 0.7rem 0.8rem;
-  color: var(--muted-soft);
-  background: var(--surface-subtle);
-  font-size: 0.67rem;
-  font-weight: 800;
-  text-align: left;
-  text-transform: uppercase;
-  letter-spacing: 0.045em;
-}
-
-.trainer-roster-table td {
-  padding: 0.72rem 0.8rem;
-  border-top: 1px solid var(--border);
-  color: var(--text);
-  font-size: 0.78rem;
-}
-
-.trainer-roster-table tbody tr {
-  cursor: pointer;
-  transition: background 120ms ease;
-}
-
-.trainer-roster-table tbody tr:hover,
-.trainer-roster-table tbody tr:focus-visible {
-  outline: none;
-  background: #fffcf2;
-}
-
-.trainer-roster-table tbody tr:focus-visible {
-  box-shadow: inset 0 0 0 2px var(--brand-primary);
-}
-
-.trainer-roster-table tbody tr > td:last-child {
-  width: 42px;
-  color: var(--brand);
-}
-
-.trainer-roster-table-person {
-  display: flex;
-  align-items: center;
-  gap: 0.6rem;
-  min-width: 220px;
-}
-
-.trainer-roster-table-person > span:last-child {
-  display: grid;
-  gap: 0.15rem;
-  min-width: 0;
-}
-
-.trainer-roster-table-person strong {
-  color: var(--text);
-  font-size: 0.8rem;
-}
-
-.trainer-roster-table-person small {
-  color: var(--muted);
-  font-size: 0.7rem;
-}
-
-.trainer-roster-table-capacity {
-  display: grid;
-  gap: 0.12rem;
-  font-weight: 700;
-  white-space: nowrap;
-}
-
-.trainer-roster-table-capacity small {
-  color: var(--warn);
-  font-size: 0.65rem;
-}
-
-.trainer-roster-table-skill-count {
-  color: var(--muted);
-  white-space: nowrap;
-}
-
-.trainer-roster-modal-backdrop {
-  align-items: center;
-  overflow-y: auto;
-}
-
-.apid-modal.trainer-roster-modal {
-  width: min(760px, 100%);
-  max-width: 760px;
-  max-height: min(90vh, 900px);
-  padding: 1.2rem;
-  border-radius: 16px;
-  box-shadow: var(--shadow-popover);
-}
-
-.trainer-roster-modal-header {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
   gap: 0.8rem;
-  padding-bottom: 0.9rem;
-  border-bottom: 1px solid var(--border);
 }
 
-.trainer-roster-modal-kicker {
-  display: block;
-  margin-bottom: 0.15rem;
-  color: var(--brand);
-  font-size: 0.67rem;
-  font-weight: 800;
-  letter-spacing: 0.07em;
-  text-transform: uppercase;
-}
-
-.trainer-roster-modal-header h3 {
-  margin: 0;
-  color: var(--text);
-  font-size: 1.1rem;
-}
-
-.trainer-roster-modal-header p {
-  margin: 0.2rem 0 0;
-  color: var(--muted);
-  font-size: 0.76rem;
-}
-
-.trainer-roster-modal-status {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.4rem;
-  margin: 0.85rem 0;
-}
-
-.trainer-roster-modal-meta {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 0.5rem;
-}
-
-.trainer-roster-modal-meta > div {
-  display: grid;
-  grid-template-columns: auto 1fr;
-  gap: 0.15rem 0.5rem;
-  padding: 0.65rem;
-  border: 1px solid var(--border);
-  border-radius: 9px;
-  background: var(--surface-subtle);
-}
-
-.trainer-roster-modal-meta svg {
-  grid-row: 1 / 3;
-  align-self: center;
-  color: var(--brand);
-}
-
-.trainer-roster-modal-meta span {
-  color: var(--muted-soft);
-  font-size: 0.65rem;
-  font-weight: 700;
-  text-transform: uppercase;
-}
-
-.trainer-roster-modal-meta strong {
-  color: var(--text);
-  font-size: 0.76rem;
-}
-
-.trainer-roster-modal-capacity {
-  margin: 0.65rem 0 0;
-}
-
-.trainer-roster-modal-skills {
-  display: grid;
-  gap: 0.45rem;
-  margin-top: 0.85rem;
-}
-
+/* ── Individual expandable card ─────────────────────────── */
 .trainer-roster-card {
   min-width: 0;
   overflow: hidden;
-  border: 1px solid var(--border);
-  border-radius: 12px;
-  background: var(--surface);
+  border: 1px solid var(--m-line);
+  border-radius: 14px;
+  background: var(--m-surface);
+  box-shadow: var(--m-shadow-card);
+  transition: box-shadow 150ms ease, border-color 150ms ease;
+}
+
+.trainer-roster-card:hover {
+  box-shadow: var(--m-shadow-elevated);
+  border-color: color-mix(in srgb, var(--m-accent) 25%, transparent);
 }
 
 .trainer-roster-card-header {
@@ -339,25 +262,24 @@
   align-items: flex-start;
   justify-content: space-between;
   gap: 0.75rem;
-  padding: 0.9rem;
-  border-bottom: 1px solid var(--border);
-  background: linear-gradient(135deg, #fffdf7 0%, var(--surface) 70%);
+  padding: 1rem 1.1rem;
+  border-bottom: 1px solid var(--m-line-2);
+  background: linear-gradient(135deg, var(--m-line-2) 0%, var(--m-surface) 70%);
   cursor: pointer;
   list-style: none;
+  user-select: none;
 }
 
-.trainer-roster-card-header::-webkit-details-marker {
-  display: none;
-}
+.trainer-roster-card-header::-webkit-details-marker { display: none; }
 
 .trainer-roster-card-header:focus-visible {
   outline: none;
-  box-shadow: var(--shadow-focus);
+  box-shadow: inset 0 0 0 2px var(--m-accent);
 }
 
 .trainer-roster-expand-icon {
   flex: 0 0 auto;
-  color: var(--muted-soft);
+  color: var(--m-soft);
   transition: transform 160ms ease;
 }
 
@@ -370,13 +292,14 @@
 }
 
 .trainer-roster-card-content {
-  padding-bottom: 1px;
+  padding-bottom: 2px;
 }
 
+/* ── Person block (avatar + name) ───────────────────────── */
 .trainer-roster-person {
   display: flex;
   align-items: center;
-  gap: 0.65rem;
+  gap: 0.75rem;
   min-width: 0;
 }
 
@@ -386,129 +309,139 @@
   flex: 0 0 42px;
   display: grid;
   place-items: center;
-  border: 1px solid var(--brand-soft-border);
   border-radius: 50%;
-  color: var(--brand);
-  background: var(--brand-soft);
-  font-size: 0.82rem;
+  border: 2px solid color-mix(in srgb, var(--m-accent) 25%, transparent);
+  background: color-mix(in srgb, var(--m-accent) 12%, transparent);
+  color: var(--m-accent);
+  font-size: 0.84rem;
   font-weight: 800;
+  letter-spacing: 0.01em;
 }
 
 .trainer-roster-person h4 {
   margin: 0;
-  color: var(--text);
+  color: var(--m-ink);
   font-size: 0.9rem;
+  font-weight: 700;
+  letter-spacing: -0.01em;
 }
 
 .trainer-roster-person p {
-  margin: 0.2rem 0 0;
-  color: var(--muted);
+  margin: 0.18rem 0 0;
+  color: var(--m-muted);
   font-size: 0.72rem;
-  line-height: 1.35;
+  line-height: 1.4;
 }
 
+/* ── Card meta grid (3 mini tiles) ─────────────────────── */
 .trainer-roster-meta {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 0.45rem;
-  padding: 0.75rem 0.9rem 0;
+  padding: 0.75rem 1.1rem 0;
 }
 
 .trainer-roster-meta > div {
   display: grid;
   grid-template-columns: auto 1fr;
-  gap: 0.12rem 0.35rem;
+  gap: 0.12rem 0.4rem;
   min-width: 0;
-  padding: 0.55rem;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  background: var(--surface-subtle);
+  padding: 0.6rem 0.65rem;
+  border: 1px solid var(--m-line);
+  border-radius: 10px;
+  background: var(--m-surface-2);
 }
 
 .trainer-roster-meta svg {
   grid-row: 1 / 3;
   align-self: center;
-  color: var(--brand);
+  color: var(--m-accent);
 }
 
 .trainer-roster-meta span {
-  color: var(--muted-soft);
+  color: var(--m-soft);
   font-size: 0.62rem;
   font-weight: 700;
   text-transform: uppercase;
+  letter-spacing: 0.05em;
 }
 
 .trainer-roster-meta strong {
-  color: var(--text);
-  font-size: 0.72rem;
+  color: var(--m-ink);
+  font-size: 0.74rem;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
+/* ── Capacity bar ───────────────────────────────────────── */
 .trainer-roster-capacity {
   display: grid;
   grid-template-columns: auto 1fr auto;
   align-items: center;
-  gap: 0.55rem;
-  margin: 0.65rem 0.9rem 0;
-  padding: 0.65rem;
-  border: 1px solid var(--border);
-  border-radius: 9px;
-  background: var(--surface-subtle);
+  gap: 0.6rem;
+  margin: 0.65rem 1.1rem 0;
+  padding: 0.75rem;
+  border: 1px solid var(--m-line);
+  border-radius: 10px;
+  background: var(--m-surface-2);
 }
 
-.trainer-roster-capacity > div:first-child {
-  display: grid;
-}
+.trainer-roster-capacity > div:first-child { display: grid; }
 
 .trainer-roster-capacity span {
-  color: var(--muted-soft);
-  font-size: 0.66rem;
+  color: var(--m-soft);
+  font-size: 0.65rem;
   font-weight: 700;
   text-transform: uppercase;
+  letter-spacing: 0.05em;
 }
 
 .trainer-roster-capacity strong {
-  color: var(--text);
-  font-size: 0.82rem;
+  color: var(--m-ink);
+  font-size: 0.84rem;
+  font-weight: 700;
 }
 
+/* progress bar track */
 .trainer-roster-progress {
   height: 7px;
   overflow: hidden;
   border-radius: 999px;
-  background: #e8edf3;
+  background: var(--m-line);
 }
 
+/* progress bar fill — teal */
 .trainer-roster-progress span {
   display: block;
   height: 100%;
   border-radius: inherit;
-  background: var(--brand-primary);
+  background: linear-gradient(90deg, var(--m-accent), var(--m-accent-2));
+  transition: width 400ms ease;
 }
 
 .trainer-roster-capacity p {
   margin: 0;
-  color: var(--muted);
-  font-size: 0.68rem;
+  color: var(--m-muted);
+  font-size: 0.7rem;
   white-space: nowrap;
 }
 
+/* ── Skills section ─────────────────────────────────────── */
 .trainer-roster-skills {
   display: grid;
   gap: 0.45rem;
-  margin: 0.65rem 0.9rem 0.9rem;
+  margin: 0.65rem 1.1rem 1rem;
 }
 
 .trainer-roster-section-title {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  color: var(--muted-soft);
+  color: var(--m-soft);
   font-size: 0.68rem;
-  font-weight: 800;
-  letter-spacing: 0.04em;
+  font-weight: 700;
+  letter-spacing: 0.05em;
   text-transform: uppercase;
 }
 
@@ -518,21 +451,28 @@
   display: grid;
   place-items: center;
   border-radius: 999px;
-  color: var(--brand);
-  background: var(--brand-soft);
+  color: var(--m-accent);
+  background: color-mix(in srgb, var(--m-accent) 12%, transparent);
   font-size: 0.68rem;
 }
 
+/* ── Skill chip rows ────────────────────────────────────── */
 .trainer-roster-skill {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
-  gap: 0.55rem;
+  gap: 0.6rem;
   min-height: 44px;
-  padding: 0.55rem 0.6rem;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  background: var(--surface-subtle);
+  padding: 0.55rem 0.7rem;
+  border: 1px solid var(--m-line);
+  border-radius: 10px;
+  background: var(--m-surface-2);
+  transition: box-shadow 150ms ease, border-color 150ms ease;
+}
+
+.trainer-roster-skill:hover {
+  border-color: color-mix(in srgb, var(--m-accent) 25%, transparent);
+  box-shadow: 0 2px 8px rgba(13, 43, 43, 0.06);
 }
 
 .trainer-roster-skill > div:first-child {
@@ -544,52 +484,344 @@
 }
 
 .trainer-roster-skill > div:first-child strong {
-  color: var(--text);
-  font-size: 0.76rem;
+  color: var(--m-ink);
+  font-size: 0.78rem;
   overflow-wrap: anywhere;
 }
 
+/* ── Action buttons inside skill chips ──────────────────── */
 .trainer-roster-actions {
   display: flex;
   gap: 0.35rem;
 }
 
-.trainer-roster-actions button,
+/* ghost / neutral */
+.trainer-roster-actions button {
+  min-height: 30px;
+  padding: 0.3rem 0.6rem;
+  border: 1.5px solid var(--m-line);
+  border-radius: 7px;
+  color: var(--m-muted);
+  background: var(--m-surface);
+  font-size: 0.7rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 150ms ease, border-color 150ms ease, color 150ms ease;
+}
+
+.trainer-roster-actions button:hover {
+  background: var(--m-line-2);
+  color: var(--m-ink);
+}
+
+/* danger / revoke */
+.trainer-roster-actions button.is-danger {
+  border-color: color-mix(in srgb, var(--m-err) 40%, transparent);
+  color: var(--m-err);
+  background: color-mix(in srgb, var(--m-err) 6%, transparent);
+}
+
+.trainer-roster-actions button.is-danger:hover {
+  background: color-mix(in srgb, var(--m-err) 12%, transparent);
+}
+
+/* restore / approve teal */
 .trainer-roster-restore {
   min-height: 30px;
-  padding: 0.35rem 0.55rem;
-  border: 1px solid var(--border);
+  padding: 0.3rem 0.6rem;
+  border: 1.5px solid color-mix(in srgb, var(--m-accent) 40%, transparent);
   border-radius: 7px;
-  color: var(--text);
-  background: var(--surface);
-  font-size: 0.68rem;
-  font-weight: 800;
+  color: var(--m-accent);
+  background: color-mix(in srgb, var(--m-accent) 8%, transparent);
+  font-size: 0.7rem;
+  font-weight: 700;
   cursor: pointer;
+  transition: background 150ms ease, border-color 150ms ease;
 }
 
-.trainer-roster-actions button.is-danger {
-  border-color: var(--err-border);
-  color: var(--err);
-  background: var(--err-soft);
+.trainer-roster-restore:hover {
+  background: color-mix(in srgb, var(--m-accent) 14%, transparent);
+  border-color: var(--m-accent);
 }
 
-.trainer-roster-restore {
-  border-color: var(--brand-soft-border);
-  color: var(--brand);
-  background: var(--brand-soft);
+/* ============================================================
+   TABLE VIEW
+   ============================================================ */
+.trainer-roster-table-wrap {
+  overflow-x: auto;
+  border: 1px solid var(--m-line);
+  border-radius: 12px;
 }
 
+.trainer-roster-table {
+  width: 100%;
+  min-width: 720px;
+  border-collapse: collapse;
+}
+
+/* Table header */
+.trainer-roster-table th {
+  padding: 0.65rem 1rem;
+  color: var(--m-soft);
+  background: color-mix(in srgb, var(--m-accent) 7%, #F7F7F7);
+  font-size: 0.68rem;
+  font-weight: 700;
+  text-align: left;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  white-space: nowrap;
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+
+/* first column sticky */
+.trainer-roster-table th:first-child,
+.trainer-roster-table td:first-child {
+  position: sticky;
+  left: 0;
+  z-index: 2;
+  background: inherit;
+}
+
+.trainer-roster-table th:first-child {
+  z-index: 3;
+}
+
+/* Table data cells */
+.trainer-roster-table td {
+  padding: 0.75rem 1rem;
+  border-top: 1px solid var(--m-line-2);
+  color: var(--m-ink);
+  font-size: 0.8rem;
+  background: var(--m-surface);
+}
+
+/* Row hover */
+.trainer-roster-table tbody tr {
+  cursor: pointer;
+  transition: background 120ms ease;
+}
+
+.trainer-roster-table tbody tr:hover td {
+  background: color-mix(in srgb, var(--m-accent) 5%, #F7F7F7);
+}
+
+.trainer-roster-table tbody tr:focus-visible td {
+  outline: none;
+  box-shadow: inset 0 0 0 2px var(--m-accent);
+}
+
+.trainer-roster-table tbody tr > td:last-child {
+  width: 42px;
+  color: var(--m-accent);
+}
+
+/* ── Table person cell ──────────────────────────────────── */
+.trainer-roster-table-person {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  min-width: 200px;
+}
+
+.trainer-roster-table-person > span:last-child {
+  display: grid;
+  gap: 0.12rem;
+  min-width: 0;
+}
+
+.trainer-roster-table-person strong {
+  color: var(--m-ink);
+  font-size: 0.82rem;
+  font-weight: 700;
+}
+
+.trainer-roster-table-person small {
+  color: var(--m-muted);
+  font-size: 0.7rem;
+}
+
+/* ── Table capacity cell ────────────────────────────────── */
+.trainer-roster-table-capacity {
+  display: grid;
+  gap: 0.12rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.trainer-roster-table-capacity small {
+  color: var(--m-warn);
+  font-size: 0.65rem;
+}
+
+.trainer-roster-table-skill-count {
+  color: var(--m-muted);
+  white-space: nowrap;
+}
+
+/* ============================================================
+   MODAL / DETAIL DRAWER
+   ============================================================ */
+.trainer-roster-modal-backdrop {
+  align-items: center;
+  overflow-y: auto;
+}
+
+.apid-modal.trainer-roster-modal {
+  width: min(760px, 100%);
+  max-width: 760px;
+  max-height: min(90vh, 900px);
+  padding: 1.5rem;
+  border-radius: 18px;
+  box-shadow: var(--m-shadow-modal);
+  overflow-y: auto;
+}
+
+/* Modal header */
+.trainer-roster-modal-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.85rem;
+  padding-bottom: 1rem;
+  border-bottom: 1px solid var(--m-line);
+}
+
+.trainer-roster-modal-kicker {
+  display: block;
+  margin-bottom: 0.2rem;
+  color: var(--m-accent);
+  font-size: 0.67rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.trainer-roster-modal-header h3 {
+  margin: 0;
+  color: var(--m-ink);
+  font-size: 1.15rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+.trainer-roster-modal-header p {
+  margin: 0.22rem 0 0;
+  color: var(--m-muted);
+  font-size: 0.78rem;
+}
+
+/* Modal status badges row */
+.trainer-roster-modal-status {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin: 0.9rem 0;
+}
+
+/* Meta detail tiles */
+.trainer-roster-modal-meta {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.55rem;
+}
+
+.trainer-roster-modal-meta > div {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 0.15rem 0.55rem;
+  padding: 0.75rem;
+  border: 1px solid var(--m-line);
+  border-radius: 10px;
+  background: var(--m-surface-2);
+}
+
+.trainer-roster-modal-meta svg {
+  grid-row: 1 / 3;
+  align-self: center;
+  color: var(--m-accent);
+}
+
+.trainer-roster-modal-meta span {
+  color: var(--m-soft);
+  font-size: 0.65rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.trainer-roster-modal-meta strong {
+  color: var(--m-ink);
+  font-size: 0.78rem;
+}
+
+/* Modal capacity */
+.trainer-roster-modal-capacity {
+  margin: 0.75rem 0 0;
+}
+
+/* Modal skills */
+.trainer-roster-modal-skills {
+  display: grid;
+  gap: 0.45rem;
+  margin-top: 1rem;
+}
+
+/* ============================================================
+   STATUS PILLS  —  shared pattern
+   ============================================================ */
+/* These are typically .boa-pill or similar; keep overrides minimal */
+.trainer-roster-pill-active {
+  padding: 0.25rem 0.65rem;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--m-accent) 12%, transparent);
+  color: var(--m-accent);
+  font-size: 0.72rem;
+  font-weight: 700;
+}
+
+.trainer-roster-pill-pending {
+  padding: 0.25rem 0.65rem;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--m-warn) 12%, transparent);
+  color: var(--m-warn);
+  font-size: 0.72rem;
+  font-weight: 700;
+}
+
+.trainer-roster-pill-err {
+  padding: 0.25rem 0.65rem;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--m-err) 10%, transparent);
+  color: var(--m-err);
+  font-size: 0.72rem;
+  font-weight: 700;
+}
+
+/* ============================================================
+   RESPONSIVE BREAKPOINTS
+   ============================================================ */
 @media (max-width: 980px) {
+  .trainer-roster-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .trainer-roster-summary {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
 
 @media (max-width: 700px) {
   .trainer-roster {
-    padding: 0.9rem;
+    padding: 1rem;
+    border-radius: 12px;
   }
 
   .trainer-roster-header,
   .trainer-roster-controls {
     flex-direction: column;
+    align-items: stretch;
   }
 
   .trainer-roster-appoint,
@@ -601,6 +833,8 @@
   .trainer-roster-filters {
     width: 100%;
     overflow-x: auto;
+    flex-wrap: nowrap;
+    padding-bottom: 0.15rem;
   }
 
   .trainer-roster-filters button {
@@ -633,5 +867,10 @@
 
   .trainer-roster-actions {
     justify-content: flex-end;
+  }
+
+  .apid-modal.trainer-roster-modal {
+    padding: 1rem;
+    border-radius: 14px;
   }
 }

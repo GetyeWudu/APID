@@ -221,13 +221,15 @@ export const MentoringChatHub: React.FC<MentoringChatHubProps> = ({
 
   return (
     <div
+      className="mentoring-chat-hub"
       style={{
         display: 'grid',
         gridTemplateColumns: '340px 1fr',
         gap: '1rem',
-        height: 'calc(100vh - 170px)',
-        minHeight: '620px',
+        height: '100%',
+        minHeight: 0,
         position: 'relative',
+        overflow: 'hidden',
       }}
     >
       {/* Sidebar with Filter Tabs */}
@@ -251,6 +253,7 @@ export const MentoringChatHub: React.FC<MentoringChatHubProps> = ({
           display: 'flex',
           flexDirection: 'column',
           height: '100%',
+          minHeight: 0,
           padding: 0,
           overflow: 'hidden',
           background: 'var(--surface, #ffffff)',
@@ -269,6 +272,7 @@ export const MentoringChatHub: React.FC<MentoringChatHubProps> = ({
                 borderBottom: '1px solid var(--border-light, #e2e8f0)',
                 background: 'var(--surface, #ffffff)',
                 zIndex: 10,
+                flexShrink: 0,
               }}
             >
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', minWidth: 0 }}>
@@ -405,6 +409,7 @@ export const MentoringChatHub: React.FC<MentoringChatHubProps> = ({
                   display: 'flex',
                   flexDirection: 'column',
                   gap: '0.5rem',
+                  flexShrink: 0,
                 }}
               >
                 <span style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-muted, #64748b)' }}>
@@ -458,7 +463,7 @@ export const MentoringChatHub: React.FC<MentoringChatHubProps> = ({
             )}
 
             {/* Thread View */}
-            <div style={{ flex: 1, minHeight: 0, position: 'relative' }}>
+            <div style={{ flex: 1, minHeight: 0, position: 'relative', overflow: 'hidden' }}>
               {messagesQuery.isLoading ? (
                 <div style={{ padding: '3rem', textAlign: 'center', color: 'var(--text-muted, #64748b)' }}>
                   <Loader2 className="animate-spin" size={24} style={{ margin: '0 auto 0.5rem' }} />

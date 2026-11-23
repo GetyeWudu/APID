@@ -116,7 +116,7 @@ export function MentoringPairChatPanel({
 
   return (
     <section className="apid-card mentoring-chat-panel">
-      <div className="boa-card-header">
+      <div className="boa-card-header" style={{ flexShrink: 0 }}>
         <div>
           <h2 className="boa-card-title">
             Chat with {detail.requestType === 'GROUP' ? 'your class' : 'your pairing'}
@@ -132,30 +132,32 @@ export function MentoringPairChatPanel({
         </div>
       </div>
 
-      {messagesQuery.isLoading ? (
-        <LoadingSkeleton rows={5} height={28} />
-      ) : messagesQuery.isError ? (
-        <ErrorState
-          message={getErrorMessage(messagesQuery.error, 'Unable to load chat history.')}
-          onRetry={() => void messagesQuery.refetch()}
-        />
-      ) : messages.length === 0 ? (
-        <EmptyState
-          title="No messages yet"
-          description="Start the conversation with your mentoring pairing. You can send messages, attach files, and share resources."
-        />
-      ) : (
-        <MessageThreadView
-          messages={messages}
-          currentUserId={user?.id}
-          isCoachOrAdmin={detail.currentUserRole === 'MENTOR'}
-          onReplyMessage={(msg) => setReplyToMessage(msg)}
-          onTogglePinMessage={(msg) => void handleTogglePin(msg)}
-          downloadAttachmentFn={(attId, fName) =>
-            mentoringPairingApi.downloadConversationAttachment(attId, fName)
-          }
-        />
-      )}
+      <div style={{ flex: 1, minHeight: 0, position: 'relative', overflow: 'hidden' }}>
+        {messagesQuery.isLoading ? (
+          <LoadingSkeleton rows={5} height={28} />
+        ) : messagesQuery.isError ? (
+          <ErrorState
+            message={getErrorMessage(messagesQuery.error, 'Unable to load chat history.')}
+            onRetry={() => void messagesQuery.refetch()}
+          />
+        ) : messages.length === 0 ? (
+          <EmptyState
+            title="No messages yet"
+            description="Start the conversation with your mentoring pairing. You can send messages, attach files, and share resources."
+          />
+        ) : (
+          <MessageThreadView
+            messages={messages}
+            currentUserId={user?.id}
+            isCoachOrAdmin={detail.currentUserRole === 'MENTOR'}
+            onReplyMessage={(msg) => setReplyToMessage(msg)}
+            onTogglePinMessage={(msg) => void handleTogglePin(msg)}
+            downloadAttachmentFn={(attId, fName) =>
+              mentoringPairingApi.downloadConversationAttachment(attId, fName)
+            }
+          />
+        )}
+      </div>
 
       {conversationId && (
         <MessageComposer
@@ -180,7 +182,7 @@ export function MentoringPairChatPanel({
       )}
 
       {!canSendMessages && (
-        <p className="boa-muted" style={{ marginTop: '0.5rem', marginBottom: 0, fontSize: '0.82rem' }}>
+        <p className="boa-muted" style={{ marginTop: '0.5rem', marginBottom: 0, fontSize: '0.82rem', flexShrink: 0 }}>
           {detail.status === 'PAUSED'
             ? 'This relationship is paused. You can still read chat history, but sending messages is unavailable.'
             : 'This relationship is closed or your membership is inactive. Chat history remains available to read.'}
@@ -188,7 +190,7 @@ export function MentoringPairChatPanel({
       )}
 
       {showPairingLink && (
-        <div style={{ marginTop: '0.75rem' }}>
+        <div style={{ marginTop: '0.75rem', flexShrink: 0 }}>
           <Link to={`/mentoring/pairing/${relationshipId}`} className="apid-btn apid-btn-outline apid-btn-sm">
             Back to pairing details
           </Link>

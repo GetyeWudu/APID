@@ -130,6 +130,7 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({
         borderTop: '1px solid var(--border, #e2e8f0)',
         background: 'var(--surface, #ffffff)',
         padding: '0.75rem 1rem',
+        flexShrink: 0,
       }}
     >
       {/* Error alert */}

@@ -1,10 +1,429 @@
-.mentoring-reassignment-card {
+/* ═══════════════════════════════════════════════════
+   Match Request Cards
+═══════════════════════════════════════════════════ */
+.hr-match-cards {
   display: grid;
   gap: 0.75rem;
 }
 
+.hr-match-card {
+  display: grid;
+  gap: 0.75rem;
+  padding: 1rem 1.1rem;
+  border: 1px solid var(--border, #E5E7EB);
+  border-radius: 12px;
+  background: var(--surface, #fff);
+  transition: box-shadow 0.15s ease;
+}
+
+.hr-match-card:hover {
+  box-shadow: 0 2px 10px rgba(197, 155, 39, 0.10);
+}
+
+.hr-match-card__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.hr-match-card__trainee {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+
+.hr-match-card__name {
+  font-weight: 700;
+  font-size: 0.95rem;
+  color: var(--text, #1A1C1E);
+}
+
+.hr-match-card__meta {
+  font-size: 0.77rem;
+  color: var(--muted, #5C626A);
+}
+
+.hr-match-card__badges {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  flex-wrap: wrap;
+  flex-shrink: 0;
+}
+
+.hr-match-card__message {
+  font-size: 0.83rem;
+  color: var(--text, #1A1C1E);
+  padding: 0.5rem 0.75rem;
+  background: var(--bg, #F7F7F7);
+  border-left: 3px solid var(--mentoring-accent, #C59B27);
+  border-radius: 0 6px 6px 0;
+  line-height: 1.5;
+}
+
+.hr-match-card__message-label {
+  font-weight: 600;
+  margin-right: 0.4rem;
+  color: var(--mentoring-accent, #C59B27);
+}
+
+.hr-match-card__controls {
+  display: grid;
+  gap: 0.5rem;
+}
+
+.hr-match-card__select-row {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.hr-match-card__select {
+  flex: 1;
+  min-width: 180px;
+}
+
+/* ═══════════════════════════════════════════════════
+   AI Suggest Button
+═══════════════════════════════════════════════════ */
+.hr-ai-suggest-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0 0.75rem;
+  height: 32px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  border-radius: 8px;
+  border: 1.5px solid var(--mentoring-accent, #C59B27);
+  color: var(--mentoring-accent, #C59B27);
+  background: transparent;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.14s, color 0.14s, box-shadow 0.14s;
+}
+
+.hr-ai-suggest-btn:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--mentoring-accent, #C59B27) 10%, transparent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--mentoring-accent, #C59B27) 15%, transparent);
+}
+
+.hr-ai-suggest-btn--active {
+  background: color-mix(in srgb, var(--mentoring-accent, #C59B27) 12%, transparent);
+}
+
+.hr-ai-suggest-btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+/* ═══════════════════════════════════════════════════
+   Spinner
+═══════════════════════════════════════════════════ */
+@keyframes hr-spin {
+  to { transform: rotate(360deg); }
+}
+
+.hr-ai-spinner {
+  display: inline-block;
+  width: 13px;
+  height: 13px;
+  border: 2px solid currentColor;
+  border-top-color: transparent;
+  border-radius: 50%;
+  animation: hr-spin 0.7s linear infinite;
+  flex-shrink: 0;
+}
+
+.hr-ai-spinner--lg {
+  width: 20px;
+  height: 20px;
+  border-width: 2.5px;
+}
+
+/* ═══════════════════════════════════════════════════
+   AI Recommendations Panel
+═══════════════════════════════════════════════════ */
+.hr-ai-panel {
+  display: grid;
+  gap: 0.65rem;
+  padding: 0.9rem 1rem;
+  border: 1.5px solid color-mix(in srgb, var(--mentoring-accent, #C59B27) 30%, transparent);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--mentoring-accent, #C59B27) 4%, var(--surface, #fff));
+  animation: hr-ai-fadein 0.18s ease;
+}
+
+@keyframes hr-ai-fadein {
+  from { opacity: 0; transform: translateY(-4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.hr-ai-panel__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.hr-ai-panel__title {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: var(--mentoring-accent, #C59B27);
+}
+
+.hr-ai-panel__close {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--muted, #5C626A);
+  cursor: pointer;
+  transition: background 0.12s, color 0.12s;
+  flex-shrink: 0;
+}
+
+.hr-ai-panel__close:hover {
+  background: var(--border, #E5E7EB);
+  color: var(--text, #1A1C1E);
+}
+
+.hr-ai-panel__loading {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  font-size: 0.83rem;
+  color: var(--muted, #5C626A);
+  padding: 0.5rem 0;
+}
+
+.hr-ai-panel__error {
+  font-size: 0.82rem;
+  color: #c0392b;
+  padding: 0.5rem 0.75rem;
+  border-radius: 6px;
+  background: #fff5f5;
+  border: 1px solid #f5c6c6;
+}
+
+.hr-ai-panel__empty {
+  font-size: 0.82rem;
+  color: var(--muted, #5C626A);
+  margin: 0;
+  padding: 0.3rem 0;
+}
+
+/* ═══════════════════════════════════════════════════
+   Recommendation Rows
+═══════════════════════════════════════════════════ */
+.hr-ai-recs {
+  display: grid;
+  gap: 0.5rem;
+}
+
+.hr-ai-rec {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+  padding: 0.7rem 0.85rem;
+  border-radius: 8px;
+  border: 1px solid var(--border, #E5E7EB);
+  background: var(--surface, #fff);
+  transition: border-color 0.13s, box-shadow 0.13s;
+}
+
+.hr-ai-rec:hover {
+  border-color: color-mix(in srgb, var(--mentoring-accent, #C59B27) 40%, transparent);
+}
+
+.hr-ai-rec--selected {
+  border-color: var(--mentoring-accent, #C59B27);
+  background: color-mix(in srgb, var(--mentoring-accent, #C59B27) 6%, var(--surface, #fff));
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--mentoring-accent, #C59B27) 20%, transparent);
+}
+
+.hr-ai-rec__rank {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--mentoring-accent, #C59B27) 14%, transparent);
+  color: var(--mentoring-accent, #C59B27);
+  font-size: 0.72rem;
+  font-weight: 800;
+  margin-top: 1px;
+}
+
+.hr-ai-rec__body {
+  flex: 1;
+  min-width: 0;
+  display: grid;
+  gap: 0.3rem;
+}
+
+.hr-ai-rec__top {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  flex-wrap: wrap;
+}
+
+.hr-ai-rec__name {
+  font-weight: 700;
+  font-size: 0.88rem;
+  color: var(--text, #1A1C1E);
+}
+
+.hr-ai-rec__stars {
+  display: flex;
+  align-items: center;
+  gap: 1px;
+  color: #f59e0b;
+}
+
+.hr-ai-rec__rating {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--muted, #5C626A);
+}
+
+.hr-ai-rec__reason {
+  font-size: 0.8rem;
+  color: var(--muted, #5C626A);
+  font-style: italic;
+  line-height: 1.5;
+  margin: 0;
+}
+
+.hr-ai-rec__meta {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  flex-wrap: wrap;
+  margin-top: 0.1rem;
+}
+
+.hr-ai-rec__badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.15rem 0.5rem;
+  border-radius: 20px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  background: color-mix(in srgb, var(--mentoring-accent, #C59B27) 12%, transparent);
+  color: var(--mentoring-accent, #C59B27);
+}
+
+.hr-ai-rec__badge--dept {
+  background: color-mix(in srgb, #6c8ebf 12%, transparent);
+  color: #3a5a8a;
+}
+
+.hr-ai-rec__capacity {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  font-size: 0.72rem;
+  color: var(--muted, #5C626A);
+  font-weight: 500;
+}
+
+.hr-ai-rec__select {
+  flex-shrink: 0;
+  align-self: flex-start;
+  margin-top: 2px;
+  font-size: 0.78rem;
+  padding: 0.25rem 0.65rem;
+  border: 1.5px solid var(--border, #E5E7EB);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text, #1A1C1E);
+  cursor: pointer;
+  transition: border-color 0.12s, background 0.12s;
+}
+
+.hr-ai-rec__select:hover {
+  border-color: var(--mentoring-accent, #C59B27);
+  color: var(--mentoring-accent, #C59B27);
+}
+
+.hr-ai-rec__select--chosen {
+  border-color: var(--mentoring-accent, #C59B27);
+  background: var(--mentoring-accent, #C59B27);
+  color: #fff;
+}
+
+.hr-ai-rec__select--chosen:hover {
+  background: color-mix(in srgb, var(--mentoring-accent, #C59B27) 85%, #000);
+  color: #fff;
+}
+
+/* ═══════════════════════════════════════════════════
+   Responsive
+═══════════════════════════════════════════════════ */
+@media (max-width: 600px) {
+  .hr-match-card__select-row {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .hr-match-card__select {
+    min-width: 0;
+  }
+
+  .hr-ai-suggest-btn {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .hr-ai-rec {
+    flex-wrap: wrap;
+  }
+
+  .hr-ai-rec__select {
+    width: 100%;
+    text-align: center;
+  }
+}
+
+/* ═══════════════════════════════════════════════════
+   Reassignment Cards
+═══════════════════════════════════════════════════ */
+.mentoring-reassignment-card {
+  display: grid;
+  gap: 1rem;
+  padding: 1.25rem 1.4rem;
+  border: 1px solid var(--border, #E5E7EB);
+  border-radius: 16px;
+  background: var(--surface, #fff);
+  box-shadow: 0 1px 4px rgba(13, 43, 43, 0.05);
+  transition: box-shadow 0.15s ease;
+}
+
+.mentoring-reassignment-card:hover {
+  box-shadow: 0 4px 16px rgba(197, 155, 39, 0.10);
+}
+
 .mentoring-reassignment-card > .boa-card-header {
   margin-bottom: 0;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
 }
 
 .mentoring-reassignment-summary {
@@ -14,17 +433,27 @@
 
 .mentoring-reassignment-summary strong {
   display: block;
+  font-size: 0.95rem;
+  font-weight: 750;
+  color: var(--text, #1A1C1E);
   line-height: 1.45;
   overflow-wrap: anywhere;
 }
 
+.mentoring-reassignment-summary .boa-card-subtitle {
+  margin-top: 0.25rem;
+  font-size: 0.8rem;
+  color: var(--muted, #5C626A);
+}
+
 .mentoring-reassignment-summary .boa-muted {
   margin-top: 0.4rem;
+  font-size: 0.78rem;
 }
 
 .mentoring-reassignment-form {
   display: grid;
-  gap: 0.9rem;
+  gap: 1rem;
   min-width: 0;
 }
 
@@ -32,9 +461,9 @@
   display: grid;
   gap: 0.4rem;
   min-width: 0;
-  color: var(--text);
-  font-size: 0.84rem;
-  font-weight: 600;
+  color: var(--text, #1A1C1E);
+  font-size: 0.82rem;
+  font-weight: 700;
 }
 
 .mentoring-reassignment-field .apid-input {
@@ -42,6 +471,17 @@
   width: 100%;
   min-width: 0;
   font-weight: 400;
+  border-radius: 9px;
+  border: 1px solid var(--border, #E5E7EB);
+  padding: 0.6rem 0.75rem;
+  font-size: 0.82rem;
+  transition: border-color 0.14s ease, box-shadow 0.14s ease;
+}
+
+.mentoring-reassignment-field .apid-input:focus {
+  border-color: var(--mentoring-accent, #C59B27);
+  outline: none;
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--mentoring-accent, #C59B27) 15%, transparent);
 }
 
 .mentoring-reassignment-field textarea {
@@ -52,31 +492,36 @@
   display: grid;
   gap: 0.55rem;
   padding: 0.85rem 1rem;
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  background: var(--surface);
+  border: 1px solid var(--border, #E5E7EB);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--mentoring-accent, #C59B27) 3%, #f8fbfa);
 }
 
 .mentoring-reassignment-override > strong {
   font-size: 0.84rem;
+  color: var(--text, #1A1C1E);
 }
 
 .mentoring-reassignment-override > p {
-  font-size: 0.82rem;
+  font-size: 0.8rem;
+  color: var(--muted, #5C626A);
+  line-height: 1.5;
+  margin: 0;
 }
 
 .mentoring-reassignment-checkbox {
   display: flex;
   align-items: center;
   gap: 0.5rem;
-  font-size: 0.84rem;
-  font-weight: 600;
+  font-size: 0.82rem;
+  font-weight: 650;
+  color: var(--text, #1A1C1E);
 }
 
 .mentoring-reassignment-actions {
   display: flex;
   justify-content: flex-end;
-  padding-top: 0.15rem;
+  padding-top: 0.25rem;
 }
 
 @media (max-width: 640px) {

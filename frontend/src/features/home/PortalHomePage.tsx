@@ -10,6 +10,9 @@ import {
   ShieldAlert,
   ShieldCheck,
   Users,
+  Zap,
+  TrendingUp,
+  Star,
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../../app/AuthContext';
@@ -124,100 +127,106 @@ export function PortalHomePage() {
 
   return (
     <div className="boa-portal-home">
-      {/* Executive Welcome & Identity Context */}
-      <section
-        className="apid-card"
-        style={{
-          background: 'linear-gradient(135deg, #ffffff 0%, #f8fafc 100%)',
-          borderLeft: '4px solid var(--brand-gold, #ca8a04)',
-          borderRadius: '12px',
-          padding: '1.5rem',
-          boxShadow: '0 2px 10px rgba(0, 0, 0, 0.03)',
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-          gap: '1.25rem',
-          flexWrap: 'wrap',
-        }}
-      >
-        <div style={{ display: 'flex', alignItems: 'center', gap: '1.25rem', flexWrap: 'wrap' }}>
-          <AvatarBadge name={linkedEmployee?.fullName ?? user.username} size={56} />
+
+      {/* ═══════════════════════════════════════════════════
+          1. EXECUTIVE HERO BANNER
+      ═══════════════════════════════════════════════════ */}
+      <section className="apid-card boa-home-hero">
+        {/* Left — identity */}
+        <div className="boa-home-hero-main">
+          <AvatarBadge name={linkedEmployee?.fullName ?? user.username} size={64} />
           <div>
-            <div
-              style={{
-                fontSize: '0.72rem',
-                fontWeight: 800,
-                textTransform: 'uppercase',
-                letterSpacing: '0.08em',
-                color: 'var(--brand-gold, #ca8a04)',
-                marginBottom: '0.2rem',
-              }}
-            >
+            <div className="boa-home-kicker">
+              <Star size={11} style={{ color: '#C59B27', flexShrink: 0 }} />
               Bank of Abyssinia · Personal Intelligence &amp; Development
             </div>
-            <h1
-              style={{
-                margin: '0 0 0.35rem 0',
-                fontSize: '1.45rem',
-                fontWeight: 800,
-                color: 'var(--text-primary, #0f172a)',
-                letterSpacing: '-0.02em',
-              }}
-            >
-              {greeting}, {linkedEmployee?.fullName ?? user.username}
+            <h1 className="boa-home-title">
+              {greeting},{' '}
+              <span className="boa-home-title-accent">
+                {linkedEmployee?.fullName ?? user.username}
+              </span>
             </h1>
+
             {canLoadIdentity && identityQuery.isLoading ? (
-              <div style={{ marginTop: '0.4rem', maxWidth: 320 }}>
+              <div style={{ marginTop: '0.5rem', maxWidth: 340 }}>
                 <LoadingSkeleton rows={1} height={16} />
               </div>
             ) : linkedEmployee ? (
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem 1.25rem', fontSize: '0.84rem', color: 'var(--muted, #475569)' }}>
-                <span>
-                  <strong>Emp #{linkedEmployee.employeeNumber}</strong> · {linkedEmployee.position || linkedEmployee.job || 'Staff Member'}
+              <div className="boa-home-meta-chips">
+                <span className="boa-home-meta-chip">
+                  <strong>Emp #{linkedEmployee.employeeNumber}</strong>
                 </span>
-                <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.3rem' }}>
-                  <Building2 size={13} style={{ color: 'var(--brand-gold, #ca8a04)' }} />
-                  {linkedEmployee.departmentName || 'Unassigned Department'}
-                  {linkedEmployee.managerFullName ? ` · Reporting to: ${linkedEmployee.managerFullName}` : ''}
+                <span className="boa-home-meta-chip">
+                  <Building2 size={12} style={{ color: '#C59B27', flexShrink: 0 }} />
+                  {linkedEmployee.departmentName || 'Unassigned'}
                 </span>
+                {(linkedEmployee.position || linkedEmployee.job) && (
+                  <span className="boa-home-meta-chip">
+                    {linkedEmployee.position || linkedEmployee.job}
+                  </span>
+                )}
+                {linkedEmployee.managerFullName && (
+                  <span className="boa-home-meta-chip">
+                    Reporting to: {linkedEmployee.managerFullName}
+                  </span>
+                )}
               </div>
             ) : (
-              <div style={{ fontSize: '0.84rem', color: 'var(--muted, #475569)' }}>
-                Account: <strong>{user.username}</strong> · Roles: {user.roles.join(', ') || 'None'}
+              <div className="boa-home-meta-chips">
+                <span className="boa-home-meta-chip">
+                  <strong>{user.username}</strong>
+                </span>
+                <span className="boa-home-meta-chip">
+                  {user.roles.join(', ') || 'Staff'}
+                </span>
               </div>
             )}
           </div>
         </div>
 
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem', alignItems: 'center' }}>
-          {activeQuarter && (
-            <StatusPill
-              label={`${activeQuarter.label} (${activeQuarter.startDate} – ${activeQuarter.endDate})`}
-              tone="info"
-              icon={<Calendar size={12} />}
-            />
-          )}
-          {directReports.length > 0 && (
-            <StatusPill
-              label={`${directReports.length} Direct Reports`}
-              tone="ok"
-              icon={<Users size={12} />}
-            />
-          )}
-          {activeSkillsCount > 0 && (
-            <StatusPill label={`${activeSkillsCount} Available Skills`} tone="neutral" />
-          )}
+        {/* Right — session context glass card */}
+        <div className="boa-home-hero-right">
+          <div className="boa-home-hero-right-header">
+            <span className="boa-home-hero-right-title">Session Context</span>
+            <ShieldCheck size={15} color="#C59B27" />
+          </div>
+          <div className="boa-home-hero-badges">
+            {activeQuarter && (
+              <StatusPill
+                label={`${activeQuarter.label} (${activeQuarter.startDate} – ${activeQuarter.endDate})`}
+                tone="info"
+                icon={<Calendar size={12} />}
+              />
+            )}
+            {directReports.length > 0 && (
+              <StatusPill
+                label={`${directReports.length} Direct Reports`}
+                tone="ok"
+                icon={<Users size={12} />}
+              />
+            )}
+            {activeSkillsCount > 0 && (
+              <StatusPill label={`${activeSkillsCount} Available Skills`} tone="neutral" />
+            )}
+            {!activeQuarter && !directReports.length && !activeSkillsCount && (
+              <StatusPill label="Workspace Active" tone="ok" icon={<Zap size={12} />} />
+            )}
+          </div>
         </div>
       </section>
 
-      {/* Friendly warning if employee account has no HR record linked yet */}
+      {/* ═══════════════════════════════════════════════════
+          2. UNLINKED NOTICE (data-testid preserved)
+      ═══════════════════════════════════════════════════ */}
       {canLoadIdentity && !identityQuery.isLoading && !identityQuery.isError && !linkedEmployee && (
         <div
           className="apid-card"
           data-testid="home-unlinked-notice"
           style={{
-            borderColor: '#fcd34d',
-            background: '#fffbeb',
+            borderColor: 'rgba(197, 155, 39, 0.35)',
+            background: 'rgba(197, 155, 39, 0.05)',
+            borderRadius: '16px',
+            padding: '1.25rem 1.5rem',
             display: 'flex',
             justifyContent: 'space-between',
             alignItems: 'center',
@@ -225,30 +234,122 @@ export function PortalHomePage() {
             flexWrap: 'wrap',
           }}
         >
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem' }}>
-            <ShieldAlert size={20} color="#b45309" />
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.85rem' }}>
+            <div
+              style={{
+                width: 38,
+                height: 38,
+                borderRadius: '10px',
+                background: 'rgba(197, 155, 39, 0.12)',
+                display: 'grid',
+                placeItems: 'center',
+                flexShrink: 0,
+              }}
+            >
+              <ShieldAlert size={20} color="#C59B27" />
+            </div>
             <div>
-              <strong style={{ fontSize: '0.9rem' }}>Employee Profile Not Linked Yet</strong>
-              <p style={{ fontSize: '0.82rem', marginTop: '0.1rem' }}>
-                Your user account is active, but has not been linked to an HR employee record under Employees &amp; Org.
+              <strong style={{ fontSize: '0.92rem', color: '#1A1C1E' }}>
+                Employee Profile Not Linked Yet
+              </strong>
+              <p style={{ fontSize: '0.84rem', marginTop: '0.15rem', color: '#5C626A', margin: 0 }}>
+                Your user account is active, but has not been linked to an HR employee record under
+                Employees &amp; Org.
               </p>
             </div>
           </div>
           {hasPermission('HIERARCHY_MANAGE') && (
-            <Link to="/admin?tab=organization" className="apid-btn apid-btn-primary apid-btn-sm">
+            <Link
+              to="/admin?tab=organization"
+              className="apid-btn apid-btn-primary apid-btn-sm"
+              style={{
+                background: 'linear-gradient(135deg, #D4AF37 0%, #C59B27 100%)',
+                color: '#1A1C1E',
+                fontWeight: 750,
+                border: 'none',
+                boxShadow: '0 2px 8px rgba(197, 155, 39, 0.25)',
+              }}
+            >
               Link Profile in Employees &amp; Org
             </Link>
           )}
         </div>
       )}
 
-      {/* Authorized Module Cards Grid */}
-      <section aria-label="Available Portal Modules">
-        <div style={{ marginBottom: '0.75rem', display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: '1rem', flexWrap: 'wrap' }}>
+      {/* ═══════════════════════════════════════════════════
+          3. TELEMETRY METRICS ROW
+      ═══════════════════════════════════════════════════ */}
+      <div className="boa-home-telemetry-grid">
+        <div className="boa-home-telemetry-card">
+          <div className="boa-home-telemetry-icon">
+            <ClipboardCheck size={20} />
+          </div>
           <div>
-            <h2 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 700 }}>Choose a Module</h2>
-            <p style={{ margin: '0.2rem 0 0', fontSize: '0.84rem', color: 'var(--muted)' }}>
-              Open a module to access your personal workspace, team responsibilities, and any administrative tools assigned to your role.
+            <div className="boa-home-telemetry-val">{authorizedModules.length}</div>
+            <div className="boa-home-telemetry-label">Authorized Modules</div>
+          </div>
+        </div>
+
+        {directReports.length > 0 && (
+          <div className="boa-home-telemetry-card">
+            <div className="boa-home-telemetry-icon">
+              <Users size={20} />
+            </div>
+            <div>
+              <div className="boa-home-telemetry-val">{directReports.length}</div>
+              <div className="boa-home-telemetry-label">People I Coach</div>
+            </div>
+          </div>
+        )}
+
+        {activeSkillsCount > 0 && (
+          <div className="boa-home-telemetry-card">
+            <div className="boa-home-telemetry-icon">
+              <Award size={20} />
+            </div>
+            <div>
+              <div className="boa-home-telemetry-val">{activeSkillsCount}</div>
+              <div className="boa-home-telemetry-label">Available Skills</div>
+            </div>
+          </div>
+        )}
+
+        {activeQuarter ? (
+          <div className="boa-home-telemetry-card">
+            <div className="boa-home-telemetry-icon">
+              <Calendar size={20} />
+            </div>
+            <div>
+              <div className="boa-home-telemetry-val" style={{ fontSize: '1rem' }}>
+                {activeQuarter.label}
+              </div>
+              <div className="boa-home-telemetry-label">Active Quarter</div>
+            </div>
+          </div>
+        ) : (
+          <div className="boa-home-telemetry-card">
+            <div className="boa-home-telemetry-icon">
+              <TrendingUp size={20} />
+            </div>
+            <div>
+              <div className="boa-home-telemetry-val">APID</div>
+              <div className="boa-home-telemetry-label">Your Growth Portal</div>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* ═══════════════════════════════════════════════════
+          4. MODULE CARDS
+      ═══════════════════════════════════════════════════ */}
+      <section aria-label="Available Portal Modules">
+        <div className="boa-home-section-header">
+          <div>
+            <div className="boa-home-section-kicker">Your Portal Modules</div>
+            <h2 className="boa-home-section-title">Choose a Module</h2>
+            <p className="boa-home-section-desc">
+              Open a module to access your personal workspace, team responsibilities, and any
+              administrative tools assigned to your role.
             </p>
           </div>
         </div>
@@ -267,26 +368,10 @@ export function PortalHomePage() {
                 to={mod.route}
                 className={`boa-module-card apid-card boa-module-card--${mod.key}`}
                 data-testid={`module-card-${mod.key}`}
-                style={{
-                  borderRadius: '12px',
-                  padding: '1.5rem',
-                  display: 'flex',
-                  flexDirection: 'column',
-                  justifyContent: 'space-between',
-                  boxShadow: '0 2px 10px rgba(0, 0, 0, 0.03)',
-                  transition: 'all 0.2s ease-in-out',
-                }}
               >
                 <div>
-                  <div className="boa-module-card-top" style={{ marginBottom: '1rem' }}>
-                    <div
-                      className={`boa-module-icon boa-module-icon--${mod.key}`}
-                      style={{
-                        width: 48,
-                        height: 48,
-                        borderRadius: '12px',
-                      }}
-                    >
+                  <div className="boa-module-card-top">
+                    <div className={`boa-module-icon boa-module-icon--${mod.key}`}>
                       {moduleIcon(mod.key)}
                     </div>
                     {hasAdminSide && (
@@ -298,46 +383,20 @@ export function PortalHomePage() {
                   </div>
 
                   <div>
-                    <h3 className="boa-module-title" style={{ fontSize: '1.25rem', fontWeight: 800 }}>
-                      {mod.title}
-                    </h3>
-                    <p className="boa-module-tagline" style={{ fontSize: '0.86rem', lineHeight: 1.5, marginTop: '0.35rem' }}>
-                      {mod.tagline}
-                    </p>
+                    <h3 className="boa-module-title">{mod.title}</h3>
+                    <p className="boa-module-tagline">{mod.tagline}</p>
                   </div>
 
-                  <div className="boa-module-chips" style={{ marginTop: '1.25rem', display: 'flex', flexWrap: 'wrap', gap: '0.4rem' }}>
+                  <div className="boa-module-chips">
                     {features.map((feat) => (
-                      <span
-                        key={feat}
-                        className="boa-module-chip"
-                        style={{
-                          fontSize: '0.78rem',
-                          fontWeight: 600,
-                          padding: '0.25rem 0.6rem',
-                          borderRadius: '6px',
-                        }}
-                      >
+                      <span key={feat} className="boa-module-chip">
                         {feat}
                       </span>
                     ))}
                   </div>
                 </div>
 
-                <div
-                  className="boa-module-cta"
-                  style={{
-                    marginTop: '1.5rem',
-                    paddingTop: '1rem',
-                    borderTop: '1px solid var(--border, #f1f5f9)',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'space-between',
-                    fontWeight: 700,
-                    fontSize: '0.9rem',
-                    color: 'var(--brand-gold, #ca8a04)',
-                  }}
-                >
+                <div className="boa-module-cta">
                   <span>Enter {mod.shortLabel}</span>
                   <ArrowRight size={17} />
                 </div>
@@ -347,33 +406,63 @@ export function PortalHomePage() {
         </div>
       </section>
 
-      {/* About APID Policy Summary */}
-      <section className="boa-grid-2" aria-label="About APID">
-        <div className="apid-card">
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.45rem' }}>
-            <BookOpen size={17} color="var(--brand)" />
-            <h3 className="boa-card-title">How Performance Coaching Works</h3>
+      {/* ═══════════════════════════════════════════════════
+          5. GOVERNANCE / ABOUT APID BENTO
+      ═══════════════════════════════════════════════════ */}
+      <section className="boa-home-governance-grid" aria-label="About APID">
+        {/* Coaching governance card */}
+        <div className="boa-home-gov-card">
+          <div>
+            <div className="boa-home-gov-header">
+              <div className="boa-home-gov-icon">
+                <BookOpen size={20} />
+              </div>
+              <h3 className="boa-home-gov-title">How Performance Coaching Works</h3>
+            </div>
+            <p className="boa-home-gov-desc">
+              Appraisal results are reviewed each cycle. Staff scoring below{' '}
+              <strong>Rounded Grade {publicConfig?.mandatoryCutoffRounded ?? 3}</strong> receive a
+              mandatory coaching plan with their reporting supervisor or assigned coach, while
+              managers can submit skill-development coaching requests at any time.
+            </p>
           </div>
-          <p style={{ fontSize: '0.84rem', color: 'var(--muted)', lineHeight: 1.55 }}>
-            Appraisal results are reviewed each cycle. Staff scoring below{' '}
-            <strong>Rounded Grade {publicConfig?.mandatoryCutoffRounded ?? 3}</strong> receive a mandatory coaching
-            plan with their reporting supervisor or assigned coach, while managers can submit skill-development coaching requests at any time.
-          </p>
+          <div className="boa-home-gov-tags">
+            <span className="boa-home-gov-tag">Mandatory Coaching</span>
+            <span className="boa-home-gov-tag">PMS Appraisal</span>
+            <span className="boa-home-gov-tag">Skill Development</span>
+          </div>
         </div>
 
-        <div className="apid-card">
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.45rem' }}>
-            <Award size={17} color="var(--brand)" />
-            <h3 className="boa-card-title">How Mentoring Works</h3>
+        {/* Mentoring governance card */}
+        <div className="boa-home-gov-card">
+          <div>
+            <div className="boa-home-gov-header">
+              <div
+                className="boa-home-gov-icon"
+                style={{
+                  background: 'rgba(212, 175, 55, 0.12)',
+                  borderColor: 'rgba(212, 175, 55, 0.25)',
+                  color: '#D4AF37',
+                }}
+              >
+                <Award size={20} />
+              </div>
+              <h3 className="boa-home-gov-title">How Mentoring Works</h3>
+            </div>
+            <p className="boa-home-gov-desc">
+              Employees can learn from a mentor and request mentoring sessions. Approved mentors can
+              also support trainees while continuing to learn from their own mentors. HR reviews
+              mentor applications and matches trainees while respecting mentor capacity limits.
+            </p>
           </div>
-          <p style={{ fontSize: '0.84rem', color: 'var(--muted)', lineHeight: 1.55 }}>
-            Employees can learn from a mentor and request mentoring sessions. Approved mentors can also support trainees
-            while continuing to learn from their own mentors.
-            HR reviews mentor applications and matches trainees while respecting mentor capacity limits.
-          </p>
+          <div className="boa-home-gov-tags">
+            <span className="boa-home-gov-tag">Mentor Matching</span>
+            <span className="boa-home-gov-tag">HR Governed</span>
+            <span className="boa-home-gov-tag">Session Tracking</span>
+          </div>
         </div>
       </section>
+
     </div>
   );
 }
-

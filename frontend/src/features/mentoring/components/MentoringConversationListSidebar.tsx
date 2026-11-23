@@ -140,15 +140,16 @@ export const MentoringConversationListSidebar: React.FC<MentoringConversationLis
         display: 'flex',
         flexDirection: 'column',
         height: '100%',
-        minHeight: '620px',
+        minHeight: 0,
         padding: '0.85rem',
         background: 'var(--surface, #ffffff)',
         borderRight: '1px solid var(--border-light, #e2e8f0)',
         boxShadow: 'none',
+        overflow: 'hidden',
       }}
     >
       {/* Top Header & Actions */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.75rem' }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.75rem', flexShrink: 0 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
           <GraduationCap size={20} color="var(--primary, #0f172a)" />
           <h3 style={{ margin: 0, fontSize: '1rem', fontWeight: 700, color: 'var(--text-main, #0f172a)' }}>
@@ -190,6 +191,7 @@ export const MentoringConversationListSidebar: React.FC<MentoringConversationLis
           padding: '0.25rem',
           borderRadius: '8px',
           marginBottom: '0.75rem',
+          flexShrink: 0,
         }}
       >
         <button
@@ -318,7 +320,7 @@ export const MentoringConversationListSidebar: React.FC<MentoringConversationLis
       </div>
 
       {/* Search Input */}
-      <div style={{ position: 'relative', marginBottom: '0.75rem' }}>
+      <div style={{ position: 'relative', marginBottom: '0.75rem', flexShrink: 0 }}>
         <Search
           size={14}
           style={{

@@ -1,12 +1,13 @@
 import { useState } from 'react';
 import axios from 'axios';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Link, Link2 } from 'lucide-react';
+import { Link, Link2, Sparkles, X, Star, Users, Zap, ChevronDown, ChevronUp } from 'lucide-react';
 import type { ApiErrorPayload } from '../../../shared/api/apiClient';
 import { EmptyState, StatusPill, useToast } from '../../../shared/components/ui';
 import type { MentoringMatchRequest } from '../api/mentoringMatchApi';
 import { mentoringMatchApi } from '../api/mentoringMatchApi';
 import type { TrainerRosterItem } from '../api/mentoringTrainerApi';
+import { mentorDirectoryApi, type MentorRecommendation } from '../api/mentorDirectoryApi';
 import './HrMatchingTab.css';
 
 export function HrMatchingTab({
@@ -19,6 +20,13 @@ export function HrMatchingTab({
   const [selectedTrainers, setSelectedTrainers] = useState<Record<number, string>>({});
   const [capacityOverrides, setCapacityOverrides] = useState<Record<number, boolean>>({});
   const [overrideReasons, setOverrideReasons] = useState<Record<number, string>>({});
+
+  // AI Recommendation state
+  const [aiRecs, setAiRecs] = useState<Record<number, MentorRecommendation[]>>({});
+  const [aiOpen, setAiOpen] = useState<Record<number, boolean>>({});
+  const [aiLoading, setAiLoading] = useState<number | null>(null);
+  const [aiError, setAiError] = useState<Record<number, string>>({});
+
   const [selectedReassignmentTrainers, setSelectedReassignmentTrainers] = useState<Record<number, string>>({});
   const [reassignmentReasons, setReassignmentReasons] = useState<Record<number, string>>({});
   const [reassignmentCapacityOverrides, setReassignmentCapacityOverrides] = useState<Record<number, boolean>>({});
@@ -26,6 +34,25 @@ export function HrMatchingTab({
   const [reassignmentSkillOverrideReasons, setReassignmentSkillOverrideReasons] = useState<Record<number, string>>({});
   const queryClient = useQueryClient();
   const { pushToast } = useToast();
+
+  const fetchAiRecs = async (requestId: number, skillName: string | null) => {
+    const learningGoal = skillName ?? 'mentoring';
+    setAiLoading(requestId);
+    setAiError((prev) => { const n = { ...prev }; delete n[requestId]; return n; });
+    try {
+      const recs = await mentorDirectoryApi.recommendMentors(learningGoal);
+      setAiRecs((prev) => ({ ...prev, [requestId]: recs }));
+      setAiOpen((prev) => ({ ...prev, [requestId]: true }));
+    } catch (err) {
+      const msg = axios.isAxiosError<ApiErrorPayload>(err)
+        ? (err.response?.data?.message ?? err.message)
+        : 'AI recommendation failed.';
+      setAiError((prev) => ({ ...prev, [requestId]: msg }));
+    } finally {
+      setAiLoading(null);
+    }
+  };
+
   const reassignmentQueue = useQuery({
     queryKey: ['mentoring', 'hr-reassignment-queue'],
     queryFn: mentoringMatchApi.listReassignmentQueue,
@@ -105,118 +132,250 @@ export function HrMatchingTab({
         {openRequests.length === 0 ? (
           <EmptyState title="No open HR matching requests" description="New trainee requests will appear here." />
         ) : (
-          <div className="apid-table-wrap">
-          <table className="apid-table">
-            <thead>
-              <tr>
-                <th>Trainee</th>
-                <th>Requested skill</th>
-                <th>Message</th>
-                <th>Status</th>
-                <th>Eligible trainer</th>
-              </tr>
-            </thead>
-            <tbody>
-              {openRequests.map((request) => {
-                const eligible = trainers.filter((trainer) =>
-                  trainer.userId !== null &&
-                  trainer.status === 'ACTIVE' &&
-                  trainer.acceptingNewPairings !== false &&
-                  trainer.employmentStatus === 'ACTIVE' &&
-                  trainer.skills.some((skill) =>
-                    skill.id === request.skillId
-                    && (skill.status === undefined ? trainer.status === 'ACTIVE' : skill.status === 'ACTIVE')
-                  )
-                );
-                const selectedTrainer = eligible.find(
-                  (trainer) => String(trainer.userId) === selectedTrainers[request.id]
-                );
-                const selectedTrainerAtCapacity = selectedTrainer !== undefined
-                  && selectedTrainer.activeTrainees + selectedTrainer.pendingTrainees
-                    >= selectedTrainer.maxConcurrentTrainees;
-                return (
-                  <tr key={request.id}>
-                    <td>
-                      <div style={{ fontWeight: 700 }}>{request.traineeName}</div>
-                      <div className="boa-muted" style={{ fontSize: '0.77rem' }}>
+          <div className="hr-match-cards">
+            {openRequests.map((request) => {
+              const eligible = trainers.filter((trainer) =>
+                trainer.userId !== null &&
+                trainer.status === 'ACTIVE' &&
+                trainer.acceptingNewPairings !== false &&
+                trainer.employmentStatus === 'ACTIVE' &&
+                trainer.skills.some((skill) =>
+                  skill.id === request.skillId
+                  && (skill.status === undefined ? trainer.status === 'ACTIVE' : skill.status === 'ACTIVE')
+                )
+              );
+              const selectedTrainer = eligible.find(
+                (trainer) => String(trainer.userId) === selectedTrainers[request.id]
+              );
+              const selectedTrainerAtCapacity = selectedTrainer !== undefined
+                && selectedTrainer.activeTrainees + selectedTrainer.pendingTrainees
+                  >= selectedTrainer.maxConcurrentTrainees;
+              const recs = aiRecs[request.id] ?? [];
+              const isAiOpen = aiOpen[request.id] ?? false;
+              const isAiLoading = aiLoading === request.id;
+              const aiErr = aiError[request.id];
+
+              return (
+                <div key={request.id} className="hr-match-card">
+                  {/* Card header row */}
+                  <div className="hr-match-card__header">
+                    <div className="hr-match-card__trainee">
+                      <span className="hr-match-card__name">{request.traineeName}</span>
+                      <span className="hr-match-card__meta">
                         {request.traineeEmployeeNumber} · {request.departmentName ?? 'Unassigned department'}
+                      </span>
+                    </div>
+                    <div className="hr-match-card__badges">
+                      <StatusPill label={request.skillName} tone="neutral" />
+                      <StatusPill label={request.status} tone="info" />
+                    </div>
+                  </div>
+
+                  {/* Message row */}
+                  {request.message && (
+                    <div className="hr-match-card__message">
+                      <span className="hr-match-card__message-label">Request note:</span>
+                      {request.message}
+                    </div>
+                  )}
+
+                  {/* Matching controls */}
+                  <div className="hr-match-card__controls">
+                    {eligible.length === 0 ? (
+                      <span className="boa-muted" style={{ fontSize: '0.82rem' }}>
+                        No active trainer with matching skill and capacity
+                      </span>
+                    ) : (
+                      <div className="hr-match-card__select-row">
+                        <select
+                          className="apid-input hr-match-card__select"
+                          aria-label={`Trainer for ${request.traineeName}`}
+                          value={selectedTrainers[request.id] ?? ''}
+                          onChange={(event) => setSelectedTrainers((previous) => ({
+                            ...previous,
+                            [request.id]: event.target.value,
+                          }))}
+                        >
+                          <option value="">Select active trainer</option>
+                          {eligible.map((trainer) => (
+                            <option key={trainer.userId ?? trainer.id} value={trainer.userId ?? ''}>
+                              {trainer.fullName} · {trainer.activeTrainees + trainer.pendingTrainees}/{trainer.maxConcurrentTrainees}
+                            </option>
+                          ))}
+                        </select>
+
+                        {/* AI Suggest button */}
+                        <button
+                          type="button"
+                          className={`apid-btn hr-ai-suggest-btn${isAiOpen ? ' hr-ai-suggest-btn--active' : ''}`}
+                          onClick={() => {
+                            if (isAiOpen) {
+                              setAiOpen((prev) => ({ ...prev, [request.id]: false }));
+                            } else {
+                              void fetchAiRecs(request.id, request.skillName);
+                            }
+                          }}
+                          disabled={isAiLoading}
+                          title="Get AI mentor suggestions"
+                        >
+                          {isAiLoading ? (
+                            <span className="hr-ai-spinner" />
+                          ) : (
+                            <Sparkles size={14} />
+                          )}
+                          AI Suggest
+                          {isAiOpen ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
+                        </button>
+
+                        <button
+                          type="button"
+                          className="apid-btn apid-btn-primary apid-btn-sm"
+                          disabled={!selectedTrainers[request.id] || matchMutation.isPending}
+                          onClick={() => matchMutation.mutate({
+                            requestId: request.id,
+                            trainerUserId: Number(selectedTrainers[request.id]),
+                            overrideCapacity: capacityOverrides[request.id] ?? false,
+                            overrideReason: overrideReasons[request.id],
+                          })}
+                        >
+                          <Link2 size={13} /> Match
+                        </button>
                       </div>
-                    </td>
-                    <td><StatusPill label={request.skillName} tone="neutral" /></td>
-                    <td>{request.message || '—'}</td>
-                    <td><StatusPill label={request.status} tone="info" /></td>
-                    <td>
-                      {eligible.length === 0 ? (
-                        <span className="boa-muted" style={{ fontSize: '0.78rem' }}>
-                          No active trainer with matching skill and capacity
-                        </span>
-                      ) : (
-                        <div style={{ display: 'flex', gap: '0.45rem', alignItems: 'center' }}>
-                          <select
+                    )}
+
+                    {/* Capacity override */}
+                    {selectedTrainerAtCapacity && (
+                      <div className="boa-stack" style={{ gap: '0.35rem', marginTop: '0.5rem' }}>
+                        <label style={{ display: 'flex', gap: '0.35rem', alignItems: 'center', fontSize: '0.8rem' }}>
+                          <input
+                            type="checkbox"
+                            checked={capacityOverrides[request.id] ?? false}
+                            onChange={(event) => setCapacityOverrides((previous) => ({
+                              ...previous,
+                              [request.id]: event.target.checked,
+                            }))}
+                          />
+                          HR override capacity
+                        </label>
+                        {capacityOverrides[request.id] && (
+                          <input
                             className="apid-input"
-                            aria-label={`Trainer for ${request.traineeName}`}
-                            value={selectedTrainers[request.id] ?? ''}
-                            onChange={(event) => setSelectedTrainers((previous) => ({
+                            aria-label={`Capacity override reason for ${request.traineeName}`}
+                            maxLength={1000}
+                            placeholder="Required reason for override"
+                            value={overrideReasons[request.id] ?? ''}
+                            onChange={(event) => setOverrideReasons((previous) => ({
                               ...previous,
                               [request.id]: event.target.value,
                             }))}
-                          >
-                            <option value="">Select active trainer</option>
-                            {eligible.map((trainer) => (
-                              <option key={trainer.userId ?? trainer.id} value={trainer.userId ?? ''}>
-                                {trainer.fullName} · {trainer.activeTrainees + trainer.pendingTrainees}/{trainer.maxConcurrentTrainees}
-                              </option>
-                            ))}
-                          </select>
-                          <button
-                            type="button"
-                            className="apid-btn apid-btn-primary apid-btn-sm"
-                            disabled={!selectedTrainers[request.id] || matchMutation.isPending}
-                            onClick={() => matchMutation.mutate({
-                              requestId: request.id,
-                              trainerUserId: Number(selectedTrainers[request.id]),
-                              overrideCapacity: capacityOverrides[request.id] ?? false,
-                              overrideReason: overrideReasons[request.id],
-                            })}
-                          >
-                            <Link2 size={13} /> Match
-                          </button>
+                          />
+                        )}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* ── AI Recommendations Panel ── */}
+                  {(isAiOpen || isAiLoading || aiErr) && (
+                    <div className="hr-ai-panel">
+                      <div className="hr-ai-panel__header">
+                        <span className="hr-ai-panel__title">
+                          <Sparkles size={14} />
+                          AI suggestions for &ldquo;{request.skillName ?? 'mentoring'}&rdquo;
+                        </span>
+                        <button
+                          type="button"
+                          className="hr-ai-panel__close"
+                          aria-label="Close AI suggestions"
+                          onClick={() => setAiOpen((prev) => ({ ...prev, [request.id]: false }))}
+                        >
+                          <X size={14} />
+                        </button>
+                      </div>
+
+                      {isAiLoading && (
+                        <div className="hr-ai-panel__loading">
+                          <span className="hr-ai-spinner hr-ai-spinner--lg" />
+                          Analysing mentors…
                         </div>
                       )}
-                      {selectedTrainerAtCapacity && (
-                        <div className="boa-stack" style={{ gap: '0.35rem', marginTop: '0.35rem' }}>
-                          <label style={{ display: 'flex', gap: '0.35rem', alignItems: 'center', fontSize: '0.8rem' }}>
-                            <input
-                              type="checkbox"
-                              checked={capacityOverrides[request.id] ?? false}
-                              onChange={(event) => setCapacityOverrides((previous) => ({
-                                ...previous,
-                                [request.id]: event.target.checked,
-                              }))}
-                            />
-                            HR override capacity
-                          </label>
-                          {capacityOverrides[request.id] && (
-                            <input
-                              className="apid-input"
-                              aria-label={`Capacity override reason for ${request.traineeName}`}
-                              maxLength={1000}
-                              placeholder="Required reason for override"
-                              value={overrideReasons[request.id] ?? ''}
-                              onChange={(event) => setOverrideReasons((previous) => ({
-                                ...previous,
-                                [request.id]: event.target.value,
-                              }))}
-                            />
-                          )}
+
+                      {aiErr && !isAiLoading && (
+                        <div className="hr-ai-panel__error">{aiErr}</div>
+                      )}
+
+                      {!isAiLoading && !aiErr && recs.length === 0 && (
+                        <p className="hr-ai-panel__empty">No AI recommendations returned. Try again or select manually.</p>
+                      )}
+
+                      {!isAiLoading && recs.length > 0 && (
+                        <div className="hr-ai-recs">
+                          {recs.map((rec) => {
+                            const isSelected = selectedTrainers[request.id] === String(rec.mentor.userId);
+                            const stars = Math.max(1, Math.min(5, 6 - rec.rank));
+                            return (
+                              <div
+                                key={rec.mentor.userId}
+                                className={`hr-ai-rec${isSelected ? ' hr-ai-rec--selected' : ''}`}
+                              >
+                                <div className="hr-ai-rec__rank">
+                                  #{rec.rank}
+                                </div>
+                                <div className="hr-ai-rec__body">
+                                  <div className="hr-ai-rec__top">
+                                    <span className="hr-ai-rec__name">{rec.mentor.fullName}</span>
+                                    <span className="hr-ai-rec__stars">
+                                      {Array.from({ length: 5 }, (_, i) => (
+                                        <Star
+                                          key={i}
+                                          size={11}
+                                          fill={i < stars ? 'currentColor' : 'none'}
+                                        />
+                                      ))}
+                                    </span>
+                                    {rec.mentor.averageRating !== null && (
+                                      <span className="hr-ai-rec__rating">{rec.mentor.averageRating.toFixed(1)}</span>
+                                    )}
+                                  </div>
+                                  <p className="hr-ai-rec__reason">{rec.reason}</p>
+                                  <div className="hr-ai-rec__meta">
+                                    {rec.skillName && (
+                                      <span className="hr-ai-rec__badge">
+                                        <Zap size={10} /> {rec.skillName}
+                                      </span>
+                                    )}
+                                    {rec.mentor.departmentName && (
+                                      <span className="hr-ai-rec__badge hr-ai-rec__badge--dept">
+                                        {rec.mentor.departmentName}
+                                      </span>
+                                    )}
+                                    <span className="hr-ai-rec__capacity">
+                                      <Users size={11} />
+                                      {rec.mentor.remainingCapacity} slot{rec.mentor.remainingCapacity !== 1 ? 's' : ''} open
+                                    </span>
+                                  </div>
+                                </div>
+                                <button
+                                  type="button"
+                                  className={`apid-btn apid-btn-sm hr-ai-rec__select${isSelected ? ' hr-ai-rec__select--chosen' : ''}`}
+                                  onClick={() => {
+                                    setSelectedTrainers((prev) => ({
+                                      ...prev,
+                                      [request.id]: String(rec.mentor.userId),
+                                    }));
+                                  }}
+                                >
+                                  {isSelected ? '✓ Selected' : 'Select'}
+                                </button>
+                              </div>
+                            );
+                          })}
                         </div>
                       )}
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
           </div>
         )}
         {requests.some((request) => request.status === 'MATCHED') && (

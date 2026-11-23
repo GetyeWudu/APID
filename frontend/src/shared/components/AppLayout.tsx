@@ -800,7 +800,15 @@ export function AppLayout({ children }: { children: ReactNode }) {
           </div>
         </header>
 
-        <main className="boa-content">{children}</main>
+        <main
+          className={`boa-content${
+            activeModule === 'coaching' || activeModule === 'mentoring'
+              ? ' boa-content--full-width'
+              : ''
+          }`}
+        >
+          {children}
+        </main>
       </div>
       {hasEmployeeAccess && user.permissions.includes('EMPLOYEE_PORTAL_ACCESS') && (
         <MentoringVideoSessionReminder key={user.id} userId={user.id} />

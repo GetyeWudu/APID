@@ -1,8 +1,10 @@
 import { useQuery } from '@tanstack/react-query';
 import {
   ArrowDownRight,
+  ArrowRight,
   ArrowUpRight,
   Building2,
+  CheckCircle2,
   ClipboardCheck,
   GitPullRequest,
   HeartHandshake,
@@ -29,6 +31,7 @@ import { mentoringMatchApi } from '../../mentoring/api/mentoringMatchApi';
 import { mentoringTrainerApi } from '../../mentoring/api/mentoringTrainerApi';
 import { MentoringRequestsPanel } from '../../mentoring/components/MentoringRequestsPanel';
 import { workspaceLiveApi } from '../api/workspaceDashboardApi';
+import '../../mentoring/pages/MentoringDashboard.css';
 
 export function WorkspaceDashboardPage() {
   const { user, hasPermission, hasAnyPermission } = useAuth();
@@ -129,7 +132,7 @@ export function WorkspaceDashboardPage() {
   const { linkedEmployee, activeSkills } = identityQuery.data;
   if (!linkedEmployee) {
     return (
-      <div className="boa-stack">
+      <div className="boa-stack mentoring-dashboard workspace-dashboard-page">
         <PageHeader title="Overview" subtitle="Your role-based employee and mentoring activity." source="live" />
         <div className="apid-card" data-testid="unlinked-profile-state">
           <EmptyState
@@ -213,7 +216,7 @@ export function WorkspaceDashboardPage() {
     .filter((request) => request.status === 'OPEN').length;
 
   return (
-    <div className="boa-stack">
+    <div className="boa-stack mentoring-dashboard workspace-dashboard-page">
       <PageHeader
         title="Overview"
         subtitle="Your live employee profile, team responsibilities, and mentoring activity."
@@ -254,8 +257,8 @@ export function WorkspaceDashboardPage() {
       </section>
 
       {hasHrActivityAccess && (
-        <section className="boa-stack" aria-label="HR mentoring activity">
-          <div className="boa-card-header">
+        <section className="apid-card hr-activity-card" aria-label="HR mentoring activity">
+          <div className="boa-card-header" style={{ marginBottom: 0 }}>
             <div>
               <h2 className="boa-card-title">HR Mentoring Activity</h2>
               <p className="boa-card-subtitle">
@@ -263,64 +266,153 @@ export function WorkspaceDashboardPage() {
               </p>
             </div>
             <Link to="/mentoring/hr" className="apid-btn apid-btn-outline apid-btn-sm">
-              Open HR mentoring
+              <span>Open HR mentoring</span>
+              <ArrowRight size={14} style={{ marginLeft: '0.25rem' }} />
             </Link>
           </div>
           {hrActivityLoading ? (
-            <LoadingSkeleton rows={2} height={72} />
+            <div style={{ marginTop: '1rem' }}>
+              <LoadingSkeleton rows={2} height={72} />
+            </div>
           ) : hrActivityError ? (
-            <ErrorState
-              message="Unable to load HR mentoring activity."
-              onRetry={() => {
-                hrActivityQueries.forEach((query) => {
-                  if (query.isError) void query.refetch();
-                });
-              }}
-            />
+            <div style={{ marginTop: '1rem' }}>
+              <ErrorState
+                message="Unable to load HR mentoring activity."
+                onRetry={() => {
+                  hrActivityQueries.forEach((query) => {
+                    if (query.isError) void query.refetch();
+                  });
+                }}
+              />
+            </div>
           ) : (
-            <div className="boa-stack">
-              <div className="boa-kpi-grid" style={{ marginBottom: 0 }}>
-                {canReviewMentorApplications && (
-                  <StatCard
-                    label="Pending Applications"
-                    value={pendingHrApplications}
-                    subtext="Awaiting HR review"
-                    icon={<ClipboardCheck size={16} />}
-                  />
-                )}
-                {canManageMentoringMatches && (
-                  <StatCard
-                    label="Awaiting Matching"
-                    value={openHrMatchRequests}
-                    subtext="Trainees waiting for a mentor"
-                    icon={<GitPullRequest size={16} />}
-                  />
-                )}
-                {canViewMentorRoster && (
-                  <StatCard
-                    label="Approved Mentors"
-                    value={activeHrMentorCount}
-                    subtext="Active approved mentors"
-                    icon={<UserRound size={16} />}
-                  />
-                )}
-                {canViewMentoringReports && (
-                  <StatCard
-                    label="Active Assignments"
-                    value={hrOverviewQuery.data?.activeRelationships ?? 0}
-                    subtext="Current mentoring relationships"
-                    icon={<HeartHandshake size={16} />}
-                  />
-                )}
-                {canViewMentoringReports && hrOverviewQuery.data && (
-                  <StatCard
-                    label="Relationship Completion"
-                    value={`${hrOverviewQuery.data.completionRatePct}%`}
-                    subtext={`${hrOverviewQuery.data.completedRelationships} completed relationships`}
-                    icon={<HeartHandshake size={16} />}
-                  />
-                )}
-              </div>
+            <div className="hr-activity-strip">
+              {canReviewMentorApplications && (
+                <Link
+                  to="/mentoring/hr?tab=applications"
+                  className="hr-activity-item"
+                  title="View pending trainer applications"
+                >
+                  <div className="hr-activity-item__header">
+                    <span
+                      className="hr-activity-item__icon"
+                      style={{
+                        backgroundColor: pendingHrApplications > 0 ? 'rgba(245, 158, 11, 0.15)' : 'rgba(232, 244, 241, 0.8)',
+                        color: pendingHrApplications > 0 ? '#d97706' : '#087e70',
+                      }}
+                      aria-hidden="true"
+                    >
+                      <ClipboardCheck size={16} />
+                    </span>
+                    <ArrowUpRight size={14} className="hr-activity-item__arrow" />
+                  </div>
+                  <div className="hr-activity-item__value">{pendingHrApplications}</div>
+                  <div className="hr-activity-item__label">Pending Applications</div>
+                  <div className="hr-activity-item__subtext">Awaiting HR review</div>
+                </Link>
+              )}
+              {canManageMentoringMatches && (
+                <Link
+                  to="/mentoring/hr?tab=matching"
+                  className="hr-activity-item"
+                  title="View trainees awaiting matching"
+                >
+                  <div className="hr-activity-item__header">
+                    <span
+                      className="hr-activity-item__icon"
+                      style={{
+                        backgroundColor: openHrMatchRequests > 0 ? 'rgba(2, 132, 199, 0.12)' : 'rgba(232, 244, 241, 0.8)',
+                        color: openHrMatchRequests > 0 ? '#0284c7' : '#087e70',
+                      }}
+                      aria-hidden="true"
+                    >
+                      <GitPullRequest size={16} />
+                    </span>
+                    <ArrowUpRight size={14} className="hr-activity-item__arrow" />
+                  </div>
+                  <div className="hr-activity-item__value">{openHrMatchRequests}</div>
+                  <div className="hr-activity-item__label">Awaiting Matching</div>
+                  <div className="hr-activity-item__subtext">Trainees waiting for a mentor</div>
+                </Link>
+              )}
+              {canViewMentorRoster && (
+                <Link
+                  to="/mentoring/hr?tab=mentor-management"
+                  className="hr-activity-item"
+                  title="View approved mentor roster"
+                >
+                  <div className="hr-activity-item__header">
+                    <span
+                      className="hr-activity-item__icon"
+                      style={{
+                        backgroundColor: 'rgba(16, 185, 129, 0.12)',
+                        color: '#059669',
+                      }}
+                      aria-hidden="true"
+                    >
+                      <UserRound size={16} />
+                    </span>
+                    <ArrowUpRight size={14} className="hr-activity-item__arrow" />
+                  </div>
+                  <div className="hr-activity-item__value">{activeHrMentorCount}</div>
+                  <div className="hr-activity-item__label">Approved Mentors</div>
+                  <div className="hr-activity-item__subtext">Active approved mentors</div>
+                </Link>
+              )}
+              {canViewMentoringReports && (
+                <Link
+                  to="/mentoring/hr?tab=analytics"
+                  className="hr-activity-item"
+                  title="View active mentoring assignments"
+                >
+                  <div className="hr-activity-item__header">
+                    <span
+                      className="hr-activity-item__icon"
+                      style={{
+                        backgroundColor: 'rgba(139, 92, 246, 0.12)',
+                        color: '#7c3aed',
+                      }}
+                      aria-hidden="true"
+                    >
+                      <HeartHandshake size={16} />
+                    </span>
+                    <ArrowUpRight size={14} className="hr-activity-item__arrow" />
+                  </div>
+                  <div className="hr-activity-item__value">
+                    {hrOverviewQuery.data?.activeRelationships ?? 0}
+                  </div>
+                  <div className="hr-activity-item__label">Active Assignments</div>
+                  <div className="hr-activity-item__subtext">Current mentoring relationships</div>
+                </Link>
+              )}
+              {canViewMentoringReports && hrOverviewQuery.data && (
+                <Link
+                  to="/mentoring/hr?tab=analytics"
+                  className="hr-activity-item"
+                  title="View relationship completion analytics"
+                >
+                  <div className="hr-activity-item__header">
+                    <span
+                      className="hr-activity-item__icon"
+                      style={{
+                        backgroundColor: 'rgba(16, 185, 129, 0.12)',
+                        color: '#059669',
+                      }}
+                      aria-hidden="true"
+                    >
+                      <CheckCircle2 size={16} />
+                    </span>
+                    <ArrowUpRight size={14} className="hr-activity-item__arrow" />
+                  </div>
+                  <div className="hr-activity-item__value">
+                    {hrOverviewQuery.data.completionRatePct}%
+                  </div>
+                  <div className="hr-activity-item__label">Relationship Completion</div>
+                  <div className="hr-activity-item__subtext">
+                    {hrOverviewQuery.data.completedRelationships} completed relationships
+                  </div>
+                </Link>
+              )}
             </div>
           )}
         </section>

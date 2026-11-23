@@ -114,6 +114,36 @@ describe('same mentor requests for different skills', () => {
     expect(screen.queryByText('The mentor recommendation service is unavailable.')).not.toBeInTheDocument();
   });
 
+  it('renders multiple mentor recommendations with readable rank labels', async () => {
+    vi.spyOn(mentorDirectoryApi, 'recommendMentors').mockResolvedValue([
+      {
+        rank: 1,
+        reason: 'Strong match for financial modeling.',
+        skillId: 4,
+        skillName: 'Advanced Excel',
+        mentor,
+      },
+      {
+        rank: 2,
+        reason: 'Related experience in financial modeling.',
+        skillId: 8,
+        skillName: 'Financial Modeling',
+        mentor: { ...mentor, userId: 21, fullName: 'Mentor Two' },
+      },
+    ]);
+    renderWithProviders(<MentoringRecommendations currentUserId={7} />);
+
+    fireEvent.change(screen.getByLabelText('What would you like to learn?'), {
+      target: { value: 'I want to learn financial modeling.' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: /find mentors/i }));
+
+    expect(await screen.findByText('Mentor One')).toBeInTheDocument();
+    expect(screen.getByText('Mentor Two')).toBeInTheDocument();
+    expect(screen.getByText('Recommendation #1')).toBeInTheDocument();
+    expect(screen.getByText('Recommendation #2')).toBeInTheDocument();
+  });
+
   it('lets a trainee select another skill in the mentor directory when one skill is active', async () => {
     const requestMentor = vi.spyOn(mentoringPairingApi, 'requestMentor').mockResolvedValue(existingPairing);
 
