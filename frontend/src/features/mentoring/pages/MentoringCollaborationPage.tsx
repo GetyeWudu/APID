@@ -16,6 +16,7 @@ import { mentoringPairingApi, type MentoringRelationshipPair } from '../api/ment
 import { MentoringPairChatPanel } from '../components/MentoringPairChatPanel';
 import { MentoringResourcesPanel } from '../components/MentoringCollaborationTools';
 import { MentoringChatHub } from '../components/MentoringChatHub';
+import './MentoringDashboard.css';
 import './MentoringCollaborationPage.css';
 
 type CollaborationMode = 'chat' | 'resources';
@@ -78,7 +79,7 @@ export function MentoringCollaborationPage({ mode }: { mode: CollaborationMode }
 
   if (isChat) {
     return (
-      <div className="boa-stack mentoring-hub mentoring-hub--chat">
+      <div className="boa-stack mentoring-dashboard mentoring-hub mentoring-hub--chat">
         <PageHeader
           title={selectedRelationshipId ? 'Pair Chat' : 'Mentoring Chat'}
           subtitle={
@@ -151,7 +152,7 @@ export function MentoringCollaborationPage({ mode }: { mode: CollaborationMode }
     : 'Browse and share learning materials with your mentoring pairs.';
 
   return (
-    <div className={`boa-stack mentoring-hub mentoring-hub--${mode}`}>
+    <div className={`boa-stack mentoring-dashboard mentoring-hub mentoring-hub--${mode}`}>
       <PageHeader
         title={pageTitle}
         subtitle={pageSubtitle}

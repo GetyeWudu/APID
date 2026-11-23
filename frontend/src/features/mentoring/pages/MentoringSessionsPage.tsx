@@ -41,6 +41,7 @@ import {
   toEthiopianTime,
 } from '../../coaching/utils/ethiopianTimeUtils';
 import { getMentoringDeliveryModeLabel } from '../utils/mentoringSessionUtils';
+import './MentoringDashboard.css';
 
 type SessionView = 'mentor' | 'trainee';
 
@@ -445,7 +446,7 @@ export function MentoringSessionsPage({ view }: { view: SessionView }) {
   const title = view === 'mentor' ? 'Mentoring Sessions (Trainer)' : 'My Mentoring Sessions (Trainee)';
 
   return (
-    <div className="boa-stack">
+    <div className="boa-stack mentoring-dashboard">
       <PageHeader
         title={title}
         subtitle={

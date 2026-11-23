@@ -105,7 +105,7 @@ export function MentoringHomePage() {
   const { linkedEmployee, activeSkills } = identityQuery.data;
   if (!linkedEmployee) {
     return (
-      <div className="boa-stack">
+      <div className="boa-stack mentoring-dashboard">
         <PageHeader
           title="Mentoring"
           subtitle="Learn with a mentor, find mentors by skill, or apply to become a mentor."
@@ -147,7 +147,7 @@ export function MentoringHomePage() {
     }
 
     return (
-      <div className="boa-stack">
+      <div className="boa-stack mentoring-dashboard">
         <PageHeader
           title="Find a Mentor"
           subtitle="Describe what you want to learn for AI-powered recommendations, or browse the mentor directory."
@@ -170,7 +170,7 @@ export function MentoringHomePage() {
   if (activeView === 'trainer-profile') {
     if (!isMentor) {
       return (
-        <div className="boa-stack">
+        <div className="boa-stack mentoring-dashboard">
           <PageHeader title="Mentor Profile" subtitle="Manage your public mentor profile." source="live" />
           <div className="apid-card">
             <EmptyState
@@ -183,7 +183,7 @@ export function MentoringHomePage() {
     }
 
     return (
-      <div className="boa-stack">
+      <div className="boa-stack mentoring-dashboard">
         <PageHeader
           title="Mentor Profile"
           subtitle="Keep your expertise, mentoring profile, and trainee capacity up to date for employees seeking a mentor."
@@ -208,7 +208,7 @@ export function MentoringHomePage() {
     }
     if (activeView === 'trainer' && !isMentor) {
       return (
-        <div className="boa-stack">
+        <div className="boa-stack mentoring-dashboard">
           <PageHeader title="My Trainees" subtitle="Review mentoring requests from mentees." source="live" />
           <div className="apid-card">
             <EmptyState
@@ -256,7 +256,7 @@ export function MentoringHomePage() {
   if (activeView === 'apply') {
     if (isMentor) {
       return (
-        <div className="boa-stack">
+        <div className="boa-stack mentoring-dashboard">
           <PageHeader
             title="Apply to Become a Mentor"
             subtitle="Approved mentors can request additional skills from their profile."
@@ -276,7 +276,7 @@ export function MentoringHomePage() {
       );
     }
     return (
-      <div className="boa-stack">
+      <div className="boa-stack mentoring-dashboard">
         <PageHeader
           title="Apply to Become a Mentor"
           subtitle="Complete your profile and supporting documents. A mentor profile is created only after administrator approval."

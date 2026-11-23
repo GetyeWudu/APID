@@ -27,6 +27,7 @@ import {
   MentoringRelationshipClosure,
 } from '../components/MentoringCollaborationTools';
 import { getMentoringDeliveryModeLabel } from '../utils/mentoringSessionUtils';
+import './MentoringDashboard.css';
 
 type DetailTab = 'overview' | 'sessions' | 'progress';
 
@@ -339,7 +340,7 @@ export function MentoringPairingDetailPage() {
   );
 
   return (
-    <div className="boa-stack">
+    <div className="boa-stack mentoring-dashboard">
       <PageHeader
         title={detail.requestType === 'GROUP' ? 'Mentoring Class' : 'Mentoring Pair'}
         subtitle={`Mentor: ${detail.mentorName} | ${detail.trainees.length} trainee${detail.trainees.length === 1 ? '' : 's'}`}
