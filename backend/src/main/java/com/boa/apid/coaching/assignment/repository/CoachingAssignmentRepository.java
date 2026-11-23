@@ -1,5 +1,6 @@
 package com.boa.apid.coaching.assignment.repository;
 
+import com.boa.apid.coaching.assignment.entity.AssignmentPathway;
 import com.boa.apid.coaching.assignment.entity.AssignmentStatus;
 import com.boa.apid.coaching.assignment.entity.CoachingAssignment;
 import jakarta.persistence.LockModeType;
@@ -34,6 +35,8 @@ public interface CoachingAssignmentRepository extends JpaRepository<CoachingAssi
             Long coachEmployeeId, Collection<AssignmentStatus> statuses);
 
     boolean existsByCoachEmployeeIdAndCoacheeEmployeeId(Long coachEmployeeId, Long coacheeEmployeeId);
+
+    List<CoachingAssignment> findAllByPathwayAndStatus(AssignmentPathway pathway, AssignmentStatus status);
 
     boolean existsByPerformanceFiscalQuarterId(Long performanceFiscalQuarterId);
     boolean existsByCoachingFiscalQuarterId(Long coachingFiscalQuarterId);

@@ -1,8 +1,14 @@
 :root {
-  /* Bank of Abyssinia Executive Palette */
-  --bg: #f5f7fb;
+  /* ========================================================
+     Bank of Abyssinia (BoA) — APID Master Design Tokens
+     Abyssinia People Intelligence & Development
+     ======================================================== */
+
+  /* Primary Brand Canvas & Surfaces */
+  --bg: #f8fafc;
   --surface: #ffffff;
-  --surface-subtle: #f8fafc;
+  --surface-subtle: #f1f5f9;
+  --surface-elevated: #ffffff;
   --border: #e2e8f0;
   --border-strong: #cbd5e1;
 
@@ -11,18 +17,37 @@
   --obsidian-border: rgba(255, 255, 255, 0.08);
 
   --text: #0f172a;
+  --text-secondary: #334155;
   --muted: #475569;
   --muted-soft: #64748b;
+  --muted-extra-soft: #94a3b8;
 
-  /* Restrained Abyssinian Gold (primary CTAs, active rail, highlights only) */
-  --brand: #b45309;
+  /* Authentic Adey Abeba Golden-Yellow Palette (Primary Warmth & CTAs) */
+  --brand: #c97a00;
   --brand-primary: #c97a00;
-  --brand-primary-hover: #a96500;
+  --brand-primary-hover: #b45309;
+  --brand-primary-active: #92400e;
   --brand-gold-bright: #f5b700;
-  --brand-soft: #fef3c7;
+  --brand-gold-subtle: #fef3c7;
+  --brand-soft: #fffbeb;
   --brand-soft-border: #fde68a;
+  --brand-gradient: linear-gradient(135deg, #f5b700 0%, #c97a00 100%);
+  --brand-gradient-hover: linear-gradient(135deg, #fec829 0%, #b45309 100%);
+  --brand-gradient-dark: linear-gradient(135deg, #1e293b 0%, #0b0f19 100%);
 
-  /* Semantic Banking Status */
+  /* Executive Banking Blue Palette (Secondary Color — Trust & Corporate Authority) */
+  --brand-secondary: #1d4ed8;
+  --brand-secondary-hover: #1e40af;
+  --brand-secondary-dark: #1e3a8a;
+  --brand-secondary-midnight: #0f1e4a;
+  --brand-secondary-soft: #eff6ff;
+  --brand-secondary-border: #bfdbfe;
+  --brand-secondary-gradient: linear-gradient(135deg, #1e3a8a 0%, #2563eb 100%);
+  --brand-duo-gradient: linear-gradient(135deg, #1e3a8a 0%, #0b0f19 50%, #c97a00 100%);
+  --brand-duo-glow: radial-gradient(circle 500px at 25% 150px, rgba(37, 99, 235, 0.15), transparent 70%),
+                    radial-gradient(circle 500px at 75% 150px, rgba(245, 183, 0, 0.12), transparent 70%);
+
+  /* Semantic Banking Indicators */
   --ok: #15803d;
   --ok-soft: #dcfce7;
   --ok-border: #bbf7d0;
@@ -31,22 +56,39 @@
   --err-border: #fecaca;
   --warn: #b45309;
   --warn-soft: #fef3c7;
-  --info: #3730a3;
-  --info-soft: #eef2ff;
-  --info-border: #c7d2fe;
+  --warn-border: #fde68a;
+  --info: #1d4ed8;
+  --info-soft: #eff6ff;
+  --info-border: #bfdbfe;
 
-  /* Elevation & Radii */
+  /* Elevation & Shadows */
+  --shadow-xs: 0 1px 2px rgba(15, 23, 42, 0.04);
+  --shadow-sm: 0 1px 3px rgba(15, 23, 42, 0.05), 0 1px 2px rgba(15, 23, 42, 0.04);
+  --shadow-card: 0 1px 3px rgba(15, 23, 42, 0.05), 0 8px 20px -12px rgba(15, 23, 42, 0.08);
+  --shadow-card-hover: 0 8px 24px -6px rgba(15, 23, 42, 0.1), 0 2px 6px -2px rgba(15, 23, 42, 0.05);
+  --shadow-popover: 0 14px 34px -8px rgba(15, 23, 42, 0.16), 0 4px 12px rgba(15, 23, 42, 0.06);
+  --shadow-focus: 0 0 0 3px rgba(201, 122, 0, 0.22);
+  --shadow-glow-gold: 0 0 24px -4px rgba(245, 183, 0, 0.35);
+  --shadow-glow-blue: 0 0 24px -4px rgba(37, 99, 235, 0.3);
+  --shadow-glow-obsidian: 0 16px 40px -10px rgba(11, 15, 25, 0.4);
+
+  /* Border Radii */
+  --radius-xs: 4px;
   --radius-sm: 6px;
   --radius-md: 10px;
   --radius-lg: 14px;
-  --shadow-xs: 0 1px 2px rgba(15, 23, 42, 0.04);
-  --shadow-card: 0 1px 3px rgba(15, 23, 42, 0.04), 0 8px 24px -14px rgba(15, 23, 42, 0.09);
-  --shadow-popover: 0 12px 32px -8px rgba(15, 23, 42, 0.18), 0 2px 8px rgba(15, 23, 42, 0.06);
-  --shadow-focus: 0 0 0 3px rgba(201, 122, 0, 0.22);
+  --radius-xl: 20px;
+  --radius-full: 9999px;
+
+  /* Glassmorphism & Backdrops */
+  --glass-bg: rgba(255, 255, 255, 0.88);
+  --glass-border: rgba(226, 232, 240, 0.85);
+  --glass-dark-bg: rgba(11, 15, 25, 0.86);
+  --glass-dark-border: rgba(255, 255, 255, 0.1);
+  --glass-blur: blur(14px);
 
   /* Layout Dimensions */
-  --sidebar-width: 264px;
-  --sidebar-collapsed: 74px;
-  --topbar-height: 64px;
+  --sidebar-width: 268px;
+  --sidebar-collapsed: 76px;
+  --topbar-height: 66px;
 }
-

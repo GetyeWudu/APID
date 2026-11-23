@@ -1,6 +1,6 @@
 import { useState, type FormEvent } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { UserPlus, X, Search, GraduationCap } from 'lucide-react';
+import { UserPlus, X, Search, GraduationCap, CheckCircle2, Zap } from 'lucide-react';
 import {
   skillCoachingRequestApi,
   type CreateSkillCoachingRequestPayload,
@@ -63,13 +63,21 @@ export function RequestSkillCoachingModal({
   const createMutation = useMutation({
     mutationFn: (payload: CreateSkillCoachingRequestPayload) =>
       skillCoachingRequestApi.createRequest(payload),
-    onSuccess: () => {
+    onSuccess: (data: any) => {
+      const isApproved = data?.status === 'APPROVED';
       pushToast({
-        title: 'Skill Coaching Request Submitted',
-        message: 'Your request has been routed to the PMS Admin for formal approval.',
+        title: isApproved ? 'Skill Coaching Cohort Activated' : 'Skill Coaching Request Submitted',
+        message: isApproved
+          ? 'Your coaching cohort has been activated immediately. You can now schedule coaching sessions with your team.'
+          : 'Your request has been routed to the PMS Admin for formal approval.',
         tone: 'ok',
       });
       void queryClient.invalidateQueries({ queryKey: ['coaching', 'my-skill-requests'] });
+      void queryClient.invalidateQueries({ queryKey: ['my-approved-skill-requests'] });
+      void queryClient.invalidateQueries({ queryKey: ['coaching', 'my-cohorts'] });
+      void queryClient.invalidateQueries({ queryKey: ['coaching', 'my-coachees'] });
+      void queryClient.invalidateQueries({ queryKey: ['coaching', 'my-sessions'] });
+      void queryClient.invalidateQueries({ queryKey: ['coaching-sessions'] });
       void queryClient.invalidateQueries({ queryKey: ['coaching', 'skill-requests', 'pending'] });
       void queryClient.invalidateQueries({ queryKey: ['coaching', 'skill-requests', 'all'] });
       resetForm();
@@ -169,6 +177,11 @@ export function RequestSkillCoachingModal({
       )
     : [];
 
+  const isDirectReportCoaching =
+    coachMode === 'SELF' &&
+    selectedEmpIds.length > 0 &&
+    selectedEmpIds.every((id) => directReports.some((dr) => dr.id === id));
+
   return (
     <div
       className="apid-modal-backdrop"
@@ -184,7 +197,7 @@ export function RequestSkillCoachingModal({
               Request Skill-Development Coaching
             </h3>
             <p className="boa-muted" style={{ margin: '0.25rem 0 0 0', fontSize: '0.84rem' }}>
-              Nominate employees for targeted skill growth. The coach can be yourself (Line Manager), your Higher Manager, or a specialized coach. Submits to <strong>PMS Admin</strong> for approval.
+              Nominate employees for targeted skill growth. Line managers coaching direct reports are <strong>automatically approved</strong> with zero waiting.
             </p>
           </div>
           <button
@@ -198,6 +211,28 @@ export function RequestSkillCoachingModal({
             <X size={15} />
           </button>
         </div>
+
+        {isDirectReportCoaching && (
+          <div
+            style={{
+              padding: '0.65rem 0.85rem',
+              backgroundColor: 'rgba(34, 197, 94, 0.08)',
+              border: '1px solid rgba(34, 197, 94, 0.25)',
+              borderRadius: 6,
+              color: '#15803d',
+              fontSize: '0.84rem',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '0.5rem',
+              marginBottom: '1rem',
+            }}
+          >
+            <CheckCircle2 size={16} style={{ flexShrink: 0 }} />
+            <span>
+              <strong>Direct Line Manager Coaching:</strong> This cohort will be <strong>activated automatically</strong> without PMS Admin approval. You can schedule sessions immediately upon creation.
+            </span>
+          </div>
+        )}
 
         {formError && (
           <div
@@ -525,7 +560,12 @@ export function RequestSkillCoachingModal({
               disabled={createMutation.isPending}
             >
               {createMutation.isPending ? (
-                'Submitting...'
+                isDirectReportCoaching ? 'Activating Cohort...' : 'Submitting...'
+              ) : isDirectReportCoaching ? (
+                <>
+                  <Zap size={14} style={{ marginRight: '0.35rem' }} />
+                  Start Coaching Cohort ({selectedEmpIds.length} staff)
+                </>
               ) : (
                 <>
                   <UserPlus size={14} style={{ marginRight: '0.35rem' }} />

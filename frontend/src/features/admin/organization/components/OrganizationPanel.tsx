@@ -1,82 +1,109 @@
-import { useCallback, useEffect, useState, type FormEvent } from 'react';
+import { useCallback, useEffect, useState, useMemo } from 'react';
 import type { AxiosError } from 'axios';
-import { useAuth } from '../../../../app/AuthContext';
 import type { ApiErrorPayload } from '../../../../shared/api/apiClient';
 import { organizationApi } from '../api/organizationApi';
+import { usersApi } from '../../users/api/usersApi';
 import type {
   DepartmentItem,
   EmployeeItem,
   EmployeePage,
   EmploymentStatus,
-  OrgImportCommitResult,
 } from '../types/organization.types';
-import { EmployeeSearchSelect } from './EmployeeSearchSelect';
 import { EmployeeTeamModal } from './EmployeeTeamModal';
-import { LinkUserModal } from './LinkUserModal';
-import { OrgImportWizardModal } from './OrgImportWizardModal';
 
 type SubView = 'employees' | 'departments';
-
-const SAMPLE_HIERARCHY_CSV = [
-  'EmployeeNumber,FullName,Email,Gender,ParentDepartment,Department,Job,Position,ManagerEmployeeNumber',
-  '00010001,Abebe Bikila,abebe.bikila@bankofabyssinia.com,Male,Executive Office,Office of the Chief Executive,Executive Leadership,Chief Executive Officer,',
-  '00010003,Bekele Tesfaye,bekele.tesfaye@bankofabyssinia.com,Male,Retail & Branch Banking,Retail Banking Directorate,Retail Executive,VP Retail & Branch Banking,00010001',
-  '00010005,Lidia Girma,lidia.girma.005@bankofabyssinia.com,Female,Retail & Branch Banking,Bole Branch Operations,Branch Banking Officer,Senior Customer Service Officer,00010004',
-].join('\n');
-
-function triggerCsvDownload(filename: string, content: string) {
-  const blob = new Blob([content], { type: 'text/csv;charset=utf-8;' });
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement('a');
-  link.href = url;
-  link.download = filename;
-  link.click();
-  URL.revokeObjectURL(url);
-}
+type ScopeFilter = 'ALL' | 'HEAD_OFFICE' | 'DISTRICTS' | 'BRANCHES';
 
 export function OrganizationPanel() {
-  const { hasPermission } = useAuth();
-  const canManageEmployeeAccounts =
-    hasPermission('HIERARCHY_MANAGE') && hasPermission('USER_MANAGE');
   const [subView, setSubView] = useState<SubView>('employees');
   const [departments, setDepartments] = useState<DepartmentItem[]>([]);
   const [employeePage, setEmployeePage] = useState<EmployeePage | null>(null);
+
+  // Smart Filters
   const [search, setSearch] = useState('');
+  const [scopeFilter, setScopeFilter] = useState<ScopeFilter>('ALL');
+  const [districtFilter, setDistrictFilter] = useState<string>('');
   const [departmentFilter, setDepartmentFilter] = useState<number | ''>('');
+  const [roleFilter, setRoleFilter] = useState<string>('');
   const [statusFilter, setStatusFilter] = useState<EmploymentStatus | ''>('');
+  const [managerDrilldown, setManagerDrilldown] = useState<{ id: number; name: string; empNo: string } | null>(null);
+  const [pageSize, setPageSize] = useState<number>(15);
   const [page, setPage] = useState(0);
+
+  const [syncing, setSyncing] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [saving, setSaving] = useState(false);
   const [banner, setBanner] = useState<{ type: 'ok' | 'err'; text: string } | null>(null);
 
-  // Employee modal state
-  const [showEmpModal, setShowEmpModal] = useState(false);
-  const [editingEmployee, setEditingEmployee] = useState<EmployeeItem | null>(null);
-  const [empNumber, setEmpNumber] = useState('');
-  const [empFullName, setEmpFullName] = useState('');
-  const [empEmail, setEmpEmail] = useState('');
-  const [empGender, setEmpGender] = useState('');
-  const [empDeptId, setEmpDeptId] = useState<number | null>(null);
-  const [empJob, setEmpJob] = useState('');
-  const [empPosition, setEmpPosition] = useState('');
-  const [empManagerId, setEmpManagerId] = useState<number | null>(null);
-  const [empManagerLabel, setEmpManagerLabel] = useState<string | null>(null);
-  const [empStatus, setEmpStatus] = useState<EmploymentStatus>('ACTIVE');
+  const handleManualSync = async () => {
+    setSyncing(true);
+    setBanner(null);
+    try {
+      const res = await usersApi.syncLdap();
+      setBanner({
+        type: 'ok',
+        text: `Active Directory sync completed in ${res.durationMs}ms: ${res.usersScanned} accounts scanned, ${res.managersLinked} managers linked, ${res.rolesAssigned} roles reconciled.`,
+      });
+      await loadEmployees();
+    } catch (err) {
+      const ax = err as AxiosError<ApiErrorPayload>;
+      setBanner({
+        type: 'err',
+        text: ax.response?.data?.message || 'Failed to synchronize with Active Directory',
+      });
+    } finally {
+      setSyncing(false);
+    }
+  };
 
-  // Department modal state
-  const [showDeptModal, setShowDeptModal] = useState(false);
-  const [editingDept, setEditingDept] = useState<DepartmentItem | null>(null);
-  const [deptCode, setDeptCode] = useState('');
-  const [deptName, setDeptName] = useState('');
-  const [deptParentId, setDeptParentId] = useState<number | null>(null);
-  const [deptHeadId, setDeptHeadId] = useState<number | null>(null);
-  const [deptHeadLabel, setDeptHeadLabel] = useState<string | null>(null);
-  const [deptActive, setDeptActive] = useState(true);
+  // Read-only Profile modal state
+  const [viewingEmployee, setViewingEmployee] = useState<EmployeeItem | null>(null);
 
-  // Sub-modals
-  const [showImportWizard, setShowImportWizard] = useState(false);
+  // Team hierarchy modal state
   const [teamEmployee, setTeamEmployee] = useState<EmployeeItem | null>(null);
-  const [linkUserEmployee, setLinkUserEmployee] = useState<EmployeeItem | null>(null);
+
+  // Derive Organizational Units
+  const districtDepts = useMemo(() => {
+    return departments.filter(
+      (d) => (d.code && d.code.endsWith('-DISTRICT')) || d.name.toLowerCase().includes('district')
+    );
+  }, [departments]);
+
+  const districtIds = useMemo(() => new Set(districtDepts.map((d) => d.id)), [districtDepts]);
+
+  const headOfficeDepts = useMemo(() => {
+    // Departments that are not districts and not branch children of districts
+    return departments.filter((d) => {
+      if (districtIds.has(d.id)) return false;
+      if (d.parentDepartmentId && districtIds.has(d.parentDepartmentId)) return false;
+      return true;
+    });
+  }, [departments, districtIds]);
+
+  const allBranchDepts = useMemo(() => {
+    return departments.filter((d) => d.parentDepartmentId && districtIds.has(d.parentDepartmentId));
+  }, [departments, districtIds]);
+
+  // Dynamically populated cascading branches / divisions
+  const cascadingDepts = useMemo(() => {
+    if (districtFilter === 'HEAD_OFFICE') {
+      return headOfficeDepts.filter((d) => d.parentDepartmentId !== null);
+    }
+    if (districtFilter) {
+      const parentId = Number(districtFilter);
+      return departments.filter((d) => d.parentDepartmentId === parentId);
+    }
+    return departments;
+  }, [districtFilter, departments, headOfficeDepts]);
+
+  const hasActiveFilters = Boolean(
+    search ||
+      scopeFilter !== 'ALL' ||
+      districtFilter ||
+      departmentFilter ||
+      roleFilter ||
+      statusFilter ||
+      managerDrilldown
+  );
 
   const loadDepartments = useCallback(async () => {
     try {
@@ -90,12 +117,30 @@ export function OrganizationPanel() {
   const loadEmployees = useCallback(async () => {
     setLoading(true);
     try {
+      let resolvedDeptId: number | '' = departmentFilter;
+      let resolvedDeptIds: number[] | undefined = undefined;
+
+      if (!departmentFilter) {
+        if (scopeFilter === 'HEAD_OFFICE' || districtFilter === 'HEAD_OFFICE') {
+          resolvedDeptIds = headOfficeDepts.map((d) => d.id);
+        } else if (scopeFilter === 'DISTRICTS') {
+          resolvedDeptIds = districtDepts.map((d) => d.id);
+        } else if (scopeFilter === 'BRANCHES') {
+          resolvedDeptIds = allBranchDepts.map((d) => d.id);
+        } else if (districtFilter) {
+          resolvedDeptId = Number(districtFilter);
+        }
+      }
+
       const res = await organizationApi.searchEmployees({
         search: search.trim() || undefined,
-        departmentId: departmentFilter,
+        departmentId: resolvedDeptId,
+        departmentIds: resolvedDeptIds,
+        position: roleFilter || undefined,
         status: statusFilter,
+        managerId: managerDrilldown ? managerDrilldown.id : undefined,
         page,
-        size: 15,
+        size: pageSize,
       });
       setEmployeePage(res);
     } catch (err) {
@@ -104,7 +149,20 @@ export function OrganizationPanel() {
     } finally {
       setLoading(false);
     }
-  }, [search, departmentFilter, statusFilter, page]);
+  }, [
+    search,
+    scopeFilter,
+    districtFilter,
+    departmentFilter,
+    roleFilter,
+    statusFilter,
+    managerDrilldown,
+    page,
+    pageSize,
+    headOfficeDepts,
+    districtDepts,
+    allBranchDepts,
+  ]);
 
   useEffect(() => {
     loadDepartments();
@@ -114,135 +172,42 @@ export function OrganizationPanel() {
     loadEmployees();
   }, [loadEmployees]);
 
-  const refreshAll = async (okMessage?: string) => {
-    if (okMessage) {
-      setBanner({ type: 'ok', text: okMessage });
-    }
-    await Promise.all([loadEmployees(), loadDepartments()]);
-  };
-
-  const openCreateEmployee = () => {
-    setEditingEmployee(null);
-    setEmpNumber('');
-    setEmpFullName('');
-    setEmpEmail('');
-    setEmpGender('');
-    setEmpDeptId(null);
-    setEmpJob('');
-    setEmpPosition('');
-    setEmpManagerId(null);
-    setEmpManagerLabel(null);
-    setEmpStatus('ACTIVE');
-    setBanner(null);
-    setShowEmpModal(true);
-  };
-
-  const openEditEmployee = (emp: EmployeeItem) => {
-    setEditingEmployee(emp);
-    setEmpNumber(emp.employeeNumber);
-    setEmpFullName(emp.fullName);
-    setEmpEmail(emp.email ?? '');
-    setEmpGender(emp.gender ?? '');
-    setEmpDeptId(emp.departmentId);
-    setEmpJob(emp.job ?? '');
-    setEmpPosition(emp.position ?? '');
-    setEmpManagerId(emp.managerId);
-    setEmpManagerLabel(
-      emp.managerFullName ? `${emp.managerFullName} (${emp.managerEmployeeNumber})` : null
-    );
-    setEmpStatus(emp.employmentStatus);
-    setBanner(null);
-    setShowEmpModal(true);
-  };
-
-  const handleSaveEmployee = async (e: FormEvent) => {
-    e.preventDefault();
-    setSaving(true);
-    setBanner(null);
-    try {
-      const payload = {
-        employeeNumber: empNumber.trim(),
-        fullName: empFullName.trim(),
-        email: empEmail.trim() || undefined,
-        gender: empGender.trim() || undefined,
-        departmentId: empDeptId,
-        job: empJob.trim() || undefined,
-        position: empPosition.trim() || undefined,
-        managerId: empManagerId,
-        employmentStatus: empStatus,
-      };
-      if (editingEmployee) {
-        await organizationApi.updateEmployee(editingEmployee.id, payload);
-        await refreshAll(`Employee "${payload.fullName}" updated.`);
-      } else {
-        await organizationApi.createEmployee(payload);
-        await refreshAll(`Employee "${payload.fullName}" created.`);
-      }
-      setShowEmpModal(false);
-    } catch (err) {
-      const ax = err as AxiosError<ApiErrorPayload>;
-      setBanner({ type: 'err', text: ax.response?.data?.message || 'Failed to save employee' });
-    } finally {
-      setSaving(false);
+  const handleScopeChange = (nextScope: ScopeFilter) => {
+    setScopeFilter(nextScope);
+    setDepartmentFilter('');
+    setPage(0);
+    if (nextScope === 'HEAD_OFFICE') {
+      setDistrictFilter('HEAD_OFFICE');
+    } else if (nextScope === 'ALL') {
+      setDistrictFilter('');
     }
   };
 
-  const openCreateDept = () => {
-    setEditingDept(null);
-    setDeptCode('');
-    setDeptName('');
-    setDeptParentId(null);
-    setDeptHeadId(null);
-    setDeptHeadLabel(null);
-    setDeptActive(true);
-    setBanner(null);
-    setShowDeptModal(true);
-  };
-
-  const openEditDept = (dept: DepartmentItem) => {
-    setEditingDept(dept);
-    setDeptCode(dept.code ?? '');
-    setDeptName(dept.name);
-    setDeptParentId(dept.parentDepartmentId);
-    setDeptHeadId(dept.headEmployeeId);
-    setDeptHeadLabel(dept.headEmployeeName);
-    setDeptActive(dept.active);
-    setBanner(null);
-    setShowDeptModal(true);
-  };
-
-  const handleSaveDepartment = async (e: FormEvent) => {
-    e.preventDefault();
-    setSaving(true);
-    setBanner(null);
-    try {
-      const payload = {
-        code: deptCode.trim() || undefined,
-        name: deptName.trim(),
-        parentDepartmentId: deptParentId,
-        headEmployeeId: deptHeadId,
-        active: deptActive,
-      };
-      if (editingDept) {
-        await organizationApi.updateDepartment(editingDept.id, payload);
-        await refreshAll(`Department "${payload.name}" updated.`);
-      } else {
-        await organizationApi.createDepartment(payload);
-        await refreshAll(`Department "${payload.name}" created.`);
-      }
-      setShowDeptModal(false);
-    } catch (err) {
-      const ax = err as AxiosError<ApiErrorPayload>;
-      setBanner({ type: 'err', text: ax.response?.data?.message || 'Failed to save department' });
-    } finally {
-      setSaving(false);
+  const handleDistrictChange = (nextDistrict: string) => {
+    setDistrictFilter(nextDistrict);
+    setDepartmentFilter('');
+    setPage(0);
+    if (nextDistrict === 'HEAD_OFFICE') {
+      setScopeFilter('HEAD_OFFICE');
+    } else if (nextDistrict) {
+      setScopeFilter('ALL');
     }
   };
 
-  const handleImportCommitted = async (result: OrgImportCommitResult) => {
-    await refreshAll(
-      `Import Batch #${result.batchId} (${result.fileFormat}) committed: ${result.employeesCreated} created, ${result.employeesUpdated} updated, ${result.departmentsCreated} departments created, ${result.managersLinked} managers linked (${result.duplicateRowsCollapsed} duplicate goal rows collapsed).`
-    );
+  const handleResetFilters = () => {
+    setSearch('');
+    setScopeFilter('ALL');
+    setDistrictFilter('');
+    setDepartmentFilter('');
+    setRoleFilter('');
+    setStatusFilter('');
+    setManagerDrilldown(null);
+    setPage(0);
+  };
+
+  const handleDrilldown = (mgrId: number, mgrName: string, mgrEmpNo: string) => {
+    setManagerDrilldown({ id: mgrId, name: mgrName, empNo: mgrEmpNo });
+    setPage(0);
   };
 
   return (
@@ -265,35 +230,22 @@ export function OrganizationPanel() {
           </button>
         </div>
 
-        <div className="apid-actions-cell">
-          {subView === 'employees' ? (
-            <>
-              <button
-                type="button"
-                className="apid-btn apid-btn-outline"
-                onClick={() => triggerCsvDownload('boa-hierarchy-sample.csv', SAMPLE_HIERARCHY_CSV)}
-              >
-                Sample CSV
-              </button>
-              <button
-                type="button"
-                className="apid-btn apid-btn-outline"
-                onClick={() => {
-                  setBanner(null);
-                  setShowImportWizard(true);
-                }}
-              >
-                Import CSV / Excel
-              </button>
-              <button type="button" className="apid-btn apid-btn-primary" onClick={openCreateEmployee}>
-                + Add Employee
-              </button>
-            </>
-          ) : (
-            <button type="button" className="apid-btn apid-btn-primary" onClick={openCreateDept}>
-              + Add Department
-            </button>
-          )}
+        <div className="apid-actions-cell" style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+          <button
+            type="button"
+            className="apid-btn apid-btn-sm apid-btn-outline"
+            disabled={syncing || loading}
+            onClick={handleManualSync}
+            title="Trigger immediate Active Directory synchronization & manager hierarchy reconciliation"
+          >
+            <span>{syncing ? '⏳ Syncing AD...' : '🔄 Sync Active Directory'}</span>
+          </button>
+          <span
+            className="boa-pill boa-pill-info"
+            title="All organizational structures and user profiles are synchronized directly from Active Directory Domain Services (every 30 mins)"
+          >
+            AD SSoT (30m sync)
+          </span>
         </div>
       </div>
 
@@ -305,34 +257,140 @@ export function OrganizationPanel() {
 
       {subView === 'employees' ? (
         <>
-          <div className="apid-toolbar-left" style={{ marginBottom: '1rem' }}>
+          {/* Level 1: Scope Pills */}
+          <div
+            style={{
+              display: 'flex',
+              gap: '0.45rem',
+              marginBottom: '0.85rem',
+              flexWrap: 'wrap',
+              alignItems: 'center',
+            }}
+          >
+            <span style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--muted)', marginRight: '0.2rem' }}>
+              Organizational Scope:
+            </span>
+            <button
+              type="button"
+              className={`apid-btn apid-btn-sm ${scopeFilter === 'ALL' && !districtFilter ? 'apid-btn-primary' : 'apid-btn-outline'}`}
+              onClick={() => handleScopeChange('ALL')}
+            >
+              All Employees (150)
+            </button>
+            <button
+              type="button"
+              className={`apid-btn apid-btn-sm ${scopeFilter === 'HEAD_OFFICE' ? 'apid-btn-primary' : 'apid-btn-outline'}`}
+              onClick={() => handleScopeChange('HEAD_OFFICE')}
+            >
+              🏛️ Head Office (25)
+            </button>
+            <button
+              type="button"
+              className={`apid-btn apid-btn-sm ${scopeFilter === 'DISTRICTS' ? 'apid-btn-primary' : 'apid-btn-outline'}`}
+              onClick={() => handleScopeChange('DISTRICTS')}
+            >
+              📍 District Directors (5)
+            </button>
+            <button
+              type="button"
+              className={`apid-btn apid-btn-sm ${scopeFilter === 'BRANCHES' ? 'apid-btn-primary' : 'apid-btn-outline'}`}
+              onClick={() => handleScopeChange('BRANCHES')}
+            >
+              🏦 All 20 Branches (120)
+            </button>
+          </div>
+
+          {/* Level 2: Smart Cascading Filters Bar */}
+          <div
+            className="apid-toolbar-left"
+            style={{
+              marginBottom: '0.85rem',
+              flexWrap: 'wrap',
+              gap: '0.5rem',
+              alignItems: 'center',
+            }}
+          >
+            {/* Search Input */}
             <input
               type="text"
               className="apid-input"
-              placeholder="Search emp #, name, email, position..."
+              style={{ minWidth: '220px', flex: '1 1 200px' }}
+              placeholder="Search emp #, name, @user, email..."
               value={search}
               onChange={(e) => {
                 setSearch(e.target.value);
                 setPage(0);
               }}
             />
+
+            {/* Cascading District Selector */}
             <select
               className="apid-input"
+              style={{ flex: '1 1 180px' }}
+              value={districtFilter}
+              onChange={(e) => handleDistrictChange(e.target.value)}
+            >
+              <option value="">All Regions & Divisions</option>
+              <option value="HEAD_OFFICE">🏛️ Head Office (25 Staff)</option>
+              <optgroup label="Bank of Abyssinia Districts">
+                {districtDepts.map((d) => (
+                  <option key={d.id} value={d.id}>
+                    📍 {d.name} (25 Staff)
+                  </option>
+                ))}
+              </optgroup>
+            </select>
+
+            {/* Cascading Branch / Department Selector */}
+            <select
+              className="apid-input"
+              style={{ flex: '1 1 200px' }}
               value={departmentFilter}
               onChange={(e) => {
                 setDepartmentFilter(e.target.value ? Number(e.target.value) : '');
                 setPage(0);
               }}
             >
-              <option value="">All Departments</option>
-              {departments.map((d) => (
+              <option value="">
+                {districtFilter === 'HEAD_OFFICE'
+                  ? 'All Head Office Divisions'
+                  : districtFilter
+                    ? 'All Branches in this District'
+                    : 'All Branches & Departments'}
+              </option>
+              {cascadingDepts.map((d) => (
                 <option key={d.id} value={d.id}>
-                  {d.parentDepartmentName ? `${d.parentDepartmentName} / ${d.name}` : d.name}
+                  {d.name}
                 </option>
               ))}
             </select>
+
+            {/* Position / Role Filter */}
             <select
               className="apid-input"
+              style={{ flex: '1 1 170px' }}
+              value={roleFilter}
+              onChange={(e) => {
+                setRoleFilter(e.target.value);
+                setPage(0);
+              }}
+            >
+              <option value="">All Positions & Roles</option>
+              <option value="Chief Executive Officer">Chief Executive Officer (CEO)</option>
+              <option value="VP Retail">VP Retail & Branch Banking</option>
+              <option value="Director">Directors (Tech, Credit, Districts)</option>
+              <option value="Branch Manager">Branch Managers</option>
+              <option value="Customer Service Officer">Senior Customer Service Officers</option>
+              <option value="Cash Teller Officer">Cash Teller Officers</option>
+              <option value="Personal Banker">Personal Bankers</option>
+              <option value="Software Developer">Senior Software Developers</option>
+              <option value="Credit Analyst">Senior Credit Analysts</option>
+            </select>
+
+            {/* Employment Status Filter */}
+            <select
+              className="apid-input"
+              style={{ flex: '0 1 130px' }}
               value={statusFilter}
               onChange={(e) => {
                 setStatusFilter(e.target.value as EmploymentStatus | '');
@@ -345,19 +403,64 @@ export function OrganizationPanel() {
               <option value="INACTIVE">INACTIVE</option>
               <option value="TERMINATED">TERMINATED</option>
             </select>
+
+            {/* Reset Filters Button */}
+            {hasActiveFilters && (
+              <button
+                type="button"
+                className="apid-btn apid-btn-outline apid-btn-sm"
+                onClick={handleResetFilters}
+                title="Clear all active filters"
+              >
+                Reset Filters ✕
+              </button>
+            )}
           </div>
 
+          {/* Manager Drill-Down Banner */}
+          {managerDrilldown && (
+            <div
+              className="apid-alert apid-alert-ok"
+              style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                marginBottom: '1rem',
+                padding: '0.5rem 0.85rem',
+              }}
+            >
+              <span>
+                👥 <strong>Direct Team Drilldown:</strong> Showing direct subordinates reporting to{' '}
+                <strong>
+                  {managerDrilldown.name} ({managerDrilldown.empNo})
+                </strong>
+              </span>
+              <button
+                type="button"
+                className="apid-btn apid-btn-sm apid-btn-outline"
+                style={{ background: 'white' }}
+                onClick={() => {
+                  setManagerDrilldown(null);
+                  setPage(0);
+                }}
+              >
+                Clear Drilldown ✕
+              </button>
+            </div>
+          )}
+
+          {/* Employees Table */}
           <div className="apid-table-wrap">
             <table className="apid-table">
               <thead>
                 <tr>
-                  <th>Emp #</th>
-                  <th>Employee</th>
-                  <th>Department</th>
+                  <th style={{ width: '90px' }}>Emp #</th>
+                  <th>Employee Profile</th>
+                  <th>Department / District</th>
                   <th>Position / Job</th>
                   <th>Direct Manager</th>
-                  <th>Status</th>
-                  <th>Actions</th>
+                  <th style={{ width: '80px' }}>Status</th>
+                  <th style={{ width: '150px', textAlign: 'right' }}>Actions</th>
                 </tr>
               </thead>
               <tbody>
@@ -367,29 +470,76 @@ export function OrganizationPanel() {
                   </tr>
                 ) : !employeePage || employeePage.content.length === 0 ? (
                   <tr>
-                    <td colSpan={7}>No employee profiles found.</td>
+                    <td colSpan={7}>No employee profiles match the selected filters.</td>
                   </tr>
                 ) : (
                   employeePage.content.map((emp) => (
                     <tr key={emp.id}>
-                      <td>{emp.employeeNumber}</td>
+                      <td>
+                        <span style={{ fontFamily: 'monospace', fontWeight: 600 }}>
+                          {emp.employeeNumber}
+                        </span>
+                      </td>
                       <td>
                         <strong>{emp.fullName}</strong>
                         <div style={{ fontSize: '0.78rem', color: 'var(--muted)' }}>
                           {emp.email || 'No email'}
-                          {emp.username ? ` • @${emp.username}` : ' • Unlinked'}
+                          {emp.username ? (
+                            <span style={{ color: 'var(--info)', fontWeight: 600 }}>
+                              {' '}• @{emp.username}
+                            </span>
+                          ) : (
+                            <span style={{ color: 'var(--muted)' }}> • Unlinked</span>
+                          )}
                         </div>
                       </td>
                       <td>
-                        {emp.departmentName || '—'}
+                        <div>{emp.departmentName || '—'}</div>
                         {emp.parentDepartmentName && (
                           <div style={{ fontSize: '0.75rem', color: 'var(--muted)' }}>
                             {emp.parentDepartmentName}
                           </div>
                         )}
                       </td>
-                      <td>{emp.position || emp.job || '—'}</td>
-                      <td>{emp.managerFullName ? `${emp.managerFullName} (${emp.managerEmployeeNumber})` : '—'}</td>
+                      <td>
+                        <div>{emp.position || emp.job || '—'}</div>
+                        {emp.job && emp.position && emp.job !== emp.position && (
+                          <div style={{ fontSize: '0.75rem', color: 'var(--muted)' }}>
+                            {emp.job}
+                          </div>
+                        )}
+                      </td>
+                      <td>
+                        {emp.managerFullName ? (
+                          <button
+                            type="button"
+                            className="apid-btn apid-btn-outline apid-btn-sm"
+                            style={{
+                              border: 'none',
+                              padding: '0.15rem 0.4rem',
+                              background: 'transparent',
+                              color: 'var(--info)',
+                              cursor: 'pointer',
+                              textAlign: 'left',
+                              textDecoration: 'underline',
+                            }}
+                            title={`Filter direct reports of ${emp.managerFullName}`}
+                            onClick={() =>
+                              handleDrilldown(
+                                emp.managerId!,
+                                emp.managerFullName!,
+                                emp.managerEmployeeNumber || ''
+                              )
+                            }
+                          >
+                            {emp.managerFullName} ({emp.managerEmployeeNumber})
+                          </button>
+                        ) : (
+                          <span style={{ color: 'var(--muted)', fontSize: '0.8rem' }}>
+                            Top Level (CEO)
+                          </span>
+                        )}
+                      </td>
                       <td>
                         <span
                           className={`apid-status ${
@@ -403,21 +553,31 @@ export function OrganizationPanel() {
                           {emp.employmentStatus}
                         </span>
                       </td>
-                      <td className="apid-actions-cell">
-                        <button type="button" className="apid-btn apid-btn-sm" onClick={() => openEditEmployee(emp)}>
-                          Edit
+                      <td className="apid-actions-cell" style={{ textAlign: 'right' }}>
+                        <button
+                          type="button"
+                          className="apid-btn apid-btn-sm apid-btn-outline"
+                          onClick={() => setViewingEmployee(emp)}
+                          title="View read-only employee profile details"
+                        >
+                          View
                         </button>
-                        <button type="button" className="apid-btn apid-btn-sm" onClick={() => setTeamEmployee(emp)}>
+                        <button
+                          type="button"
+                          className="apid-btn apid-btn-sm"
+                          onClick={() => setTeamEmployee(emp)}
+                          title="View direct reports & reporting tree"
+                        >
                           Team
                         </button>
-                        {canManageEmployeeAccounts && (
-                          <button
-                            type="button"
-                            className={`apid-btn apid-btn-sm${emp.userId ? ' apid-btn-danger' : ''}`}
-                            onClick={() => setLinkUserEmployee(emp)}
+                        {emp.username && (
+                          <span
+                            className="boa-pill boa-pill-info"
+                            style={{ fontSize: '0.7rem', padding: '0.15rem 0.45rem' }}
+                            title="Synchronized and authenticated from Active Directory DS"
                           >
-                            {emp.userId ? 'Revoke Link' : 'Link User'}
-                          </button>
+                            AD Synced
+                          </span>
                         )}
                       </td>
                     </tr>
@@ -427,29 +587,62 @@ export function OrganizationPanel() {
             </table>
           </div>
 
-          {employeePage && employeePage.totalPages > 1 && (
-            <div className="apid-pagination">
+          {/* Level 3: Smart Pagination & Rows Per Page Controls */}
+          <div
+            className="apid-pagination"
+            style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              flexWrap: 'wrap',
+              gap: '0.75rem',
+              marginTop: '1rem',
+            }}
+          >
+            {/* Rows Per Page Selector */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem' }}>
+              <span style={{ fontSize: '0.82rem', color: 'var(--muted)' }}>Rows per page:</span>
+              <select
+                className="apid-input"
+                style={{ width: 'auto', padding: '0.2rem 0.5rem', height: '32px' }}
+                value={pageSize}
+                onChange={(e) => {
+                  setPageSize(Number(e.target.value));
+                  setPage(0);
+                }}
+              >
+                <option value={15}>15</option>
+                <option value={25}>25</option>
+                <option value={50}>50</option>
+                <option value={100}>100</option>
+              </select>
+            </div>
+
+            {/* Prev / Page X of Y / Next */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
               <button
                 type="button"
                 className="apid-btn apid-btn-outline apid-btn-sm"
                 disabled={page === 0}
-                onClick={() => setPage((p) => p - 1)}
+                onClick={() => setPage((p) => Math.max(0, p - 1))}
               >
                 Prev
               </button>
-              <span>
-                Page {employeePage.number + 1} of {employeePage.totalPages} ({employeePage.totalElements} employees)
+              <span style={{ fontSize: '0.85rem' }}>
+                Page {employeePage ? employeePage.number + 1 : 1} of{' '}
+                {employeePage ? Math.max(1, employeePage.totalPages) : 1} (
+                {employeePage?.totalElements ?? 0} employees)
               </span>
               <button
                 type="button"
                 className="apid-btn apid-btn-outline apid-btn-sm"
-                disabled={page + 1 >= employeePage.totalPages}
+                disabled={!employeePage || page + 1 >= employeePage.totalPages}
                 onClick={() => setPage((p) => p + 1)}
               >
                 Next
               </button>
             </div>
-          )}
+          </div>
         </>
       ) : (
         <div className="apid-table-wrap">
@@ -458,10 +651,10 @@ export function OrganizationPanel() {
               <tr>
                 <th>Code</th>
                 <th>Department</th>
-                <th>Parent Directorate / Dept</th>
+                <th>Parent Directorate / Region</th>
                 <th>Head Employee</th>
                 <th>Status</th>
-                <th>Actions</th>
+                <th style={{ textAlign: 'right' }}>Source</th>
               </tr>
             </thead>
             <tbody>
@@ -472,21 +665,27 @@ export function OrganizationPanel() {
               ) : (
                 departments.map((dept) => (
                   <tr key={dept.id}>
-                    <td>{dept.code || '—'}</td>
+                    <td>
+                      <span style={{ fontFamily: 'monospace' }}>{dept.code || '—'}</span>
+                    </td>
                     <td>
                       <strong>{dept.name}</strong>
                     </td>
-                    <td>{dept.parentDepartmentName || 'Root'}</td>
+                    <td>{dept.parentDepartmentName || 'Corporate Directorate (Root)'}</td>
                     <td>{dept.headEmployeeName || '—'}</td>
                     <td>
                       <span className={`apid-status ${dept.active ? 'apid-status-active' : 'apid-status-disabled'}`}>
                         {dept.active ? 'ACTIVE' : 'INACTIVE'}
                       </span>
                     </td>
-                    <td className="apid-actions-cell">
-                      <button type="button" className="apid-btn apid-btn-sm" onClick={() => openEditDept(dept)}>
-                        Edit
-                      </button>
+                    <td style={{ textAlign: 'right' }}>
+                      <span
+                        className="boa-pill boa-pill-info"
+                        style={{ fontSize: '0.72rem' }}
+                        title="Managed directly in Bank of Abyssinia Active Directory & Enterprise Database"
+                      >
+                        AD Managed
+                      </span>
                     </td>
                   </tr>
                 ))
@@ -496,246 +695,116 @@ export function OrganizationPanel() {
         </div>
       )}
 
-      {showEmpModal && (
+      {/* Read-Only Employee Profile Modal */}
+      {viewingEmployee && (
         <div className="apid-modal-backdrop">
           <div className="apid-modal apid-card" style={{ maxWidth: '580px', maxHeight: '90vh', overflowY: 'auto' }}>
-            <h3>{editingEmployee ? 'Edit Employee Profile' : 'Add Employee Profile'}</h3>
-            <form className="apid-form" onSubmit={handleSaveEmployee}>
-              <div className="apid-field">
-                <label htmlFor="emp-number">Employee Number</label>
-                <input
-                  id="emp-number"
-                  className="apid-input"
-                  value={empNumber}
-                  onChange={(e) => setEmpNumber(e.target.value)}
-                  maxLength={60}
-                  required
-                />
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+              <div>
+                <h3 style={{ margin: 0 }}>Employee Profile</h3>
+                <div style={{ fontSize: '0.8rem', color: 'var(--muted)', marginTop: '0.2rem' }}>
+                  Synchronized from Active Directory (Domain: <code style={{ color: 'var(--info)' }}>apid.test</code>)
+                </div>
               </div>
+              <span className="boa-pill boa-pill-info">AD Synced</span>
+            </div>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.85rem' }}>
               <div className="apid-field">
-                <label htmlFor="emp-fullname">Full Name</label>
-                <input
-                  id="emp-fullname"
-                  className="apid-input"
-                  value={empFullName}
-                  onChange={(e) => setEmpFullName(e.target.value)}
-                  maxLength={200}
-                  required
-                />
-              </div>
-              <div className="apid-field">
-                <label htmlFor="emp-email">Work Email</label>
-                <input
-                  id="emp-email"
-                  type="email"
-                  className="apid-input"
-                  value={empEmail}
-                  onChange={(e) => setEmpEmail(e.target.value)}
-                  maxLength={200}
-                />
-              </div>
-              <div className="apid-field">
-                <label htmlFor="emp-gender">Gender</label>
-                <select
-                  id="emp-gender"
-                  className="apid-input"
-                  value={empGender}
-                  onChange={(e) => setEmpGender(e.target.value)}
-                >
-                  <option value="">Unspecified</option>
-                  <option value="Male">Male</option>
-                  <option value="Female">Female</option>
-                </select>
-              </div>
-              <div className="apid-field">
-                <label htmlFor="emp-dept">Department</label>
-                <select
-                  id="emp-dept"
-                  className="apid-input"
-                  value={empDeptId ?? ''}
-                  onChange={(e) => setEmpDeptId(e.target.value ? Number(e.target.value) : null)}
-                >
-                  <option value="">None</option>
-                  {departments.map((d) => (
-                    <option key={d.id} value={d.id}>
-                      {d.parentDepartmentName ? `${d.parentDepartmentName} / ${d.name}` : d.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div className="apid-field">
-                <label htmlFor="emp-job">Job</label>
-                <input
-                  id="emp-job"
-                  className="apid-input"
-                  value={empJob}
-                  onChange={(e) => setEmpJob(e.target.value)}
-                  maxLength={150}
-                />
-              </div>
-              <div className="apid-field">
-                <label htmlFor="emp-position">Position</label>
-                <input
-                  id="emp-position"
-                  className="apid-input"
-                  value={empPosition}
-                  onChange={(e) => setEmpPosition(e.target.value)}
-                  maxLength={150}
-                />
-              </div>
-              <div className="apid-field">
-                <label htmlFor="emp-manager">Direct Manager</label>
-                <EmployeeSearchSelect
-                  id="emp-manager"
-                  value={empManagerId}
-                  selectedLabel={empManagerLabel}
-                  excludeId={editingEmployee?.id ?? null}
-                  noneLabel="No Manager (Top Level)"
-                  onChange={(nextId, item) => {
-                    setEmpManagerId(nextId);
-                    setEmpManagerLabel(item ? `${item.fullName} (${item.employeeNumber})` : null);
-                  }}
-                />
-              </div>
-              <div className="apid-field">
-                <label htmlFor="emp-status">Employment Status</label>
-                <select
-                  id="emp-status"
-                  className="apid-input"
-                  value={empStatus}
-                  onChange={(e) => setEmpStatus(e.target.value as EmploymentStatus)}
-                >
-                  <option value="ACTIVE">ACTIVE</option>
-                  <option value="ON_LEAVE">ON_LEAVE</option>
-                  <option value="INACTIVE">INACTIVE</option>
-                  <option value="TERMINATED">TERMINATED</option>
-                </select>
+                <label style={{ fontSize: '0.78rem', color: 'var(--muted)' }}>Employee Number</label>
+                <div style={{ fontWeight: 600, fontFamily: 'monospace', fontSize: '1rem' }}>
+                  {viewingEmployee.employeeNumber}
+                </div>
               </div>
 
-              <div className="apid-modal-actions">
-                <button
-                  type="button"
-                  className="apid-btn apid-btn-outline"
-                  disabled={saving}
-                  onClick={() => setShowEmpModal(false)}
-                >
-                  Cancel
-                </button>
-                <button type="submit" className="apid-btn apid-btn-primary" disabled={saving}>
-                  {saving ? 'Saving...' : editingEmployee ? 'Save Changes' : 'Create Employee'}
-                </button>
+              <div className="apid-field">
+                <label style={{ fontSize: '0.78rem', color: 'var(--muted)' }}>Full Legal Name</label>
+                <div style={{ fontWeight: 600, fontSize: '1rem' }}>{viewingEmployee.fullName}</div>
               </div>
-            </form>
+
+              <div className="apid-field">
+                <label style={{ fontSize: '0.78rem', color: 'var(--muted)' }}>Corporate Work Email</label>
+                <div>{viewingEmployee.email || '—'}</div>
+              </div>
+
+              <div className="apid-field">
+                <label style={{ fontSize: '0.78rem', color: 'var(--muted)' }}>Active Directory Login Username</label>
+                <div style={{ color: 'var(--info)', fontWeight: 600 }}>
+                  {viewingEmployee.username ? `@${viewingEmployee.username}` : 'Unlinked'}
+                </div>
+              </div>
+
+              <div className="apid-field">
+                <label style={{ fontSize: '0.78rem', color: 'var(--muted)' }}>Department / Unit</label>
+                <div>
+                  <strong>{viewingEmployee.departmentName || '—'}</strong>
+                  {viewingEmployee.parentDepartmentName && (
+                    <div style={{ fontSize: '0.8rem', color: 'var(--muted)' }}>
+                      Directorate / Region: {viewingEmployee.parentDepartmentName}
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <div className="apid-field">
+                <label style={{ fontSize: '0.78rem', color: 'var(--muted)' }}>Position / Job Title</label>
+                <div>{viewingEmployee.position || viewingEmployee.job || '—'}</div>
+              </div>
+
+              <div className="apid-field">
+                <label style={{ fontSize: '0.78rem', color: 'var(--muted)' }}>Direct Supervisor (Reporting Line)</label>
+                <div>
+                  {viewingEmployee.managerFullName ? (
+                    <span>
+                      {viewingEmployee.managerFullName} ({viewingEmployee.managerEmployeeNumber})
+                    </span>
+                  ) : (
+                    <span style={{ color: 'var(--muted)' }}>Top Level Executive (Chief Executive Officer)</span>
+                  )}
+                </div>
+              </div>
+
+              <div className="apid-field">
+                <label style={{ fontSize: '0.78rem', color: 'var(--muted)' }}>Employment Status</label>
+                <div>
+                  <span
+                    className={`apid-status ${
+                      viewingEmployee.employmentStatus === 'ACTIVE'
+                        ? 'apid-status-active'
+                        : viewingEmployee.employmentStatus === 'ON_LEAVE'
+                          ? 'apid-status-templock'
+                          : 'apid-status-disabled'
+                    }`}
+                  >
+                    {viewingEmployee.employmentStatus}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            <div className="apid-alert apid-alert-info" style={{ marginTop: '1.25rem', fontSize: '0.8rem' }}>
+              Directory Governance: This employee profile is managed directly via Active Directory Domain Services. Any identity changes made in AD DS automatically synchronize to APID.
+            </div>
+
+            <div className="apid-modal-actions" style={{ marginTop: '1.25rem' }}>
+              <button
+                type="button"
+                className="apid-btn apid-btn-primary"
+                onClick={() => setViewingEmployee(null)}
+              >
+                Close
+              </button>
+            </div>
           </div>
         </div>
       )}
 
-      {showDeptModal && (
-        <div className="apid-modal-backdrop">
-          <div className="apid-modal apid-card">
-            <h3>{editingDept ? 'Edit Department' : 'Add Department'}</h3>
-            <form className="apid-form" onSubmit={handleSaveDepartment}>
-              <div className="apid-field">
-                <label htmlFor="dept-code">Code (optional)</label>
-                <input
-                  id="dept-code"
-                  className="apid-input"
-                  value={deptCode}
-                  onChange={(e) => setDeptCode(e.target.value)}
-                  maxLength={60}
-                />
-              </div>
-              <div className="apid-field">
-                <label htmlFor="dept-name">Department Name</label>
-                <input
-                  id="dept-name"
-                  className="apid-input"
-                  value={deptName}
-                  onChange={(e) => setDeptName(e.target.value)}
-                  maxLength={150}
-                  required
-                />
-              </div>
-              <div className="apid-field">
-                <label htmlFor="dept-parent">Parent Department</label>
-                <select
-                  id="dept-parent"
-                  className="apid-input"
-                  value={deptParentId ?? ''}
-                  onChange={(e) => setDeptParentId(e.target.value ? Number(e.target.value) : null)}
-                >
-                  <option value="">None (Root Directorate / Dept)</option>
-                  {departments
-                    .filter((d) => !editingDept || d.id !== editingDept.id)
-                    .map((d) => (
-                      <option key={d.id} value={d.id}>
-                        {d.name}
-                      </option>
-                    ))}
-                </select>
-              </div>
-              <div className="apid-field">
-                <label htmlFor="dept-head">Department Head</label>
-                <EmployeeSearchSelect
-                  id="dept-head"
-                  value={deptHeadId}
-                  selectedLabel={deptHeadLabel}
-                  noneLabel="Unassigned"
-                  onChange={(nextId, item) => {
-                    setDeptHeadId(nextId);
-                    setDeptHeadLabel(item ? `${item.fullName} (${item.employeeNumber})` : null);
-                  }}
-                />
-              </div>
-              {editingDept && (
-                <label className="apid-checkbox-row">
-                  <input
-                    type="checkbox"
-                    checked={deptActive}
-                    onChange={(e) => setDeptActive(e.target.checked)}
-                  />
-                  <span>Active department</span>
-                </label>
-              )}
-              <div className="apid-modal-actions">
-                <button
-                  type="button"
-                  className="apid-btn apid-btn-outline"
-                  disabled={saving}
-                  onClick={() => setShowDeptModal(false)}
-                >
-                  Cancel
-                </button>
-                <button type="submit" className="apid-btn apid-btn-primary" disabled={saving}>
-                  {saving ? 'Saving...' : editingDept ? 'Save Changes' : 'Create Department'}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {showImportWizard && (
-        <OrgImportWizardModal
-          onClose={() => setShowImportWizard(false)}
-          onCommitted={handleImportCommitted}
-          onDownloadStandardSample={() => triggerCsvDownload('boa-hierarchy-sample.csv', SAMPLE_HIERARCHY_CSV)}
-        />
-      )}
-
+      {/* Direct Reports Team Hierarchy Modal */}
       {teamEmployee && (
         <EmployeeTeamModal
           employee={teamEmployee}
           onClose={() => setTeamEmployee(null)}
-          onUpdated={refreshAll}
-        />
-      )}
-
-      {linkUserEmployee && (
-        <LinkUserModal
-          employee={linkUserEmployee}
-          onClose={() => setLinkUserEmployee(null)}
-          onUpdated={refreshAll}
+          onUpdated={() => loadEmployees()}
         />
       )}
     </div>

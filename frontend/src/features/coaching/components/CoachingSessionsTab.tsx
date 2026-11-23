@@ -20,13 +20,22 @@ import {
   Sliders,
   PlusCircle,
   AlertCircle,
+  Plus,
+  BookOpen,
+  ExternalLink,
+  Bot,
+  Mic,
+  Link,
+  Download,
 } from 'lucide-react';
 import { useAuth } from '../../../app/AuthContext';
+import { apiClient } from '../../../shared/api/apiClient';
 import { coreConfigApi } from '../../admin/config/api/coreConfigApi';
 import {
   coachingSessionApi,
   coachingGovernanceApi,
   CoachingSessionItem,
+  ReferenceMaterialItem,
 } from '../api/coachingSessionApi';
 import { MyCoacheeItem } from '../api/coachingAssignmentApi';
 import { ScheduleSessionModal } from './ScheduleSessionModal';
@@ -102,6 +111,30 @@ export const CoachingSessionsTab: React.FC<CoachingSessionsTabProps> = ({
 
   const toggleSeriesRoadmap = (seriesId: number) => {
     setExpandedSeriesRoadmaps((prev) => ({ ...prev, [seriesId]: !prev[seriesId] }));
+  };
+
+  const [downloadingUrl, setDownloadingUrl] = useState<string | null>(null);
+
+  const handleDownloadDocument = async (url: string, filename: string) => {
+    try {
+      setDownloadingUrl(url);
+      const cleanPath = url.startsWith('/api/v1') ? url.replace('/api/v1', '') : url;
+      const res = await apiClient.get<Blob>(cleanPath, { responseType: 'blob' });
+      const blob = new Blob([res.data]);
+      const blobUrl = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = blobUrl;
+      link.setAttribute('download', filename || 'document');
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(blobUrl);
+    } catch (err: any) {
+      console.error('Download failed:', err);
+      alert('Failed to download document: ' + (err?.response?.data?.message || err?.message || 'Access error'));
+    } finally {
+      setDownloadingUrl(null);
+    }
   };
 
   // Fetch system configs for coaching policies (e.g. 15-min early video join window)
@@ -555,37 +588,82 @@ export const CoachingSessionsTab: React.FC<CoachingSessionsTabProps> = ({
                   )}
                 </div>
 
-                {/* Delivery Mode Badge */}
-                <div
-                  style={{
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    gap: '0.35rem',
-                    background: 'var(--surface-subtle, #f8fafc)',
-                    border: '1px solid var(--border, #e2e8f0)',
-                    padding: '0.2rem 0.55rem',
-                    borderRadius: '6px',
-                    fontSize: '0.76rem',
-                    fontWeight: 600,
-                    color: 'var(--text-secondary, #334155)',
-                  }}
-                >
-                  {session.meetingMode === 'VIRTUAL_VIDEO' ? (
-                    <>
-                      <Video size={13} style={{ color: '#0284c7' }} />
-                      <span>Daily.co Live Video</span>
-                    </>
-                  ) : session.meetingMode === 'PHONE_CALL' ? (
-                    <>
-                      <Phone size={13} style={{ color: '#16a34a' }} />
-                      <span>Phone Call</span>
-                    </>
-                  ) : (
-                    <>
-                      <MapPin size={13} style={{ color: '#9333ea' }} />
-                      <span>{session.meetingLocation || 'In-Person'}</span>
-                    </>
+                {/* Delivery Mode & AI Badges */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', flexWrap: 'wrap' }}>
+                  {session.aiSummarizationEnabled !== false && (
+                    <span
+                      title="Local AI Auto-Summarization active"
+                      style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '0.25rem',
+                        fontSize: '0.72rem',
+                        fontWeight: 600,
+                        padding: '0.2rem 0.45rem',
+                        borderRadius: '6px',
+                        background: 'rgba(202, 138, 4, 0.08)',
+                        color: '#b45309',
+                        border: '1px solid rgba(202, 138, 4, 0.2)',
+                      }}
+                    >
+                      <Bot size={11} /> AI Summary
+                    </span>
                   )}
+                  {session.aiAgentEnabled && (
+                    <span
+                      title="LiveKit AI Active Participant Agent active"
+                      style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '0.25rem',
+                        fontSize: '0.72rem',
+                        fontWeight: 600,
+                        padding: '0.2rem 0.45rem',
+                        borderRadius: '6px',
+                        background: 'rgba(37, 99, 235, 0.08)',
+                        color: '#1d4ed8',
+                        border: '1px solid rgba(37, 99, 235, 0.2)',
+                      }}
+                    >
+                      <Mic size={11} /> AI Co-Pilot
+                    </span>
+                  )}
+                  <div
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '0.35rem',
+                      background: 'var(--surface-subtle, #f8fafc)',
+                      border: '1px solid var(--border, #e2e8f0)',
+                      padding: '0.2rem 0.55rem',
+                      borderRadius: '6px',
+                      fontSize: '0.76rem',
+                      fontWeight: 600,
+                      color: 'var(--text-secondary, #334155)',
+                    }}
+                  >
+                    {session.meetingMode === 'VIRTUAL_VIDEO' || session.meetingMode === 'ONLINE' ? (
+                      <>
+                        <Video size={13} style={{ color: '#0284c7' }} />
+                        <span>LiveKit Video</span>
+                      </>
+                    ) : session.meetingMode === 'HYBRID' ? (
+                      <>
+                        <Video size={13} style={{ color: '#0284c7' }} />
+                        <span>Hybrid Call</span>
+                      </>
+                    ) : session.meetingMode === 'PHONE_CALL' ? (
+                      <>
+                        <Phone size={13} style={{ color: '#16a34a' }} />
+                        <span>Phone Call</span>
+                      </>
+                    ) : (
+                      <>
+                        <MapPin size={13} style={{ color: '#9333ea' }} />
+                        <span>{session.meetingLocation || 'In-Person'}</span>
+                      </>
+                    )}
+                  </div>
                 </div>
               </div>
 
@@ -695,6 +773,145 @@ export const CoachingSessionsTab: React.FC<CoachingSessionsTabProps> = ({
                   )}
                 </div>
               )}
+
+              {/* Pre-Session Preparation & References */}
+              {(() => {
+                let parsedMaterials: ReferenceMaterialItem[] = [];
+                if (session.referenceMaterials) {
+                  if (Array.isArray(session.referenceMaterials)) {
+                    parsedMaterials = session.referenceMaterials;
+                  } else {
+                    try {
+                      const res = JSON.parse(session.referenceMaterials);
+                      if (Array.isArray(res)) parsedMaterials = res;
+                    } catch {
+                      // ignore parse error
+                    }
+                  }
+                }
+                const hasPrep = Boolean(session.prepNotes && session.prepNotes.trim());
+                const hasMaterials = parsedMaterials.length > 0;
+
+                if (!hasPrep && !hasMaterials) return null;
+
+                return (
+                  <div
+                    style={{
+                      marginTop: '0.65rem',
+                      padding: '0.65rem 0.85rem',
+                      borderRadius: '8px',
+                      background: 'rgba(248, 250, 252, 0.9)',
+                      border: '1px solid var(--border, #e2e8f0)',
+                    }}
+                  >
+                    <div
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '0.4rem',
+                        fontSize: '0.74rem',
+                        fontWeight: 700,
+                        letterSpacing: '0.03em',
+                        color: 'var(--muted, #64748b)',
+                        marginBottom: '0.35rem',
+                      }}
+                    >
+                      <BookOpen size={12} style={{ color: 'var(--brand-gold, #ca8a04)' }} />
+                      PRE-SESSION PREPARATION & REFERENCES
+                    </div>
+
+                    {hasPrep && (
+                      <div
+                        style={{
+                          fontSize: '0.8rem',
+                          color: 'var(--text-primary, #1e293b)',
+                          lineHeight: 1.45,
+                          marginBottom: hasMaterials ? '0.5rem' : 0,
+                        }}
+                      >
+                        {session.prepNotes}
+                      </div>
+                    )}
+
+                    {hasMaterials && (
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.4rem' }}>
+                        {parsedMaterials.map((mat, mIdx) => (
+                          mat.type === 'DOCUMENT' && mat.url ? (
+                            <button
+                              key={mIdx}
+                              type="button"
+                              onClick={() => handleDownloadDocument(mat.url!, mat.title)}
+                              disabled={downloadingUrl === mat.url}
+                              style={{
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '0.35rem',
+                                fontSize: '0.74rem',
+                                fontWeight: 600,
+                                padding: '0.2rem 0.55rem',
+                                background: '#f0fdf4',
+                                color: '#166534',
+                                borderRadius: '5px',
+                                border: '1px solid #bbf7d0',
+                                cursor: downloadingUrl === mat.url ? 'wait' : 'pointer',
+                              }}
+                              title={`Download ${mat.title}`}
+                            >
+                              <FileText size={11} style={{ color: '#15803d' }} />
+                              <span>{mat.title}</span>
+                              {mat.notes && <span style={{ opacity: 0.75, fontSize: '0.68rem' }}>({mat.notes})</span>}
+                              <Download size={11} />
+                            </button>
+                          ) : mat.type === 'URL' && mat.url ? (
+                            <a
+                              key={mIdx}
+                              href={mat.url.startsWith('http') ? mat.url : `https://${mat.url}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              style={{
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '0.3rem',
+                                fontSize: '0.74rem',
+                                fontWeight: 600,
+                                padding: '0.2rem 0.5rem',
+                                background: '#eff6ff',
+                                color: '#1d4ed8',
+                                borderRadius: '5px',
+                                border: '1px solid #bfdbfe',
+                                textDecoration: 'none',
+                              }}
+                            >
+                              <Link size={11} />
+                              <span>{mat.title}</span>
+                              <ExternalLink size={11} />
+                            </a>
+                          ) : (
+                            <span
+                              key={mIdx}
+                              style={{
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '0.3rem',
+                                fontSize: '0.74rem',
+                                fontWeight: 600,
+                                padding: '0.2rem 0.5rem',
+                                background: '#fefce8',
+                                color: '#854d0e',
+                                borderRadius: '5px',
+                                border: '1px solid #fef08a',
+                              }}
+                            >
+                              <BookOpen size={11} />
+                              <span>{mat.title}{mat.notes ? ` (${mat.notes})` : ''}</span>
+                            </span>
+                          )
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
             </div>
 
             {/* Middle Row: Coach & Coachee Roster with Avatars */}
@@ -1090,8 +1307,8 @@ export const CoachingSessionsTab: React.FC<CoachingSessionsTabProps> = ({
                   </button>
                 )}
 
-                {/* Primary Action: Daily.co Video Call (Window guarded) */}
-                {session.meetingMode === 'VIRTUAL_VIDEO' &&
+                {/* Primary Action: Video Call (Window guarded) */}
+                {(session.meetingMode === 'VIRTUAL_VIDEO' || session.meetingMode === 'ONLINE' || session.meetingMode === 'HYBRID') &&
                   session.status !== 'CANCELLED' &&
                   session.status !== 'COMPLETED' && (
                     isTooEarlyForCall ? (
@@ -1137,7 +1354,7 @@ export const CoachingSessionsTab: React.FC<CoachingSessionsTabProps> = ({
                         }}
                       >
                         <Video size={16} />
-                        Join Daily.co Video
+                        Join LiveKit Video
                       </button>
                     ) : (
                       <span
@@ -2046,13 +2263,13 @@ export const CoachingSessionsTab: React.FC<CoachingSessionsTabProps> = ({
             </p>
           </div>
 
-          {/* Primary Action Button: Standard Bank Recurring Coaching Rhythm */}
+          {/* Primary Action Button: Schedule Coaching Session (Mentoring Style) */}
           {canSchedule && (
             <div style={{ display: 'flex', gap: '0.6rem', alignItems: 'center' }}>
               <button
                 type="button"
                 className="apid-btn apid-btn-primary"
-                onClick={() => setIsSeriesOpen(true)}
+                onClick={() => setIsScheduleOpen(true)}
                 style={{
                   display: 'inline-flex',
                   alignItems: 'center',
@@ -2066,8 +2283,8 @@ export const CoachingSessionsTab: React.FC<CoachingSessionsTabProps> = ({
                   boxShadow: '0 2px 4px rgba(202, 138, 4, 0.25)',
                 }}
               >
-                <Sparkles size={16} />
-                <span>{mode === 'SKILLS' ? 'Schedule Workshop Rhythm' : 'Set Meeting Rhythm'}</span>
+                <Plus size={16} />
+                <span>Schedule Coaching Session</span>
               </button>
             </div>
           )}
@@ -2483,7 +2700,7 @@ export const CoachingSessionsTab: React.FC<CoachingSessionsTabProps> = ({
           <button
             type="button"
             className="apid-btn apid-btn-primary"
-            onClick={() => setIsSeriesOpen(true)}
+            onClick={() => setIsScheduleOpen(true)}
             style={{
               display: 'inline-flex',
               alignItems: 'center',
@@ -2493,7 +2710,7 @@ export const CoachingSessionsTab: React.FC<CoachingSessionsTabProps> = ({
               color: '#fff',
             }}
           >
-            <Calendar size={16} /> Set Meeting Rhythm
+            <Plus size={16} /> Schedule Coaching Session
           </button>
         </div>
       )}
@@ -2785,7 +3002,7 @@ export const CoachingSessionsTab: React.FC<CoachingSessionsTabProps> = ({
         }}
       />
 
-      {/* Daily.co Video Meeting Modal */}
+      {/* LiveKit Video Meeting Modal */}
       <DailyVideoModal
         session={selectedForVideo}
         isOpen={selectedForVideo !== null}

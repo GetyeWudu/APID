@@ -139,25 +139,63 @@ public class SkillCoachingRequestService {
 
         savedReq.setTargets(targets);
 
-        // Audit log
-        auditService.record(new AuditService.AuditCommand(
-                null,
-                actor.getUserId(),
-                actor.getUsername(),
-                null,
-                "COACHING",
-                "SKILL_COACHING_REQUEST_CREATED",
-                "SUCCESS",
-                null,
-                "SkillCoachingRequest",
-                savedReq.getId().toString(),
-                Map.of(
-                        "skillTitle", savedReq.getSkillTitle(),
-                        "targetCount", String.valueOf(targets.size()),
-                        "proposedCoach", proposedCoach.getFullName()
-                ),
-                null, null
-        ));
+        // Check if this request qualifies for Line Manager Auto-Approval
+        // Line managers coaching their direct reports do NOT need PMS Admin approval.
+        boolean allTargetsAreDirectReports = uniqueEmployeeIds.stream()
+                .allMatch(empId -> employeeQueryService.isDirectManager(requester.getId(), empId));
+        boolean isLineManagerSelfCoaching = proposedCoach.getId().equals(requester.getId());
+        boolean isAdmin = actor.getAuthorities().stream().anyMatch(a ->
+                a.getAuthority().equals("COACHING_REQUEST_APPROVE") || a.getAuthority().equals("COACHING_ASSIGNMENT_MANAGE"));
+
+        boolean isAutoApproved = (allTargetsAreDirectReports && isLineManagerSelfCoaching) || isAdmin;
+
+        if (isAutoApproved) {
+            String autoReviewNotes = isAdmin && !isLineManagerSelfCoaching
+                    ? "Directly approved by Administrator"
+                    : "Auto-approved: Line manager coaching direct report(s)";
+            savedReq = activateSkillCohort(savedReq, proposedCoach, targets, actor.getUserId(), autoReviewNotes, true);
+
+            auditService.record(new AuditService.AuditCommand(
+                    null,
+                    actor.getUserId(),
+                    actor.getUsername(),
+                    null,
+                    "COACHING",
+                    "SKILL_COACHING_REQUEST_AUTO_APPROVED",
+                    "SUCCESS",
+                    null,
+                    "SkillCoachingRequest",
+                    savedReq.getId().toString(),
+                    Map.of(
+                            "skillTitle", savedReq.getSkillTitle(),
+                            "targetCount", String.valueOf(targets.size()),
+                            "coach", proposedCoach.getFullName(),
+                            "autoApproved", "true"
+                    ),
+                    null, null
+            ));
+        } else {
+            // Cross-department or external specialist coaching requires PMS Admin review
+            auditService.record(new AuditService.AuditCommand(
+                    null,
+                    actor.getUserId(),
+                    actor.getUsername(),
+                    null,
+                    "COACHING",
+                    "SKILL_COACHING_REQUEST_CREATED",
+                    "SUCCESS",
+                    null,
+                    "SkillCoachingRequest",
+                    savedReq.getId().toString(),
+                    Map.of(
+                            "skillTitle", savedReq.getSkillTitle(),
+                            "targetCount", String.valueOf(targets.size()),
+                            "proposedCoach", proposedCoach.getFullName(),
+                            "status", "PENDING_APPROVAL"
+                    ),
+                    null, null
+            ));
+        }
 
         return toDto(savedReq);
     }
@@ -281,83 +319,14 @@ public class SkillCoachingRequestService {
 
         List<SkillCoachingRequestTarget> targets = targetRepository.findAllByRequestId(requestId);
 
-        // Create assignment for each target coachee
-        for (SkillCoachingRequestTarget target : targets) {
-            if (finalCoach != null && target.getEmployeeId().equals(finalCoach.getId())) {
-                throw new BusinessException("CANNOT_COACH_SELF", "Employee cannot coach themselves", HttpStatus.BAD_REQUEST);
-            }
-
-            CoachingAssignment assignment = new CoachingAssignment();
-            assignment.setPathway(AssignmentPathway.SELF_DEVELOPMENT);
-            assignment.setCoacheeEmployeeId(target.getEmployeeId());
-            assignment.setCoachEmployeeId(finalCoach != null ? finalCoach.getId() : null);
-            // Performance quarter defaults to active/target coaching quarter
-            assignment.setPerformanceFiscalQuarterId(req.getCoachingFiscalQuarterId());
-            assignment.setCoachingFiscalQuarterId(req.getCoachingFiscalQuarterId());
-            assignment.setStatus(finalCoach != null ? AssignmentStatus.ACTIVE : AssignmentStatus.PENDING_COACH_ASSIGNMENT);
-            assignment.setAtRisk(false);
-
-            CoachingAssignment savedAssignment = assignmentRepository.save(assignment);
-            target.setCreatedAssignmentId(savedAssignment.getId());
-            targetRepository.save(target);
-
-            // Insert coachee participant
-            CoachingParticipant coacheePart = new CoachingParticipant();
-            coacheePart.setAssignmentId(savedAssignment.getId());
-            coacheePart.setEmployeeId(target.getEmployeeId());
-            coacheePart.setRole(ParticipantRole.COACHEE);
-            coacheePart.setActive(true);
-            participantRepository.save(coacheePart);
-
-            // Insert coach participant if coach assigned
-            if (finalCoach != null) {
-                CoachingParticipant coachPart = new CoachingParticipant();
-                coachPart.setAssignmentId(savedAssignment.getId());
-                coachPart.setEmployeeId(finalCoach.getId());
-                coachPart.setRole(ParticipantRole.COACH);
-                coachPart.setActive(true);
-                participantRepository.save(coachPart);
-            }
-
-            // Notify coachee
-            Employee coachee = employeeRepository.findById(target.getEmployeeId()).orElse(null);
-            if (coachee != null && coachee.getUserId() != null) {
-                notificationService.notify(
-                        coachee.getUserId(),
-                        NotificationModule.COACHING,
-                        "SKILL_COACHING_APPROVED",
-                        "Skill Coaching Approved",
-                        "Your skill coaching request for '" + req.getSkillTitle() + "' has been approved by PMS Administration.",
-                        "/coaching?view=plan"
-                );
-            }
-        }
-
-        // Notify coach
-        if (finalCoach != null && finalCoach.getUserId() != null) {
-            notificationService.notify(
-                    finalCoach.getUserId(),
-                    NotificationModule.COACHING,
-                    "COACHING_COACHEE_ASSIGNED",
-                    "New Coachees Assigned",
-                    "You have been assigned to coach " + targets.size() + " employee(s) for '" + req.getSkillTitle() + "'.",
-                    "/coaching?view=coachees"
-            );
-        }
-
-        req.setStatus(SkillCoachingRequestStatus.APPROVED);
-        req.setProposedCoachEmployeeId(finalCoachId);
-        req.setReviewedByUserId(actor.getUserId());
-        req.setReviewNotes(payload.reviewNotes());
-        req.setReviewedAt(Instant.now());
-        SkillCoachingRequest savedReq = requestRepository.save(req);
-
-        // Provision group conversation for the approved skill cohort
-        try {
-            coachingCommunicationService.provisionSkillCohortGroupConversation(savedReq.getId(), actor.getUserId());
-        } catch (Exception e) {
-            // Keep going, non-fatal if conversation already exists
-        }
+        SkillCoachingRequest savedReq = activateSkillCohort(
+                req,
+                finalCoach,
+                targets,
+                actor.getUserId(),
+                payload.reviewNotes(),
+                false
+        );
 
         // Audit log
         auditService.record(new AuditService.AuditCommand(
@@ -380,6 +349,106 @@ public class SkillCoachingRequestService {
         ));
 
         return toDto(savedReq);
+    }
+
+    /**
+     * Activates a skill coaching cohort:
+     * - Marks request APPROVED
+     * - Generates active CoachingAssignment & CoachingParticipant records
+     * - Notifies coachees & coach
+     * - Provisions group chat conversation
+     */
+    private SkillCoachingRequest activateSkillCohort(
+            SkillCoachingRequest req,
+            Employee coach,
+            List<SkillCoachingRequestTarget> targets,
+            Long reviewerUserId,
+            String reviewNotes,
+            boolean isAutoApproved
+    ) {
+        req.setStatus(SkillCoachingRequestStatus.APPROVED);
+        req.setProposedCoachEmployeeId(coach != null ? coach.getId() : null);
+        req.setReviewedByUserId(reviewerUserId);
+        req.setReviewNotes(reviewNotes);
+        req.setReviewedAt(Instant.now());
+        SkillCoachingRequest savedReq = requestRepository.save(req);
+
+        // Create assignment for each target coachee
+        for (SkillCoachingRequestTarget target : targets) {
+            if (coach != null && target.getEmployeeId().equals(coach.getId())) {
+                throw new BusinessException("CANNOT_COACH_SELF", "Employee cannot coach themselves", HttpStatus.BAD_REQUEST);
+            }
+
+            CoachingAssignment assignment = new CoachingAssignment();
+            assignment.setPathway(AssignmentPathway.SELF_DEVELOPMENT);
+            assignment.setCoacheeEmployeeId(target.getEmployeeId());
+            assignment.setCoachEmployeeId(coach != null ? coach.getId() : null);
+            // Performance quarter defaults to active/target coaching quarter
+            assignment.setPerformanceFiscalQuarterId(req.getCoachingFiscalQuarterId());
+            assignment.setCoachingFiscalQuarterId(req.getCoachingFiscalQuarterId());
+            assignment.setStatus(coach != null ? AssignmentStatus.ACTIVE : AssignmentStatus.PENDING_COACH_ASSIGNMENT);
+            assignment.setAtRisk(false);
+
+            CoachingAssignment savedAssignment = assignmentRepository.save(assignment);
+            target.setCreatedAssignmentId(savedAssignment.getId());
+            targetRepository.save(target);
+
+            // Insert coachee participant
+            CoachingParticipant coacheePart = new CoachingParticipant();
+            coacheePart.setAssignmentId(savedAssignment.getId());
+            coacheePart.setEmployeeId(target.getEmployeeId());
+            coacheePart.setRole(ParticipantRole.COACHEE);
+            coacheePart.setActive(true);
+            participantRepository.save(coacheePart);
+
+            // Insert coach participant if coach assigned
+            if (coach != null) {
+                CoachingParticipant coachPart = new CoachingParticipant();
+                coachPart.setAssignmentId(savedAssignment.getId());
+                coachPart.setEmployeeId(coach.getId());
+                coachPart.setRole(ParticipantRole.COACH);
+                coachPart.setActive(true);
+                participantRepository.save(coachPart);
+            }
+
+            // Notify coachee
+            Employee coachee = employeeRepository.findById(target.getEmployeeId()).orElse(null);
+            if (coachee != null && coachee.getUserId() != null) {
+                String notifTitle = isAutoApproved ? "Skill Coaching Cohort Started" : "Skill Coaching Approved";
+                String notifBody = isAutoApproved
+                        ? "Your line manager has initiated a skill coaching cohort for '" + req.getSkillTitle() + "'."
+                        : "Your skill coaching request for '" + req.getSkillTitle() + "' has been approved by PMS Administration.";
+                notificationService.notify(
+                        coachee.getUserId(),
+                        NotificationModule.COACHING,
+                        "SKILL_COACHING_APPROVED",
+                        notifTitle,
+                        notifBody,
+                        "/coaching?view=plan"
+                );
+            }
+        }
+
+        // Notify coach (if coach is different from reviewer/requester)
+        if (coach != null && coach.getUserId() != null && (!isAutoApproved || !coach.getUserId().equals(reviewerUserId))) {
+            notificationService.notify(
+                    coach.getUserId(),
+                    NotificationModule.COACHING,
+                    "COACHING_COACHEE_ASSIGNED",
+                    "New Coachees Assigned",
+                    "You have been assigned to coach " + targets.size() + " employee(s) for '" + req.getSkillTitle() + "'.",
+                    "/coaching?view=coachees"
+            );
+        }
+
+        // Provision group conversation for the approved skill cohort
+        try {
+            coachingCommunicationService.provisionSkillCohortGroupConversation(savedReq.getId(), reviewerUserId);
+        } catch (Exception e) {
+            // Keep going, non-fatal if conversation already exists
+        }
+
+        return savedReq;
     }
 
     /**

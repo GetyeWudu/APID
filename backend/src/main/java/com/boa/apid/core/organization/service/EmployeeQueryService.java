@@ -4,9 +4,12 @@ import com.boa.apid.common.exception.ResourceNotFoundException;
 import com.boa.apid.core.authorization.entity.User;
 import com.boa.apid.core.authorization.repository.UserRepository;
 import com.boa.apid.core.organization.dto.EmployeeDto;
+import com.boa.apid.core.organization.entity.Department;
 import com.boa.apid.core.organization.entity.Employee;
 import com.boa.apid.core.organization.entity.EmploymentStatus;
 import com.boa.apid.core.organization.repository.EmployeeRepository;
+import jakarta.persistence.criteria.Join;
+import jakarta.persistence.criteria.JoinType;
 import jakarta.persistence.criteria.Predicate;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
@@ -140,16 +143,49 @@ public class EmployeeQueryService {
             int page,
             int size
     ) {
+        return searchEmployees(search, departmentId, null, null, status, managerId, page, size);
+    }
+
+    public Page<EmployeeDto> searchEmployees(
+            String search,
+            Long departmentId,
+            List<Long> departmentIds,
+            String position,
+            EmploymentStatus status,
+            Long managerId,
+            int page,
+            int size
+    ) {
         int safePage = Math.max(0, page);
         int safeSize = Math.min(Math.max(1, size), MAX_PAGE_SIZE);
         Pageable pageable = PageRequest.of(safePage, safeSize, Sort.by(Sort.Direction.ASC, "fullName"));
 
         String normalizedSearch = search == null || search.isBlank() ? null : search.trim().toLowerCase(Locale.ROOT);
+        String normalizedPos = position == null || position.isBlank() ? null : position.trim().toLowerCase(Locale.ROOT);
 
         Specification<Employee> spec = (root, query, cb) -> {
             List<Predicate> predicates = new ArrayList<>();
-            if (departmentId != null) {
-                predicates.add(cb.equal(root.get("department").get("id"), departmentId));
+            if (departmentIds != null && !departmentIds.isEmpty()) {
+                Join<Employee, Department> deptJoin = root.join("department", JoinType.LEFT);
+                Join<Department, Department> parentJoin = deptJoin.join("parentDepartment", JoinType.LEFT);
+                predicates.add(cb.or(
+                        deptJoin.get("id").in(departmentIds),
+                        parentJoin.get("id").in(departmentIds)
+                ));
+            } else if (departmentId != null) {
+                Join<Employee, Department> deptJoin = root.join("department", JoinType.LEFT);
+                Join<Department, Department> parentJoin = deptJoin.join("parentDepartment", JoinType.LEFT);
+                predicates.add(cb.or(
+                        cb.equal(deptJoin.get("id"), departmentId),
+                        cb.equal(parentJoin.get("id"), departmentId)
+                ));
+            }
+            if (normalizedPos != null) {
+                String posPattern = "%" + normalizedPos + "%";
+                predicates.add(cb.or(
+                        cb.like(cb.lower(cb.coalesce(root.get("position"), "")), posPattern),
+                        cb.like(cb.lower(cb.coalesce(root.get("job"), "")), posPattern)
+                ));
             }
             if (status != null) {
                 predicates.add(cb.equal(root.get("employmentStatus"), status));

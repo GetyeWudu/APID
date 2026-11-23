@@ -395,7 +395,7 @@ export const CoachingRulesTab: React.FC = () => {
               </h3>
             </div>
             <p style={{ margin: '0 0 1rem 0', fontSize: '0.82rem', color: '#64748b', lineHeight: 1.5 }}>
-              How early before the meeting start time participants can enter the Daily.co video room. Before this window, the join button stays locked.
+              How early before the meeting start time participants can enter the LiveKit video room. Before this window, the join button stays locked.
             </p>
           </div>
 

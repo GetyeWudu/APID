@@ -19,6 +19,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
+import java.util.Optional;
 import java.util.Set;
 
 @Service
@@ -58,12 +59,36 @@ public class AuthService {
     public LoginOutcome login(LoginRequest request, String clientIp, String userAgent) {
         rateLimiter.checkLoginAllowed(clientIp, request.username());
 
-        IdentityAuthenticationProvider provider = authProviders.stream()
-                .filter(p -> p.supports(AuthProvider.LOCAL))
-                .findFirst()
-                .orElseThrow(() -> new IllegalStateException("No LOCAL authentication provider configured"));
+        String rawUsername = request.username() != null ? request.username().trim() : "";
+        Optional<User> localUserOpt = userRepository.findByUsernameIgnoreCase(rawUsername);
 
-        IdentityAuthenticationProvider.AuthResult result = provider.authenticate(request.username(), request.password());
+        IdentityAuthenticationProvider.AuthResult result;
+
+        // Route: If the account explicitly exists with LOCAL auth provider (e.g. system administrator), authenticate locally
+        if (localUserOpt.isPresent() && localUserOpt.get().getAuthProvider() == AuthProvider.LOCAL) {
+            IdentityAuthenticationProvider localProvider = getProvider(AuthProvider.LOCAL);
+            result = localProvider.authenticate(request.username(), request.password());
+        } else {
+            // Bank employee login: attempt Active Directory first, with clean fallback if needed
+            Optional<IdentityAuthenticationProvider> adProviderOpt = authProviders.stream()
+                    .filter(p -> p.supports(AuthProvider.ACTIVE_DIRECTORY))
+                    .findFirst();
+
+            if (adProviderOpt.isPresent()) {
+                result = adProviderOpt.get().authenticate(request.username(), request.password());
+                // Fallback to local authentication if AD provider reported provider mismatch or unknown and local user exists
+                if (!result.authenticated() && localUserOpt.isPresent() &&
+                        (result.failureReason() == IdentityAuthenticationProvider.AuthFailureReason.PROVIDER_MISMATCH
+                                || result.failureReason() == IdentityAuthenticationProvider.AuthFailureReason.UNKNOWN_USER)) {
+                    IdentityAuthenticationProvider localProvider = getProvider(AuthProvider.LOCAL);
+                    result = localProvider.authenticate(request.username(), request.password());
+                }
+            } else {
+                IdentityAuthenticationProvider localProvider = getProvider(AuthProvider.LOCAL);
+                result = localProvider.authenticate(request.username(), request.password());
+            }
+        }
+
         if (!result.authenticated() || result.user() == null) {
             auditService.recordIndependent(new AuditService.AuditCommand(
                     null, null, request.username(), null,
@@ -168,6 +193,13 @@ public class AuthService {
                 jwtService.getAccessExpirationMs(),
                 profile
         );
+    }
+
+    private IdentityAuthenticationProvider getProvider(AuthProvider authProvider) {
+        return authProviders.stream()
+                .filter(p -> p.supports(authProvider))
+                .findFirst()
+                .orElseThrow(() -> new IllegalStateException("No " + authProvider + " authentication provider configured"));
     }
 
     public record LoginOutcome(AuthResponse response, String rawRefreshToken) {}

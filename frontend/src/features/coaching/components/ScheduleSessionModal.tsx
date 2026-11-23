@@ -1,10 +1,11 @@
 import React, { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Calendar, Video, Phone, MapPin, X, Target, AlertTriangle } from 'lucide-react';
-import { coachingSessionApi, CreateSessionPayload, SessionMeetingMode } from '../api/coachingSessionApi';
+import { Calendar, Video, MapPin, X, Target, AlertTriangle, BookOpen, Link, Plus, Trash2, Bot, Mic, FileText, Paperclip, Upload, Loader2 } from 'lucide-react';
+import { coachingSessionApi, CreateSessionPayload, SessionMeetingMode, ReferenceMaterialItem } from '../api/coachingSessionApi';
 import { coachingAssignmentApi, MyCoacheeItem } from '../api/coachingAssignmentApi';
 import { skillCoachingRequestApi, SkillCoachingRequestItem } from '../api/skillCoachingRequestApi';
 import { BANK_OPERATING_TIME_OPTIONS, toEthiopianTime } from '../utils/ethiopianTimeUtils';
+import { apiClient } from '../../../shared/api/apiClient';
 
 interface ScheduleSessionModalProps {
   isOpen: boolean;
@@ -29,10 +30,55 @@ export const ScheduleSessionModal: React.FC<ScheduleSessionModalProps> = ({
   const [startDate, setStartDate] = useState('');
   const [startTime, setStartTime] = useState('15:00');
   const [duration, setDuration] = useState<number>(45);
-  const [meetingMode, setMeetingMode] = useState<SessionMeetingMode>('VIRTUAL_VIDEO');
+  const [meetingMode, setMeetingMode] = useState<SessionMeetingMode>('ONLINE');
   const [meetingLocation, setMeetingLocation] = useState('');
   const [selectedGoalId, setSelectedGoalId] = useState<number | ''>('');
+  const [prepNotes, setPrepNotes] = useState('');
+  const [referenceMaterials, setReferenceMaterials] = useState<ReferenceMaterialItem[]>([]);
+  const [newRefType, setNewRefType] = useState<'URL' | 'BOOK' | 'DOCUMENT'>('URL');
+  const [newRefTitle, setNewRefTitle] = useState('');
+  const [newRefUrl, setNewRefUrl] = useState('');
+  const [newRefNotes, setNewRefNotes] = useState('');
+  const [showAddRefForm, setShowAddRefForm] = useState(false);
+  const [uploadingFile, setUploadingFile] = useState(false);
+  const [aiSummarizationEnabled, setAiSummarizationEnabled] = useState(true);
+  const [aiAgentEnabled, setAiAgentEnabled] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setError(null);
+    setUploadingFile(true);
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('purpose', 'COACHING_RESOURCE');
+      const res = await apiClient.post<any>('/core/files', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      });
+      const data = res.data?.data;
+      const sizeKb = Math.round((data?.fileSizeBytes || file.size) / 1024);
+      const sizeStr = sizeKb >= 1024 ? `${(sizeKb / 1024).toFixed(1)} MB` : `${sizeKb} KB`;
+      const fileExt = file.name.split('.').pop()?.toUpperCase() || 'DOC';
+
+      setReferenceMaterials((prev) => [
+        ...prev,
+        {
+          type: 'DOCUMENT',
+          title: file.name,
+          url: `/api/v1/core/files/${data?.id}/download`,
+          notes: `${sizeStr} • ${fileExt}`,
+        },
+      ]);
+      setShowAddRefForm(false);
+    } catch (err: any) {
+      setError(err?.response?.data?.message || 'Failed to upload document. Please ensure it is a PDF, Word, Excel, or PPTX under 25MB.');
+    } finally {
+      setUploadingFile(false);
+      if (e.target) e.target.value = '';
+    }
+  };
 
   // Load approved skill requests where current user is proposed coach
   const skillRequestsQuery = useQuery<SkillCoachingRequestItem[]>({
@@ -86,6 +132,14 @@ export const ScheduleSessionModal: React.FC<ScheduleSessionModalProps> = ({
     setSelectedAssignmentId('');
     setSelectedSkillRequestId('');
     setSelectedGoalId('');
+    setPrepNotes('');
+    setReferenceMaterials([]);
+    setNewRefTitle('');
+    setNewRefUrl('');
+    setNewRefNotes('');
+    setShowAddRefForm(false);
+    setAiSummarizationEnabled(true);
+    setAiAgentEnabled(false);
     setError(null);
   };
 
@@ -116,6 +170,10 @@ export const ScheduleSessionModal: React.FC<ScheduleSessionModalProps> = ({
       meetingLocation: meetingLocation.trim() || undefined,
       targetPmsGoalId: selectedGoalId ? Number(selectedGoalId) : undefined,
       additionalAssignmentIds: sessionType === 'MANDATORY_PMS' && additionalAssignmentIds.length > 0 ? additionalAssignmentIds : undefined,
+      prepNotes: prepNotes.trim() || undefined,
+      referenceMaterials: referenceMaterials.length > 0 ? JSON.stringify(referenceMaterials) : undefined,
+      aiSummarizationEnabled,
+      aiAgentEnabled,
     };
 
     if (sessionType === 'MANDATORY_PMS') {
@@ -289,8 +347,8 @@ export const ScheduleSessionModal: React.FC<ScheduleSessionModalProps> = ({
                   {!selectedAssignmentId
                     ? '⚠️ Select at least 1 coachee'
                     : additionalAssignmentIds.length === 0
-                    ? '👤 1-on-1 PMS Session'
-                    : `👥 Joint Group Remediation (${1 + additionalAssignmentIds.length} Coachees)`}
+                    ? '👤 1-on-1 PMS Session (Independently Counted)'
+                    : `👥 Joint Group Remediation (${1 + additionalAssignmentIds.length} Coachees · Independent Quota Credit)`}
                 </span>
               </div>
 
@@ -360,18 +418,40 @@ export const ScheduleSessionModal: React.FC<ScheduleSessionModalProps> = ({
                       <div style={{ flex: 1, minWidth: 0 }}>
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                           <strong style={{ fontSize: '0.86rem', color: 'var(--text)' }}>{c.coacheeFullName}</strong>
-                          <span
-                            style={{
-                              fontSize: '0.7rem',
-                              padding: '0.1rem 0.35rem',
-                              borderRadius: '4px',
-                              background: 'rgba(239, 68, 68, 0.1)',
-                              color: '#ef4444',
-                              fontWeight: 700,
-                            }}
-                          >
-                            Score &lt; 3.0
-                          </span>
+                          <div style={{ display: 'flex', gap: '0.35rem', alignItems: 'center' }}>
+                            {c.appraisalRating && (
+                              <span
+                                style={{
+                                  fontSize: '0.68rem',
+                                  padding: '0.1rem 0.35rem',
+                                  borderRadius: '4px',
+                                  background: c.appraisalRating < 2.0 ? 'rgba(239, 68, 68, 0.15)' : 'rgba(245, 158, 11, 0.15)',
+                                  color: c.appraisalRating < 2.0 ? '#dc2626' : '#d97706',
+                                  fontWeight: 700,
+                                }}
+                              >
+                                Score {c.appraisalRating.toFixed(2)}
+                              </span>
+                            )}
+                            <span
+                              style={{
+                                fontSize: '0.68rem',
+                                padding: '0.1rem 0.35rem',
+                                borderRadius: '4px',
+                                background: (c.completedSessions ?? 0) >= (c.requiredTarget ?? 5)
+                                  ? 'rgba(34, 197, 94, 0.15)'
+                                  : 'rgba(59, 130, 246, 0.15)',
+                                color: (c.completedSessions ?? 0) >= (c.requiredTarget ?? 5)
+                                  ? '#16a34a'
+                                  : '#2563eb',
+                                fontWeight: 700,
+                              }}
+                            >
+                              {(c.completedSessions ?? 0) >= (c.requiredTarget ?? 5)
+                                ? `✓ Quota Met (${c.completedSessions}/${c.requiredTarget})`
+                                : `${c.completedSessions ?? 0}/${c.requiredTarget ?? 5} Done`}
+                            </span>
+                          </div>
                         </div>
                         <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
                           {c.coacheeEmployeeNumber} • {c.coacheeDepartment || 'Branch Operations'}
@@ -508,19 +588,11 @@ export const ScheduleSessionModal: React.FC<ScheduleSessionModalProps> = ({
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '0.5rem', marginTop: '0.25rem' }}>
               <button
                 type="button"
-                className={`apid-btn ${meetingMode === 'VIRTUAL_VIDEO' ? 'apid-btn-primary' : 'apid-btn-outline'}`}
+                className={`apid-btn ${meetingMode === 'ONLINE' || meetingMode === 'VIRTUAL_VIDEO' ? 'apid-btn-primary' : 'apid-btn-outline'}`}
                 style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.35rem' }}
-                onClick={() => setMeetingMode('VIRTUAL_VIDEO')}
+                onClick={() => setMeetingMode('ONLINE')}
               >
-                <Video size={16} /> Daily.co Video
-              </button>
-              <button
-                type="button"
-                className={`apid-btn ${meetingMode === 'PHONE_CALL' ? 'apid-btn-primary' : 'apid-btn-outline'}`}
-                style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.35rem' }}
-                onClick={() => setMeetingMode('PHONE_CALL')}
-              >
-                <Phone size={16} /> Phone Call
+                <Video size={16} /> LiveKit Video
               </button>
               <button
                 type="button"
@@ -530,10 +602,18 @@ export const ScheduleSessionModal: React.FC<ScheduleSessionModalProps> = ({
               >
                 <MapPin size={16} /> In-Person
               </button>
+              <button
+                type="button"
+                className={`apid-btn ${meetingMode === 'HYBRID' ? 'apid-btn-primary' : 'apid-btn-outline'}`}
+                style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.35rem' }}
+                onClick={() => setMeetingMode('HYBRID')}
+              >
+                <Video size={16} /> Hybrid
+              </button>
             </div>
           </div>
 
-          {meetingMode !== 'VIRTUAL_VIDEO' && (
+          {(meetingMode === 'IN_PERSON' || meetingMode === 'HYBRID' || meetingMode === 'PHONE_CALL') && (
             <div className="apid-field" style={{ marginBottom: '1rem' }}>
               <label htmlFor="meeting-location" style={{ fontWeight: 600 }}>
                 {meetingMode === 'PHONE_CALL' ? 'Phone Number / Extension' : 'Branch Meeting Room Location'}
@@ -548,6 +628,337 @@ export const ScheduleSessionModal: React.FC<ScheduleSessionModalProps> = ({
               />
             </div>
           )}
+
+          {/* Pre-Session Preparation & References */}
+          <div
+            style={{
+              padding: '1rem',
+              borderRadius: '8px',
+              border: '1px solid var(--border, #e2e8f0)',
+              background: 'var(--surface-subtle, #f8fafc)',
+              marginBottom: '1rem',
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.75rem' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontWeight: 700, fontSize: '0.88rem', color: 'var(--text-primary)' }}>
+                <BookOpen size={16} style={{ color: 'var(--gold-primary, #ca8a04)' }} />
+                Pre-Session Preparation & References
+              </div>
+              <button
+                type="button"
+                className="apid-btn apid-btn-outline"
+                style={{ fontSize: '0.75rem', padding: '0.2rem 0.55rem', display: 'flex', alignItems: 'center', gap: '0.25rem' }}
+                onClick={() => setShowAddRefForm(!showAddRefForm)}
+              >
+                <Plus size={13} /> Add Material / URL
+              </button>
+            </div>
+
+            <div className="apid-field" style={{ marginBottom: '0.75rem' }}>
+              <label htmlFor="session-prep-notes" style={{ fontWeight: 600, fontSize: '0.8rem', color: 'var(--muted, #64748b)' }}>
+                Preparation Instructions & Focus Notes
+              </label>
+              <textarea
+                id="session-prep-notes"
+                className="apid-input"
+                rows={2}
+                value={prepNotes}
+                onChange={(e) => setPrepNotes(e.target.value)}
+                placeholder="e.g. Please review the branch FX compliance checklists and queue SLA benchmarks before joining."
+                style={{ resize: 'vertical' }}
+              />
+            </div>
+
+            {/* List of Added Reference Materials */}
+            {referenceMaterials.length > 0 && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.45rem', marginBottom: '0.75rem' }}>
+                {referenceMaterials.map((item, idx) => (
+                  <div
+                    key={idx}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      padding: '0.45rem 0.65rem',
+                      background: '#ffffff',
+                      borderRadius: '6px',
+                      border: '1px solid var(--border, #e2e8f0)',
+                      fontSize: '0.8rem',
+                    }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', overflow: 'hidden' }}>
+                      {item.type === 'URL' ? (
+                        <Link size={14} style={{ color: '#2563eb', flexShrink: 0 }} />
+                      ) : item.type === 'DOCUMENT' ? (
+                        <FileText size={14} style={{ color: '#059669', flexShrink: 0 }} />
+                      ) : (
+                        <BookOpen size={14} style={{ color: 'var(--gold-primary, #ca8a04)', flexShrink: 0 }} />
+                      )}
+                      <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        <strong style={{ color: 'var(--text-primary)' }}>{item.title}</strong>
+                        {item.url && (
+                          <span style={{ color: item.type === 'DOCUMENT' ? '#059669' : '#2563eb', marginLeft: '0.4rem', fontSize: '0.75rem' }}>
+                            ({item.url.startsWith('/api') ? 'Attached Document' : item.url})
+                          </span>
+                        )}
+                        {item.notes && (
+                          <span style={{ color: 'var(--muted, #64748b)', marginLeft: '0.4rem', fontSize: '0.75rem' }}>
+                            — {item.notes}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setReferenceMaterials(referenceMaterials.filter((_, i) => i !== idx))}
+                      style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', padding: '0.2rem' }}
+                      title="Remove"
+                    >
+                      <Trash2 size={14} />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Inline Add Reference Form */}
+            {showAddRefForm && (
+              <div
+                style={{
+                  padding: '0.75rem',
+                  borderRadius: '6px',
+                  background: '#ffffff',
+                  border: '1px dashed var(--gold-primary, #ca8a04)',
+                  marginBottom: '0.5rem',
+                }}
+              >
+                <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '0.65rem', flexWrap: 'wrap' }}>
+                  <button
+                    type="button"
+                    className={`apid-btn ${newRefType === 'URL' ? 'apid-btn-primary' : 'apid-btn-outline'}`}
+                    style={{ fontSize: '0.72rem', padding: '0.25rem 0.55rem' }}
+                    onClick={() => setNewRefType('URL')}
+                  >
+                    <Link size={12} /> Reference URL
+                  </button>
+                  <button
+                    type="button"
+                    className={`apid-btn ${newRefType === 'BOOK' ? 'apid-btn-primary' : 'apid-btn-outline'}`}
+                    style={{ fontSize: '0.72rem', padding: '0.25rem 0.55rem' }}
+                    onClick={() => setNewRefType('BOOK')}
+                  >
+                    <BookOpen size={12} /> Reference Book / Reading
+                  </button>
+                  <button
+                    type="button"
+                    className={`apid-btn ${newRefType === 'DOCUMENT' ? 'apid-btn-primary' : 'apid-btn-outline'}`}
+                    style={{ fontSize: '0.72rem', padding: '0.25rem 0.55rem' }}
+                    onClick={() => setNewRefType('DOCUMENT')}
+                  >
+                    <Paperclip size={12} /> Upload Document / File
+                  </button>
+                </div>
+
+                {newRefType === 'DOCUMENT' ? (
+                  <div style={{ marginBottom: '0.5rem' }}>
+                    <label
+                      style={{
+                        display: 'flex',
+                        flexDirection: 'column',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        gap: '0.35rem',
+                        padding: '1rem',
+                        border: '2px dashed var(--gold-primary, #ca8a04)',
+                        borderRadius: '8px',
+                        background: '#fffdf5',
+                        cursor: uploadingFile ? 'not-allowed' : 'pointer',
+                        textAlign: 'center',
+                      }}
+                    >
+                      <input
+                        type="file"
+                        accept=".pdf,.docx,.xlsx,.pptx,.png,.jpg,.jpeg,.doc"
+                        onChange={handleFileUpload}
+                        disabled={uploadingFile}
+                        style={{ display: 'none' }}
+                      />
+                      {uploadingFile ? (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', color: 'var(--brand-gold, #ca8a04)', fontWeight: 600, fontSize: '0.82rem' }}>
+                          <Loader2 size={16} className="animate-spin" />
+                          <span>Uploading document to BoA Coaching Storage...</span>
+                        </div>
+                      ) : (
+                        <>
+                          <Upload size={20} style={{ color: 'var(--brand-gold, #ca8a04)' }} />
+                          <div style={{ fontWeight: 600, fontSize: '0.82rem', color: 'var(--text-primary)' }}>
+                            Click to select & upload file (PDF, Book, Word, Excel, PPTX)
+                          </div>
+                          <div style={{ fontSize: '0.72rem', color: 'var(--muted, #64748b)' }}>
+                            Max 25MB • Stored securely in BoA Coaching repository
+                          </div>
+                        </>
+                      )}
+                    </label>
+                    <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '0.5rem' }}>
+                      <button
+                        type="button"
+                        className="apid-btn apid-btn-secondary"
+                        style={{ fontSize: '0.72rem', padding: '0.2rem 0.5rem' }}
+                        onClick={() => setShowAddRefForm(false)}
+                        disabled={uploadingFile}
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem', marginBottom: '0.5rem' }}>
+                      <input
+                        type="text"
+                        className="apid-input"
+                        placeholder={newRefType === 'URL' ? 'URL Title (e.g. BoA FX Portal)' : 'Book Title (e.g. Bank Service Standards)'}
+                        value={newRefTitle}
+                        onChange={(e) => setNewRefTitle(e.target.value)}
+                        style={{ fontSize: '0.8rem' }}
+                      />
+                      {newRefType === 'URL' ? (
+                        <input
+                          type="url"
+                          className="apid-input"
+                          placeholder="https://..."
+                          value={newRefUrl}
+                          onChange={(e) => setNewRefUrl(e.target.value)}
+                          style={{ fontSize: '0.8rem' }}
+                        />
+                      ) : (
+                        <input
+                          type="text"
+                          className="apid-input"
+                          placeholder="Author / Chapter / Pages (e.g. Chap 4, pp. 22-35)"
+                          value={newRefNotes}
+                          onChange={(e) => setNewRefNotes(e.target.value)}
+                          style={{ fontSize: '0.8rem' }}
+                        />
+                      )}
+                    </div>
+
+                    <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.4rem' }}>
+                      <button
+                        type="button"
+                        className="apid-btn apid-btn-secondary"
+                        style={{ fontSize: '0.72rem', padding: '0.2rem 0.5rem' }}
+                        onClick={() => setShowAddRefForm(false)}
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        type="button"
+                        className="apid-btn apid-btn-primary"
+                        style={{ fontSize: '0.72rem', padding: '0.2rem 0.6rem' }}
+                        onClick={() => {
+                          if (!newRefTitle.trim()) return;
+                          setReferenceMaterials([
+                            ...referenceMaterials,
+                            {
+                              type: newRefType,
+                              title: newRefTitle.trim(),
+                              url: newRefType === 'URL' ? newRefUrl.trim() : undefined,
+                              notes: newRefType === 'BOOK' ? newRefNotes.trim() : undefined,
+                            },
+                          ]);
+                          setNewRefTitle('');
+                          setNewRefUrl('');
+                          setNewRefNotes('');
+                          setShowAddRefForm(false);
+                        }}
+                      >
+                        Save Material
+                      </button>
+                    </div>
+                  </>
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* AI Session Capabilities */}
+          <div
+            style={{
+              padding: '1rem',
+              borderRadius: '8px',
+              border: '1px solid var(--border, #e2e8f0)',
+              background: 'var(--surface-subtle, #f8fafc)',
+              marginBottom: '1rem',
+            }}
+          >
+            <div style={{ fontWeight: 700, fontSize: '0.88rem', color: 'var(--text-primary)', marginBottom: '0.75rem', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+              <Bot size={16} style={{ color: '#2563eb' }} />
+              Session AI Automation Controls
+            </div>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+              {/* Auto Summarization */}
+              <label
+                style={{
+                  display: 'flex',
+                  alignItems: 'flex-start',
+                  gap: '0.65rem',
+                  padding: '0.6rem 0.75rem',
+                  borderRadius: '6px',
+                  background: '#ffffff',
+                  border: '1px solid var(--border, #e2e8f0)',
+                  cursor: 'pointer',
+                }}
+              >
+                <input
+                  type="checkbox"
+                  checked={aiSummarizationEnabled}
+                  onChange={(e) => setAiSummarizationEnabled(e.target.checked)}
+                  style={{ marginTop: '3px', accentColor: 'var(--gold-primary, #ca8a04)' }}
+                />
+                <div>
+                  <div style={{ fontWeight: 600, fontSize: '0.82rem', color: 'var(--text-primary)' }}>
+                    Enable Local AI Auto-Summarization
+                  </div>
+                  <div style={{ fontSize: '0.74rem', color: 'var(--muted, #64748b)', marginTop: '0.1rem' }}>
+                    Automatically synthesizes meeting minutes, key discussion topics, and action items upon session conclusion using local on-premise AI.
+                  </div>
+                </div>
+              </label>
+
+              {/* LiveKit AI Agent Participant */}
+              <label
+                style={{
+                  display: 'flex',
+                  alignItems: 'flex-start',
+                  gap: '0.65rem',
+                  padding: '0.6rem 0.75rem',
+                  borderRadius: '6px',
+                  background: '#ffffff',
+                  border: '1px solid var(--border, #e2e8f0)',
+                  cursor: 'pointer',
+                }}
+              >
+                <input
+                  type="checkbox"
+                  checked={aiAgentEnabled}
+                  onChange={(e) => setAiAgentEnabled(e.target.checked)}
+                  style={{ marginTop: '3px', accentColor: '#2563eb' }}
+                />
+                <div>
+                  <div style={{ fontWeight: 600, fontSize: '0.82rem', color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+                    <Mic size={13} style={{ color: '#2563eb' }} />
+                    Allow LiveKit AI Active Participant Agent
+                  </div>
+                  <div style={{ fontSize: '0.74rem', color: 'var(--muted, #64748b)', marginTop: '0.1rem' }}>
+                    Permits the autonomous coaching co-pilot agent to join this LiveKit video room as an interactive participant to assist in real-time.
+                  </div>
+                </div>
+              </label>
+            </div>
+          </div>
 
           {/* Actions */}
           <div

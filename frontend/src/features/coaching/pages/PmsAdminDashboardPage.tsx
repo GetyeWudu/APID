@@ -21,13 +21,14 @@ import { PmsUploadPreviewTab } from '../components/PmsUploadPreviewTab';
 import { RatingDistributionCard } from '../components/RatingDistributionCard';
 import { SkillDevApprovalTab } from '../components/SkillDevApprovalTab';
 import { CoachingRulesTab } from '../components/CoachingRulesTab';
+import { PmsReferralsTab } from '../components/PmsReferralsTab';
 import { skillCoachingRequestApi } from '../api/skillCoachingRequestApi';
 import {
   classifyRating,
   isMandatoryCoachingRounded,
 } from '../utils/ratingClassification';
 
-type PmsTabKey = 'overview' | 'uploads' | 'approvals' | 'reports' | 'policies';
+type PmsTabKey = 'overview' | 'referrals' | 'uploads' | 'approvals' | 'reports' | 'policies';
 
 interface PmsTabMeta {
   key: PmsTabKey;
@@ -44,6 +45,17 @@ const PMS_TABS: PmsTabMeta[] = [
       'COACHING_COACH_REPLACE',
       'COACHING_INITIATIVE_CREATE',
       'COACHING_REPORT_VIEW_ALL',
+    ],
+  },
+  {
+    key: 'referrals',
+    label: 'Persistent Referrals (< 3.0)',
+    anyPermissions: [
+      'COACHING_ASSIGNMENT_VIEW_ALL',
+      'COACHING_COACH_REPLACE',
+      'COACHING_MANAGE',
+      'ADMIN_PORTAL_ACCESS',
+      'PMS_ADMIN_ACCESS',
     ],
   },
   {
@@ -188,7 +200,19 @@ export function PmsAdminDashboardPage() {
         })}
       </div>
 
-      {activeTab === 'policies' ? (
+      {activeTab === 'referrals' ? (
+        <PermissionGate
+          anyPermissions={[
+            'COACHING_ASSIGNMENT_VIEW_ALL',
+            'COACHING_COACH_REPLACE',
+            'COACHING_MANAGE',
+            'ADMIN_PORTAL_ACCESS',
+            'PMS_ADMIN_ACCESS',
+          ]}
+        >
+          <PmsReferralsTab />
+        </PermissionGate>
+      ) : activeTab === 'policies' ? (
         <PermissionGate
           anyPermissions={[
             'COACHING_ASSIGNMENT_VIEW_ALL',

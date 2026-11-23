@@ -9,12 +9,35 @@ import org.springframework.data.repository.query.Param;
 import java.time.Instant;
 import java.util.Collection;
 import java.util.List;
+import java.util.Optional;
 
 public interface CoachingSessionRepository extends JpaRepository<CoachingSession, Long> {
+
+    Optional<CoachingSession> findByDailyRoomName(String dailyRoomName);
+
+    Optional<CoachingSession> findByMeetingRoomName(String meetingRoomName);
 
     List<CoachingSession> findAllByAssignmentIdOrderByScheduledStartTimeDesc(Long assignmentId);
 
     List<CoachingSession> findAllByAssignmentId(Long assignmentId);
+
+    @Query("""
+            SELECT DISTINCT s FROM CoachingSession s
+            LEFT JOIN SessionParticipant p ON p.sessionId = s.id
+            WHERE s.assignmentId = :assignmentId OR p.assignmentId = :assignmentId
+            ORDER BY s.scheduledStartTime DESC
+            """)
+    List<CoachingSession> findAllSessionsForAssignment(@Param("assignmentId") Long assignmentId);
+
+    @Query("""
+            SELECT COUNT(DISTINCT s.id) FROM CoachingSession s
+            JOIN SessionParticipant p ON p.sessionId = s.id
+            WHERE (s.assignmentId = :assignmentId OR p.assignmentId = :assignmentId)
+              AND p.employeeId = :employeeId
+              AND s.status = 'COMPLETED'
+              AND p.attendanceStatus = 'ATTENDED'
+            """)
+    int countCompletedSessionsForAssignment(@Param("assignmentId") Long assignmentId, @Param("employeeId") Long employeeId);
 
     List<CoachingSession> findAllBySkillRequestIdOrderByScheduledStartTimeDesc(Long skillRequestId);
 

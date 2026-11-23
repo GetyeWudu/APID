@@ -2,6 +2,7 @@ package com.boa.apid.core.identity.controller;
 
 import com.boa.apid.common.response.ApiResponse;
 import com.boa.apid.core.auth.security.ApidUserPrincipal;
+import com.boa.apid.core.authorization.entity.AuthProvider;
 import com.boa.apid.core.authorization.entity.UserStatus;
 import com.boa.apid.core.identity.dto.*;
 import com.boa.apid.core.identity.service.UserAdminService;
@@ -26,12 +27,14 @@ public class UserAdminController {
     public ApiResponse<Page<AdminUserDto>> searchUsers(
             @RequestParam(required = false) String search,
             @RequestParam(required = false) UserStatus status,
+            @RequestParam(required = false) AuthProvider authProvider,
+            @RequestParam(required = false) Long roleId,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size,
             @RequestParam(defaultValue = "createdAt") String sortBy,
             @RequestParam(defaultValue = "desc") String sortDir
     ) {
-        return ApiResponse.ok(userAdminService.searchUsers(search, status, page, size, sortBy, sortDir));
+        return ApiResponse.ok(userAdminService.searchUsers(search, status, authProvider, roleId, page, size, sortBy, sortDir));
     }
 
     @PostMapping

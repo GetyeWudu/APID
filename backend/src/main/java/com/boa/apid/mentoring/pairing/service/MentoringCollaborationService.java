@@ -1,9 +1,9 @@
 package com.boa.apid.mentoring.pairing.service;
 
-import com.boa.apid.coaching.session.dto.SessionJoinTokenDto;
-import com.boa.apid.coaching.session.video.MeetingRoomDetails;
-import com.boa.apid.coaching.session.video.MeetingTokenDetails;
-import com.boa.apid.coaching.session.video.VideoMeetingProvider;
+import com.boa.apid.platform.video.api.MeetingRoomDetails;
+import com.boa.apid.platform.video.api.MeetingTokenDetails;
+import com.boa.apid.platform.video.api.SessionJoinTokenDto;
+import com.boa.apid.platform.video.api.VideoMeetingProvider;
 import com.boa.apid.common.exception.BusinessException;
 import com.boa.apid.common.exception.ResourceNotFoundException;
 import com.boa.apid.core.auth.security.ApidUserPrincipal;
@@ -268,17 +268,14 @@ public class MentoringCollaborationService {
         MentoringRelationshipMember targetTrainee = resolveTargetTrainee(relationship, body.traineeUserId());
 
         String meetingUrl = normalizeMeetingUrl(body.meetingUrl());
+        String roomName = null;
         if ((body.deliveryMode() == MentoringDeliveryMode.ONLINE || body.deliveryMode() == MentoringDeliveryMode.HYBRID)
                 && (meetingUrl == null || meetingUrl.isBlank())) {
-            try {
-                String prefix = "mentoring-rel" + relationship.getId();
-                Instant expiry = body.scheduledEnd().plus(Duration.ofHours(3));
-                MeetingRoomDetails room = videoMeetingProvider.createRoom(prefix, expiry);
-                meetingUrl = room.roomUrl();
-            } catch (Exception ex) {
-                log.warn("Failed to provision Daily.co video room for mentoring session, using fallback", ex);
-                meetingUrl = "https://amakari.daily.co/boa-mentoring-rel" + relationship.getId();
-            }
+            String prefix = "mentoring-rel" + relationship.getId();
+            Instant expiry = body.scheduledEnd().plus(Duration.ofHours(3));
+            MeetingRoomDetails room = videoMeetingProvider.createRoom(prefix, expiry);
+            roomName = room.roomName();
+            meetingUrl = room.roomUrl();
         }
 
         MentoringSession session = new MentoringSession();
@@ -290,6 +287,9 @@ public class MentoringCollaborationService {
         session.setScheduledEnd(body.scheduledEnd());
         session.setDeliveryMode(body.deliveryMode());
         session.setMeetingUrl(meetingUrl);
+        session.setMeetingRoomName(roomName);
+        session.setMeetingRoomUrl(meetingUrl);
+        session.setMeetingProvider(videoMeetingProvider.getProviderName());
         session.setLocation(normalizeOptionalText(body.location()));
         session.setStatus(MentoringSessionStatus.SCHEDULED);
         session.setCreatedByUser(relationship.getMentorUser());
@@ -844,7 +844,7 @@ public class MentoringCollaborationService {
         String meetingUrl = session.getMeetingUrl();
         if ((session.getDeliveryMode() == MentoringDeliveryMode.ONLINE || session.getDeliveryMode() == MentoringDeliveryMode.HYBRID)
                 && (meetingUrl == null || meetingUrl.isBlank())) {
-            meetingUrl = "https://amakari.daily.co/boa-mentoring-rel" + session.getRelationship().getId() + "-s" + session.getId();
+            meetingUrl = "wss://apid-livekit.home.arpa/boa-mentoring-rel" + session.getRelationship().getId() + "-s" + session.getId();
         }
 
         return new MentoringSessionDto(

@@ -325,7 +325,7 @@ describe('MentoringPairingDetailPage', () => {
     fireEvent.click(await screen.findByRole('tab', { name: 'Sessions' }));
 
     expect(await screen.findByText('Tomorrow session')).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: /Join Daily\.co Video/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Join LiveKit Video/i })).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Session details' }));
     expect(screen.getByText('Video only')).toBeInTheDocument();
     expect(screen.getByText('1 day remaining')).toBeInTheDocument();

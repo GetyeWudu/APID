@@ -12,6 +12,8 @@ export const usersApi = {
   async search(params: {
     search?: string;
     status?: UserStatus | '';
+    authProvider?: string | '';
+    roleId?: number | '';
     page?: number;
     size?: number;
   }): Promise<PageResponse<AdminUser>> {
@@ -19,6 +21,8 @@ export const usersApi = {
       params: {
         search: params.search || undefined,
         status: params.status || undefined,
+        authProvider: params.authProvider || undefined,
+        roleId: params.roleId || undefined,
         page: params.page ?? 0,
         size: params.size ?? 15,
       },
@@ -55,6 +59,54 @@ export const usersApi = {
     const res = await apiClient.put<ApiResponse<AdminUser>>(`/core/admin/users/${userId}/roles`, {
       roleIds,
     });
+    return res.data.data;
+  },
+
+  async syncLdap(): Promise<{
+    success: boolean;
+    message: string;
+    usersScanned: number;
+    usersCreated: number;
+    usersUpdated: number;
+    usersDisabled: number;
+    managersLinked: number;
+    rolesAssigned: number;
+    durationMs: number;
+    completedAt: string;
+  }> {
+    const res = await apiClient.post<ApiResponse<{
+      success: boolean;
+      message: string;
+      usersScanned: number;
+      usersCreated: number;
+      usersUpdated: number;
+      usersDisabled: number;
+      managersLinked: number;
+      rolesAssigned: number;
+      durationMs: number;
+      completedAt: string;
+    }>>('/core/admin/ldap/sync');
+    return res.data.data;
+  },
+
+  async getLdapStatus(): Promise<{
+    enabled: boolean;
+    url: string;
+    domain: string;
+    baseDn: string;
+    userSearchBase: string;
+    syncEnabled: boolean;
+    syncCron: string;
+  }> {
+    const res = await apiClient.get<ApiResponse<{
+      enabled: boolean;
+      url: string;
+      domain: string;
+      baseDn: string;
+      userSearchBase: string;
+      syncEnabled: boolean;
+      syncCron: string;
+    }>>('/core/admin/ldap/status');
     return res.data.data;
   },
 };

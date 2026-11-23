@@ -72,6 +72,33 @@ apid:
   bootstrap:
     admin-username: ${APID_BOOTSTRAP_ADMIN_USERNAME:admin}
     admin-password: ${APID_BOOTSTRAP_ADMIN_PASSWORD:}
+  meeting:
+    provider: ${MEETING_PROVIDER:livekit}
+  livekit:
+    api-url: ${LIVEKIT_API_URL:http://10.9.36.155:7880}
+    public-url: ${LIVEKIT_PUBLIC_URL:ws://10.9.36.155:7880}
+    api-key: ${LIVEKIT_API_KEY:APIDLocalKey}
+    api-secret: ${LIVEKIT_API_SECRET:HErVoKzJMGiiWkzXrZMPaKMGc1IWXISSjuxGI1AJNic=}
+    token-ttl-seconds: ${LIVEKIT_TOKEN_TTL:7200}
+  ai:
+    enabled: ${AI_ENABLED:true}
+    provider: ${AI_PROVIDER:ollama}
+    ollama:
+      base-url: ${OLLAMA_BASE_URL:http://10.9.36.155:11434}
+      model: ${OLLAMA_MODEL:qwen3:8b}
+      timeout-seconds: ${OLLAMA_TIMEOUT_SECONDS:120}
+  ldap:
+    enabled: ${APID_LDAP_ENABLED:false}
+    url: ${APID_LDAP_URL:ldaps://10.9.82.23:636}
+    base-dn: ${APID_LDAP_BASE_DN:DC=apid,DC=test}
+    domain: ${APID_LDAP_DOMAIN:apid.test}
+    user-search-base: ${APID_LDAP_USER_SEARCH_BASE:OU=APID,DC=apid,DC=test}
+    user-search-filter: ${APID_LDAP_USER_SEARCH_FILTER:(&(objectCategory=person)(objectClass=user)(|(sAMAccountName={0})(userPrincipalName={1})(employeeID={2})))}
+    bind-dn: ${APID_LDAP_BIND_DN:CN=APID LDAP Service Account,OU=Service Accounts,OU=APID,DC=apid,DC=test}
+    bind-password: ${APID_LDAP_BIND_PASSWORD:}
+    timeout-ms: ${APID_LDAP_TIMEOUT_MS:5000}
+    trust-cert-path: ${APID_LDAP_TRUST_CERT_PATH:classpath:certs/apid-ca.crt}
+
   daily:
     api-base-url: ${DAILY_API_BASE_URL:https://api.daily.co/v1}
     api-key: ${DAILY_API_KEY:}

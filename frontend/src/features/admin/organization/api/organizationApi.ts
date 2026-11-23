@@ -36,6 +36,8 @@ export const organizationApi = {
   async searchEmployees(params: {
     search?: string;
     departmentId?: number | '';
+    departmentIds?: number[];
+    position?: string;
     status?: EmploymentStatus | '';
     managerId?: number | '';
     page?: number;
@@ -45,6 +47,8 @@ export const organizationApi = {
       params: {
         search: params.search || undefined,
         departmentId: params.departmentId === '' ? undefined : params.departmentId,
+        departmentIds: params.departmentIds && params.departmentIds.length > 0 ? params.departmentIds.join(',') : undefined,
+        position: params.position || undefined,
         status: params.status || undefined,
         managerId: params.managerId === '' ? undefined : params.managerId,
         page: params.page ?? 0,

@@ -50,6 +50,15 @@ public class CoachingSession {
     @Column(name = "daily_room_url", columnDefinition = "TEXT")
     private String dailyRoomUrl;
 
+    @Column(name = "meeting_provider", length = 30)
+    private String meetingProvider = "LIVEKIT";
+
+    @Column(name = "meeting_room_name", length = 120)
+    private String meetingRoomName;
+
+    @Column(name = "meeting_room_url", columnDefinition = "TEXT")
+    private String meetingRoomUrl;
+
     @Enumerated(EnumType.STRING)
     @Column(name = "status", nullable = false, length = 30)
     private SessionStatus status = SessionStatus.PROPOSED;
@@ -86,6 +95,24 @@ public class CoachingSession {
 
     @Column(name = "is_extension_session", nullable = false)
     private boolean isExtensionSession = false;
+
+    @Column(name = "prep_notes", columnDefinition = "TEXT")
+    private String prepNotes;
+
+    @Column(name = "reference_materials", columnDefinition = "TEXT")
+    private String referenceMaterials = "[]";
+
+    @Column(name = "ai_summarization_enabled", nullable = false)
+    private boolean aiSummarizationEnabled = true;
+
+    @Column(name = "ai_agent_enabled", nullable = false)
+    private boolean aiAgentEnabled = false;
+
+    @Column(name = "minutes_synthesis_status", length = 30)
+    private String minutesSynthesisStatus = "IDLE"; // 'IDLE', 'SYNTHESIZING', 'DRAFT_READY', 'FINALIZED'
+
+    @Column(name = "minutes_synthesized_at")
+    private Instant minutesSynthesizedAt;
 
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
@@ -138,11 +165,32 @@ public class CoachingSession {
     public String getMeetingLocation() { return meetingLocation; }
     public void setMeetingLocation(String meetingLocation) { this.meetingLocation = meetingLocation; }
 
-    public String getDailyRoomName() { return dailyRoomName; }
-    public void setDailyRoomName(String dailyRoomName) { this.dailyRoomName = dailyRoomName; }
+    public String getDailyRoomName() { return meetingRoomName != null ? meetingRoomName : dailyRoomName; }
+    public void setDailyRoomName(String dailyRoomName) {
+        this.dailyRoomName = dailyRoomName;
+        if (this.meetingRoomName == null) this.meetingRoomName = dailyRoomName;
+    }
 
-    public String getDailyRoomUrl() { return dailyRoomUrl; }
-    public void setDailyRoomUrl(String dailyRoomUrl) { this.dailyRoomUrl = dailyRoomUrl; }
+    public String getDailyRoomUrl() { return meetingRoomUrl != null ? meetingRoomUrl : dailyRoomUrl; }
+    public void setDailyRoomUrl(String dailyRoomUrl) {
+        this.dailyRoomUrl = dailyRoomUrl;
+        if (this.meetingRoomUrl == null) this.meetingRoomUrl = dailyRoomUrl;
+    }
+
+    public String getMeetingProvider() { return meetingProvider; }
+    public void setMeetingProvider(String meetingProvider) { this.meetingProvider = meetingProvider; }
+
+    public String getMeetingRoomName() { return meetingRoomName != null ? meetingRoomName : dailyRoomName; }
+    public void setMeetingRoomName(String meetingRoomName) {
+        this.meetingRoomName = meetingRoomName;
+        this.dailyRoomName = meetingRoomName;
+    }
+
+    public String getMeetingRoomUrl() { return meetingRoomUrl != null ? meetingRoomUrl : dailyRoomUrl; }
+    public void setMeetingRoomUrl(String meetingRoomUrl) {
+        this.meetingRoomUrl = meetingRoomUrl;
+        this.dailyRoomUrl = meetingRoomUrl;
+    }
 
     public SessionStatus getStatus() { return status; }
     public void setStatus(SessionStatus status) { this.status = status; }
@@ -179,6 +227,26 @@ public class CoachingSession {
 
     public boolean isExtensionSession() { return isExtensionSession; }
     public void setExtensionSession(boolean extensionSession) { isExtensionSession = extensionSession; }
+
+    public String getMinutesSynthesisStatus() { return minutesSynthesisStatus; }
+    public void setMinutesSynthesisStatus(String minutesSynthesisStatus) { this.minutesSynthesisStatus = minutesSynthesisStatus; }
+
+    public Instant getMinutesSynthesizedAt() { return minutesSynthesizedAt; }
+    public void setMinutesSynthesizedAt(Instant minutesSynthesizedAt) { this.minutesSynthesizedAt = minutesSynthesizedAt; }
+
+    public String getPrepNotes() { return prepNotes; }
+    public void setPrepNotes(String prepNotes) { this.prepNotes = prepNotes; }
+
+    public String getReferenceMaterials() { return referenceMaterials; }
+    public void setReferenceMaterials(String referenceMaterials) { this.referenceMaterials = referenceMaterials; }
+
+    public boolean isAiSummarizationEnabled() { return aiSummarizationEnabled; }
+    public boolean getAiSummarizationEnabled() { return aiSummarizationEnabled; }
+    public void setAiSummarizationEnabled(boolean aiSummarizationEnabled) { this.aiSummarizationEnabled = aiSummarizationEnabled; }
+
+    public boolean isAiAgentEnabled() { return aiAgentEnabled; }
+    public boolean getAiAgentEnabled() { return aiAgentEnabled; }
+    public void setAiAgentEnabled(boolean aiAgentEnabled) { this.aiAgentEnabled = aiAgentEnabled; }
 
     public Instant getCreatedAt() { return createdAt; }
     public Instant getUpdatedAt() { return updatedAt; }

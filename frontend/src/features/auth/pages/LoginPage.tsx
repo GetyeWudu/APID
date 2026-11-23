@@ -20,6 +20,8 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../../../app/AuthContext';
 import type { ApiErrorPayload } from '../../../shared/api/apiClient';
+import { BoaBrandHeader } from '../../../shared/components/ui/BoaEmblem';
+import './AuthPages.css';
 
 export function LoginPage() {
   const { isAuthenticated, user, login } = useAuth();
@@ -82,7 +84,10 @@ export function LoginPage() {
       }
     } catch (err) {
       const axiosErr = err as AxiosError<ApiErrorPayload>;
-      setError(axiosErr.response?.data?.message || 'Unable to sign in. Please check your credentials.');
+      setError(
+        axiosErr.response?.data?.message ||
+          'Unable to sign in. Please check your credentials or contact IT support.'
+      );
     } finally {
       setSubmitting(false);
     }

@@ -77,6 +77,19 @@ public interface EmployeeRepository extends JpaRepository<Employee, Long>, JpaSp
             """)
     List<Employee> findDetailedByEmployeeNumbersIgnoreCase(@Param("employeeNumbers") java.util.Collection<String> employeeNumbers);
 
+    @Query("""
+            SELECT e.userId FROM Employee e
+            LEFT JOIN e.department d
+            WHERE e.userId IS NOT NULL
+              AND (
+                LOWER(e.fullName) LIKE LOWER(CONCAT('%', :term, '%'))
+                OR LOWER(e.employeeNumber) LIKE LOWER(CONCAT('%', :term, '%'))
+                OR LOWER(COALESCE(e.email, '')) LIKE LOWER(CONCAT('%', :term, '%'))
+                OR LOWER(COALESCE(d.name, '')) LIKE LOWER(CONCAT('%', :term, '%'))
+              )
+            """)
+    List<Long> findUserIdsBySearchTerm(@Param("term") String term);
+
     @Query("SELECT e FROM Employee e WHERE LOWER(e.employeeNumber) = LOWER(:employeeNumber)")
     Optional<Employee> findByEmployeeNumberIgnoreCase(@Param("employeeNumber") String employeeNumber);
 

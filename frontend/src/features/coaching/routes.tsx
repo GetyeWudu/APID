@@ -41,4 +41,12 @@ export const coachingRoutes: RouteObject[] = [
       </ProtectedRoute>
     ),
   },
+  {
+    path: '/admin/coaching/pms',
+    element: (
+      <ProtectedRoute requiredAnyPermissions={PMS_MODULE_PERMISSIONS}>
+        <PmsAdminDashboardPage />
+      </ProtectedRoute>
+    ),
+  },
 ];

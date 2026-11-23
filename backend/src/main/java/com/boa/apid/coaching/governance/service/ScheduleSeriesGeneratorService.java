@@ -14,8 +14,8 @@ import com.boa.apid.coaching.session.entity.*;
 import com.boa.apid.coaching.session.repository.CoachingSessionRepository;
 import com.boa.apid.coaching.session.repository.SessionParticipantRepository;
 import com.boa.apid.coaching.session.service.CoachingSessionService;
-import com.boa.apid.coaching.session.video.MeetingRoomDetails;
-import com.boa.apid.coaching.session.video.VideoMeetingProvider;
+import com.boa.apid.platform.video.api.MeetingRoomDetails;
+import com.boa.apid.platform.video.api.VideoMeetingProvider;
 import com.boa.apid.coaching.skillrequest.entity.SkillCoachingRequest;
 import com.boa.apid.coaching.skillrequest.entity.SkillCoachingRequestStatus;
 import com.boa.apid.coaching.skillrequest.entity.SkillCoachingRequestTarget;
@@ -106,15 +106,7 @@ public class ScheduleSeriesGeneratorService {
         if (Boolean.FALSE.equals(publicConfig.getCoachingAllowSaturdayScheduling()) && days.contains(DayOfWeek.SATURDAY)) {
             throw new BusinessException("SATURDAY_NOT_ALLOWED", "Saturday sessions are currently disabled by Bank Coaching Policy.");
         }
-        if (Boolean.FALSE.equals(publicConfig.getCoachingAllowJointPmsGroup()) && request.additionalAssignmentIds() != null && !request.additionalAssignmentIds().isEmpty()) {
-            throw new BusinessException("JOINT_PMS_NOT_ALLOWED", "Joint PMS group remediation is currently disabled by Bank Coaching Policy.");
-        }
-        if (request.additionalAssignmentIds() != null && publicConfig.getCoachingMaxJointGroupSize() != null) {
-            int totalSelected = 1 + request.additionalAssignmentIds().size();
-            if (totalSelected > publicConfig.getCoachingMaxJointGroupSize()) {
-                throw new BusinessException("MAX_GROUP_SIZE_EXCEEDED", "Joint PMS groups cannot exceed " + publicConfig.getCoachingMaxJointGroupSize() + " talents per Bank Policy.");
-            }
-        }
+        // Flexible Multi-PMS Group Remediation: Joint PMS coaching is fully allowed per Bank policy update.
 
         // Resolve participating employees for conflict checking
         List<Long> participantEmpIds = new ArrayList<>();
@@ -440,13 +432,13 @@ public class ScheduleSeriesGeneratorService {
             Instant startInstant = SchedulingTimezones.toUtcInstant(p.sessionDate(), p.startTime());
             Instant endInstant = SchedulingTimezones.toUtcInstant(p.sessionDate(), p.endTime());
 
-            String dailyRoomName = null;
-            String dailyRoomUrl = null;
-            if (series.getMeetingMode() == SessionMeetingMode.VIRTUAL_VIDEO) {
+            String roomName = null;
+            String roomUrl = null;
+            if (series.getMeetingMode().isVideoRequired()) {
                 String prefix = hasAssignment ? "pms-" + request.assignmentId() : "skill-" + request.skillRequestId();
                 MeetingRoomDetails room = videoMeetingProvider.createRoom(prefix + "-s" + p.sequenceNumber(), endInstant.plus(Duration.ofHours(2)));
-                dailyRoomName = room.roomName();
-                dailyRoomUrl = room.roomUrl();
+                roomName = room.roomName();
+                roomUrl = room.roomUrl();
             }
 
             CoachingSession session = new CoachingSession();
@@ -460,8 +452,11 @@ public class ScheduleSeriesGeneratorService {
             session.setDurationMinutes(request.durationMinutes());
             session.setMeetingMode(series.getMeetingMode());
             session.setMeetingLocation(series.getMeetingLocation());
-            session.setDailyRoomName(dailyRoomName);
-            session.setDailyRoomUrl(dailyRoomUrl);
+            session.setMeetingProvider(videoMeetingProvider.getProviderName());
+            session.setMeetingRoomName(roomName);
+            session.setMeetingRoomUrl(roomUrl);
+            session.setDailyRoomName(roomName);
+            session.setDailyRoomUrl(roomUrl);
             session.setTargetPmsGoalId(request.targetPmsGoalId());
             session.setCreatedByUserId(actor.getUserId());
             session.setStatus(SessionStatus.CONFIRMED);
@@ -508,7 +503,7 @@ public class ScheduleSeriesGeneratorService {
                     SchedulingTimezones.DEFAULT_ZONE_ID,
                     series.getMeetingMode().name(),
                     series.getMeetingLocation(),
-                    dailyRoomUrl,
+                    savedSession.getMeetingRoomUrl(),
                     resParts
             ));
 

@@ -607,13 +607,13 @@ export function MentoringSessionsPage({ view }: { view: SessionView }) {
                 value={createDeliveryMode}
                 onChange={(e) => setCreateDeliveryMode(e.target.value as MentoringDeliveryMode)}
               >
-                <option value="ONLINE">Online Video Call (Daily.co / Teams)</option>
+                <option value="ONLINE">Online Video Call (LiveKit)</option>
                 <option value="IN_PERSON">In-Person (Branch / Training Center)</option>
                 <option value="HYBRID">Hybrid</option>
               </select>
               {(createDeliveryMode === 'ONLINE' || createDeliveryMode === 'HYBRID') && (
                 <span style={{ fontSize: '0.78rem', color: '#0284c7', fontWeight: 500, marginTop: '0.2rem' }}>
-                  ✨ A secure Daily.co video room will be automatically provisioned for this session.
+                  ✨ A secure LiveKit video room will be automatically provisioned for this session.
                 </span>
               )}
             </div>
@@ -636,7 +636,7 @@ export function MentoringSessionsPage({ view }: { view: SessionView }) {
                   className="apid-input"
                   value={createMeetingUrl}
                   onChange={(e) => setCreateMeetingUrl(e.target.value)}
-                  placeholder="Leave empty to use automatic Daily.co video room"
+                  placeholder="Leave empty to use automatic LiveKit video room"
                 />
               </div>
             )}
@@ -785,6 +785,29 @@ export function MentoringSessionsPage({ view }: { view: SessionView }) {
                     >
                       View Pairing
                     </Link>
+                    {(session.deliveryMode === 'ONLINE' || session.deliveryMode === 'HYBRID') &&
+                      isMentoringSessionDay(session.scheduledStart) &&
+                      session.status !== 'CANCELLED' &&
+                      session.status !== 'DECLINED' && (
+                        <button
+                          type="button"
+                          onClick={() => setSelectedForVideo(session)}
+                          className="apid-btn apid-btn-sm"
+                          style={{
+                            background: 'linear-gradient(135deg, #0284c7, #0369a1)',
+                            color: '#ffffff',
+                            border: 'none',
+                            fontWeight: 600,
+                            boxShadow: '0 2px 4px rgba(2, 132, 199, 0.25)',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '0.35rem',
+                            cursor: 'pointer',
+                          }}
+                        >
+                          <Video size={14} /> Join LiveKit Video
+                        </button>
+                    )}
                     <MentoringSessionJoinButton
                       session={session}
                       onJoin={() => setSelectedForVideo(session)}

@@ -1,4 +1,5 @@
 export * from './AvatarBadge';
+export * from './BoaEmblem';
 export * from './ConfirmDialog';
 export * from './DataSourceBadge';
 export * from './DataTable';

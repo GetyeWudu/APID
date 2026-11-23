@@ -12,7 +12,11 @@ import com.boa.apid.core.authorization.repository.UserRoleRepository;
 import com.boa.apid.core.authorization.service.PermissionCacheInvalidationEvent;
 import com.boa.apid.core.authorization.service.SuperAdminProtectionService;
 import com.boa.apid.core.identity.dto.*;
+import com.boa.apid.core.organization.entity.Employee;
+import com.boa.apid.core.organization.repository.EmployeeRepository;
 import jakarta.persistence.criteria.Predicate;
+import jakarta.persistence.criteria.Root;
+import jakarta.persistence.criteria.Subquery;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
@@ -46,6 +50,7 @@ public class UserAdminService {
     private final SuperAdminProtectionService protectionService;
     private final ApplicationEventPublisher eventPublisher;
     private final AuditService auditService;
+    private final EmployeeRepository employeeRepository;
 
     public UserAdminService(
             UserRepository userRepository,
@@ -55,7 +60,8 @@ public class UserAdminService {
             RefreshTokenService refreshTokenService,
             SuperAdminProtectionService protectionService,
             ApplicationEventPublisher eventPublisher,
-            AuditService auditService
+            AuditService auditService,
+            EmployeeRepository employeeRepository
     ) {
         this.userRepository = userRepository;
         this.roleRepository = roleRepository;
@@ -65,12 +71,27 @@ public class UserAdminService {
         this.protectionService = protectionService;
         this.eventPublisher = eventPublisher;
         this.auditService = auditService;
+        this.employeeRepository = employeeRepository;
     }
 
     @Transactional(readOnly = true)
     public Page<AdminUserDto> searchUsers(
             String search,
             UserStatus status,
+            int page,
+            int size,
+            String sortBy,
+            String sortDir
+    ) {
+        return searchUsers(search, status, null, null, page, size, sortBy, sortDir);
+    }
+
+    @Transactional(readOnly = true)
+    public Page<AdminUserDto> searchUsers(
+            String search,
+            UserStatus status,
+            AuthProvider authProvider,
+            Long roleId,
             int page,
             int size,
             String sortBy,
@@ -89,14 +110,36 @@ public class UserAdminService {
         Sort sort = Sort.by(new Sort.Order(direction, sortBy), new Sort.Order(Sort.Direction.ASC, "id"));
         Pageable pageable = PageRequest.of(Math.max(page, 0), size, sort);
 
+        List<Long> employeeMatchedUserIds = (search != null && !search.isBlank())
+                ? employeeRepository.findUserIdsBySearchTerm(search.trim())
+                : List.of();
+
         Specification<User> spec = (root, query, cb) -> {
             List<Predicate> predicates = new ArrayList<>();
             if (search != null && !search.isBlank()) {
-                predicates.add(cb.like(cb.lower(root.get("username")),
-                        "%" + search.trim().toLowerCase(Locale.ROOT) + "%"));
+                String pattern = "%" + search.trim().toLowerCase(Locale.ROOT) + "%";
+                Predicate usernameMatch = cb.like(cb.lower(root.get("username")), pattern);
+                if (!employeeMatchedUserIds.isEmpty()) {
+                    predicates.add(cb.or(usernameMatch, root.get("id").in(employeeMatchedUserIds)));
+                } else {
+                    predicates.add(usernameMatch);
+                }
             }
             if (status != null) {
                 predicates.add(cb.equal(root.get("status"), status));
+            }
+            if (authProvider != null) {
+                predicates.add(cb.equal(root.get("authProvider"), authProvider));
+            }
+            if (roleId != null) {
+                Subquery<Long> subquery = query.subquery(Long.class);
+                Root<UserRole> ur = subquery.from(UserRole.class);
+                subquery.select(ur.get("user").get("id"))
+                        .where(cb.and(
+                                cb.equal(ur.get("role").get("id"), roleId),
+                                cb.equal(ur.get("active"), true)
+                        ));
+                predicates.add(root.get("id").in(subquery));
             }
             return cb.and(predicates.toArray(Predicate[]::new));
         };
@@ -119,7 +162,12 @@ public class UserAdminService {
                         )
                 ));
 
-        return usersPage.map(u -> toDto(u, rolesByUserId.getOrDefault(u.getId(), Set.of())));
+        Map<Long, Employee> employeesByUserId = userIds.isEmpty()
+                ? Map.of()
+                : employeeRepository.findDetailedByUserIdIn(userIds).stream()
+                .collect(Collectors.toMap(Employee::getUserId, e -> e, (a, b) -> a));
+
+        return usersPage.map(u -> toDto(u, rolesByUserId.getOrDefault(u.getId(), Set.of()), employeesByUserId.get(u.getId())));
     }
 
     @Transactional
@@ -390,11 +438,22 @@ public class UserAdminService {
                         ur.getRole().getId(), ur.getRole().getName(), ur.getRole().isSystemProtected()))
                 .collect(Collectors.toCollection(() -> new TreeSet<>(
                         Comparator.comparing(AdminUserDto.RoleSummary::name))));
-        return toDto(user, summaries);
+        Employee employee = employeeRepository.findByUserId(user.getId()).orElse(null);
+        return toDto(user, summaries, employee);
     }
 
     private AdminUserDto toDto(User user, Set<AdminUserDto.RoleSummary> roles) {
+        return toDto(user, roles, null);
+    }
+
+    private AdminUserDto toDto(User user, Set<AdminUserDto.RoleSummary> roles, Employee employee) {
         boolean tempLocked = user.getLockedUntil() != null && user.getLockedUntil().isAfter(Instant.now());
+        String fullName = employee != null ? employee.getFullName() : null;
+        String employeeNumber = employee != null ? employee.getEmployeeNumber() : null;
+        String departmentName = employee != null
+                ? (employee.getDepartment() != null ? employee.getDepartment().getName() : employee.getDepartmentName())
+                : null;
+
         return new AdminUserDto(
                 user.getId(),
                 user.getUsername(),
@@ -406,7 +465,10 @@ public class UserAdminService {
                 user.isMustChangePassword(),
                 roles,
                 user.getLastLoginAt(),
-                user.getCreatedAt()
+                user.getCreatedAt(),
+                fullName,
+                employeeNumber,
+                departmentName
         );
     }
 

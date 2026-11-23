@@ -31,7 +31,11 @@ public class SkillCoachingRequestController {
             @Valid @RequestBody CreateSkillCoachingRequestPayload payload,
             @AuthenticationPrincipal ApidUserPrincipal actor
     ) {
-        return ApiResponse.ok("Request submitted for PMS approval", requestService.createRequest(payload, actor));
+        SkillCoachingRequestDto dto = requestService.createRequest(payload, actor);
+        String msg = dto.status() == com.boa.apid.coaching.skillrequest.entity.SkillCoachingRequestStatus.APPROVED
+                ? "Skill coaching cohort created and activated successfully"
+                : "Request submitted for PMS approval";
+        return ApiResponse.ok(msg, dto);
     }
 
     /**

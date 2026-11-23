@@ -9,11 +9,13 @@ import com.boa.apid.coaching.importpms.repository.PmsGoalLineRepository;
 import com.boa.apid.coaching.session.dto.*;
 import com.boa.apid.coaching.session.entity.*;
 import com.boa.apid.coaching.session.repository.CoachingSessionRepository;
+import com.boa.apid.coaching.session.repository.CoachingSessionTurnRepository;
 import com.boa.apid.coaching.session.repository.SessionParticipantRepository;
 import com.boa.apid.coaching.session.repository.SessionScheduleProposalRepository;
-import com.boa.apid.coaching.session.video.MeetingRoomDetails;
-import com.boa.apid.coaching.session.video.MeetingTokenDetails;
-import com.boa.apid.coaching.session.video.VideoMeetingProvider;
+import com.boa.apid.platform.video.api.MeetingRoomDetails;
+import com.boa.apid.platform.video.api.MeetingTokenDetails;
+import com.boa.apid.platform.video.api.SessionJoinTokenDto;
+import com.boa.apid.platform.video.api.VideoMeetingProvider;
 import com.boa.apid.coaching.skillrequest.entity.SkillCoachingRequest;
 import com.boa.apid.coaching.skillrequest.entity.SkillCoachingRequestStatus;
 import com.boa.apid.coaching.skillrequest.entity.SkillCoachingRequestTarget;
@@ -27,6 +29,9 @@ import com.boa.apid.core.config.dto.PublicConfigDto;
 import com.boa.apid.core.config.entity.FiscalQuarter;
 import com.boa.apid.core.config.repository.FiscalQuarterRepository;
 import com.boa.apid.core.config.service.ConfigCacheStore;
+import com.boa.apid.core.notifications.entity.NotificationChannel;
+import com.boa.apid.core.notifications.entity.NotificationModule;
+import com.boa.apid.core.notifications.service.NotificationService;
 import com.boa.apid.core.organization.dto.EmployeeDto;
 import com.boa.apid.core.organization.entity.Employee;
 import com.boa.apid.core.organization.repository.EmployeeRepository;
@@ -37,8 +42,10 @@ import com.boa.apid.core.scheduling.service.ScheduleReservationService;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.time.*;
+import java.time.format.DateTimeFormatter;
 import java.util.*;
 import java.util.stream.Collectors;
 
@@ -59,6 +66,9 @@ public class CoachingSessionService {
     private final ScheduleReservationService reservationService;
     private final ConfigCacheStore configCacheStore;
     private final FiscalQuarterRepository fiscalQuarterRepository;
+    private final MinutesGenerationService minutesGenerationService;
+    private final CoachingSessionTurnRepository turnRepository;
+    private final NotificationService notificationService;
 
     public CoachingSessionService(
             CoachingSessionRepository sessionRepository,
@@ -74,7 +84,10 @@ public class CoachingSessionService {
             AuditService auditService,
             ScheduleReservationService reservationService,
             ConfigCacheStore configCacheStore,
-            FiscalQuarterRepository fiscalQuarterRepository
+            FiscalQuarterRepository fiscalQuarterRepository,
+            MinutesGenerationService minutesGenerationService,
+            CoachingSessionTurnRepository turnRepository,
+            NotificationService notificationService
     ) {
         this.sessionRepository = sessionRepository;
         this.participantRepository = participantRepository;
@@ -90,6 +103,9 @@ public class CoachingSessionService {
         this.reservationService = reservationService;
         this.configCacheStore = configCacheStore;
         this.fiscalQuarterRepository = fiscalQuarterRepository;
+        this.minutesGenerationService = minutesGenerationService;
+        this.turnRepository = turnRepository;
+        this.notificationService = notificationService;
     }
 
     // ─────────────────────────── 1. CREATE SESSION ───────────────────────────
@@ -126,6 +142,7 @@ public class CoachingSessionService {
         Long coachEmpId;
         AssignmentPathway pathway;
         List<Long> coacheeEmpIds = new ArrayList<>();
+        Map<Long, Long> coacheeToAssignmentMap = new HashMap<>();
 
         if (hasAssignment) {
             CoachingAssignment assignment = assignmentRepository.findById(request.assignmentId())
@@ -148,11 +165,13 @@ public class CoachingSessionService {
 
             pathway = AssignmentPathway.MANDATORY_PMS;
             coacheeEmpIds.add(assignment.getCoacheeEmployeeId());
+            coacheeToAssignmentMap.put(assignment.getCoacheeEmployeeId(), assignment.getId());
             if (request.additionalAssignmentIds() != null) {
                 for (Long addId : request.additionalAssignmentIds()) {
                     assignmentRepository.findById(addId).ifPresent(addAss -> {
                         if (addAss.getCoacheeEmployeeId() != null && !coacheeEmpIds.contains(addAss.getCoacheeEmployeeId())) {
                             coacheeEmpIds.add(addAss.getCoacheeEmployeeId());
+                            coacheeToAssignmentMap.put(addAss.getCoacheeEmployeeId(), addAss.getId());
                         }
                     });
                 }
@@ -180,7 +199,12 @@ public class CoachingSessionService {
             if (targets.isEmpty()) {
                 throw new BusinessException("EMPTY_COHORT", "Approved skill request has no registered employee targets.");
             }
-            targets.forEach(t -> coacheeEmpIds.add(t.getEmployeeId()));
+            targets.forEach(t -> {
+                coacheeEmpIds.add(t.getEmployeeId());
+                if (t.getCreatedAssignmentId() != null) {
+                    coacheeToAssignmentMap.put(t.getEmployeeId(), t.getCreatedAssignmentId());
+                }
+            });
         }
 
         // Concurrency / double-booking check
@@ -188,14 +212,19 @@ public class CoachingSessionService {
             throw new BusinessException("COACH_DOUBLE_BOOKED", "Coach already has another confirmed coaching session during this time window.");
         }
 
-        // Provision Daily.co video room if VIRTUAL_VIDEO
-        String dailyRoomName = null;
-        String dailyRoomUrl = null;
-        if (request.meetingMode() == SessionMeetingMode.VIRTUAL_VIDEO) {
+        if (request.meetingMode().isLocationRequired()
+                && (request.meetingLocation() == null || request.meetingLocation().isBlank())) {
+            throw new BusinessException("LOCATION_REQUIRED", "A meeting location is required for in-person or hybrid coaching sessions.");
+        }
+
+        // Provision LiveKit video room if ONLINE, HYBRID, or legacy VIRTUAL_VIDEO
+        String roomName = null;
+        String roomUrl = null;
+        if (request.meetingMode().isVideoRequired()) {
             String prefix = hasAssignment ? "pms-" + request.assignmentId() : "skill-" + request.skillRequestId();
             MeetingRoomDetails room = videoMeetingProvider.createRoom(prefix, endTime.plus(Duration.ofHours(2)));
-            dailyRoomName = room.roomName();
-            dailyRoomUrl = room.roomUrl();
+            roomName = room.roomName();
+            roomUrl = room.roomUrl();
         }
 
         CoachingSession session = new CoachingSession();
@@ -209,9 +238,16 @@ public class CoachingSessionService {
         session.setDurationMinutes(duration);
         session.setMeetingMode(request.meetingMode());
         session.setMeetingLocation(request.meetingLocation());
-        session.setDailyRoomName(dailyRoomName);
-        session.setDailyRoomUrl(dailyRoomUrl);
+        session.setMeetingProvider(videoMeetingProvider.getProviderName());
+        session.setMeetingRoomName(roomName);
+        session.setMeetingRoomUrl(roomUrl);
+        session.setDailyRoomName(roomName);
+        session.setDailyRoomUrl(roomUrl);
         session.setTargetPmsGoalId(request.targetPmsGoalId());
+        session.setPrepNotes(request.prepNotes());
+        session.setReferenceMaterials(request.referenceMaterials() != null ? request.referenceMaterials() : "[]");
+        session.setAiSummarizationEnabled(request.aiSummarizationEnabled() != null ? request.aiSummarizationEnabled() : true);
+        session.setAiAgentEnabled(request.aiAgentEnabled() != null ? request.aiAgentEnabled() : false);
         session.setCreatedByUserId(actor.getUserId());
         session.setStatus(SessionStatus.CONFIRMED); // Confirmed on proposal by coach
 
@@ -226,11 +262,12 @@ public class CoachingSessionService {
         coachPart.setRespondedAt(Instant.now());
         participantRepository.save(coachPart);
 
-        // Create Coachee Participants
+        // Create Coachee Participants with independent assignment mapping
         for (Long coacheeId : coacheeEmpIds) {
             SessionParticipant coacheePart = new SessionParticipant();
             coacheePart.setSessionId(savedSession.getId());
             coacheePart.setEmployeeId(coacheeId);
+            coacheePart.setAssignmentId(coacheeToAssignmentMap.get(coacheeId));
             coacheePart.setRole(ParticipantRole.COACHEE);
             coacheePart.setInvitationStatus(InvitationStatus.PENDING);
             participantRepository.save(coacheePart);
@@ -265,6 +302,33 @@ public class CoachingSessionService {
                 Map.of("title", savedSession.getTitle(), "mode", savedSession.getMeetingMode().name()),
                 null, null
         ));
+
+        // In-App & Outbox Email notifications to coachee(s)
+        DateTimeFormatter dtf = DateTimeFormatter.ofPattern("MMM dd, yyyy 'at' hh:mm a");
+        String formattedTime = dtf.format(startTime.atZone(ZoneId.of("Africa/Addis_Ababa"))) + " EAT";
+        for (Long coacheeEmpId : coacheeEmpIds) {
+            employeeRepository.findById(coacheeEmpId).ifPresent(c -> {
+                if (c.getUserId() != null) {
+                    notificationService.notify(
+                            c.getUserId(),
+                            NotificationModule.COACHING,
+                            "COACHING_SESSION_SCHEDULED",
+                            "📅 New Coaching Session: " + savedSession.getTitle(),
+                            "Coach " + callerEmp.fullName() + " has scheduled a coaching session for " + formattedTime + ".",
+                            "/coaching?view=sessions"
+                    );
+                    notificationService.enqueueViaOutbox(
+                            c.getUserId(),
+                            NotificationModule.COACHING,
+                            "COACHING_SESSION_SCHEDULED",
+                            "📅 New Coaching Session: " + savedSession.getTitle(),
+                            "Coach " + callerEmp.fullName() + " has scheduled a coaching session for " + formattedTime + ".",
+                            "/coaching?view=sessions",
+                            NotificationChannel.EMAIL
+                    );
+                }
+            });
+        }
 
         return toDto(savedSession);
     }
@@ -335,6 +399,29 @@ public class CoachingSessionService {
             sessionRepository.save(session);
         }
 
+        if (!request.accept()) {
+            Employee coach = employeeRepository.findById(session.getCoachEmployeeId()).orElse(null);
+            if (coach != null && coach.getUserId() != null) {
+                notificationService.notify(
+                        coach.getUserId(),
+                        NotificationModule.COACHING,
+                        "COACHING_INVITATION_DECLINED",
+                        "❌ Session Invitation Declined: " + callerEmp.fullName(),
+                        callerEmp.fullName() + " declined attendance for '" + session.getTitle() + "'. Reason: " + request.declineReason(),
+                        "/coaching?view=sessions"
+                );
+                notificationService.enqueueViaOutbox(
+                        coach.getUserId(),
+                        NotificationModule.COACHING,
+                        "COACHING_INVITATION_DECLINED",
+                        "❌ Session Invitation Declined: " + callerEmp.fullName(),
+                        callerEmp.fullName() + " declined attendance for '" + session.getTitle() + "'. Reason: " + request.declineReason(),
+                        "/coaching?view=sessions",
+                        NotificationChannel.EMAIL
+                );
+            }
+        }
+
         return toDto(session);
     }
 
@@ -371,6 +458,18 @@ public class CoachingSessionService {
         if (request.targetPmsGoalId() != null) {
             session.setTargetPmsGoalId(request.targetPmsGoalId());
         }
+        if (request.prepNotes() != null) {
+            session.setPrepNotes(request.prepNotes().trim());
+        }
+        if (request.referenceMaterials() != null) {
+            session.setReferenceMaterials(request.referenceMaterials());
+        }
+        if (request.aiSummarizationEnabled() != null) {
+            session.setAiSummarizationEnabled(request.aiSummarizationEnabled());
+        }
+        if (request.aiAgentEnabled() != null) {
+            session.setAiAgentEnabled(request.aiAgentEnabled());
+        }
 
         // 2. Schedule & Duration validation
         Instant newStart = request.scheduledStartTime() != null ? request.scheduledStartTime() : session.getScheduledStartTime();
@@ -406,6 +505,34 @@ public class CoachingSessionService {
                 if (p.getRole() == ParticipantRole.COACHEE) {
                     p.setInvitationStatus(InvitationStatus.PENDING);
                     participantRepository.save(p);
+                }
+            }
+
+            DateTimeFormatter dtf = DateTimeFormatter.ofPattern("MMM dd, yyyy 'at' hh:mm a");
+            String formattedTime = dtf.format(newStart.atZone(eatZone)) + " EAT";
+            for (SessionParticipant p : parts) {
+                if (p.getRole() == ParticipantRole.COACHEE) {
+                    employeeRepository.findById(p.getEmployeeId()).ifPresent(c -> {
+                        if (c.getUserId() != null) {
+                            notificationService.notify(
+                                    c.getUserId(),
+                                    NotificationModule.COACHING,
+                                    "COACHING_SESSION_RESCHEDULED",
+                                    "🔄 Session Rescheduled: " + session.getTitle(),
+                                    "Coach " + callerEmp.fullName() + " rescheduled your session to " + formattedTime + ".",
+                                    "/coaching?view=sessions"
+                            );
+                            notificationService.enqueueViaOutbox(
+                                    c.getUserId(),
+                                    NotificationModule.COACHING,
+                                    "COACHING_SESSION_RESCHEDULED",
+                                    "🔄 Session Rescheduled: " + session.getTitle(),
+                                    "Coach " + callerEmp.fullName() + " rescheduled your coaching session to " + formattedTime + ".",
+                                    "/coaching?view=sessions",
+                                    NotificationChannel.EMAIL
+                            );
+                        }
+                    });
                 }
             }
         }
@@ -473,6 +600,34 @@ public class CoachingSessionService {
                     participantRepository.save(p);
                 }
             }
+
+            DateTimeFormatter dtf = DateTimeFormatter.ofPattern("MMM dd, yyyy 'at' hh:mm a");
+            String formattedTime = dtf.format(newStart.atZone(eatZone)) + " EAT";
+            for (SessionParticipant p : parts) {
+                if (p.getRole() == ParticipantRole.COACHEE) {
+                    employeeRepository.findById(p.getEmployeeId()).ifPresent(c -> {
+                        if (c.getUserId() != null) {
+                            notificationService.notify(
+                                    c.getUserId(),
+                                    NotificationModule.COACHING,
+                                    "COACHING_SESSION_RESCHEDULED",
+                                    "🔄 Session Rescheduled: " + session.getTitle(),
+                                    "Coach " + callerEmp.fullName() + " rescheduled your session to " + formattedTime + ".",
+                                    "/coaching?view=sessions"
+                            );
+                            notificationService.enqueueViaOutbox(
+                                    c.getUserId(),
+                                    NotificationModule.COACHING,
+                                    "COACHING_SESSION_RESCHEDULED",
+                                    "🔄 Session Rescheduled: " + session.getTitle(),
+                                    "Coach " + callerEmp.fullName() + " rescheduled your coaching session to " + formattedTime + ".",
+                                    "/coaching?view=sessions",
+                                    NotificationChannel.EMAIL
+                            );
+                        }
+                    });
+                }
+            }
         } else {
             // Coachee proposed: mark session RESCHEDULE_PENDING for coach review
             proposal.setStatus(ProposalStatus.PENDING);
@@ -480,6 +635,29 @@ public class CoachingSessionService {
 
             session.setStatus(SessionStatus.RESCHEDULE_PENDING);
             sessionRepository.save(session);
+
+            DateTimeFormatter dtf = DateTimeFormatter.ofPattern("MMM dd, yyyy 'at' hh:mm a");
+            String formattedProposedTime = dtf.format(newStart.atZone(eatZone)) + " EAT";
+            Employee coach = employeeRepository.findById(session.getCoachEmployeeId()).orElse(null);
+            if (coach != null && coach.getUserId() != null) {
+                notificationService.notify(
+                        coach.getUserId(),
+                        NotificationModule.COACHING,
+                        "COACHING_RESCHEDULE_PROPOSED",
+                        "⏳ Reschedule Request: " + callerEmp.fullName(),
+                        callerEmp.fullName() + " requested to reschedule '" + session.getTitle() + "' to " + formattedProposedTime + ". Reason: " + request.reason(),
+                        "/coaching?view=sessions"
+                );
+                notificationService.enqueueViaOutbox(
+                        coach.getUserId(),
+                        NotificationModule.COACHING,
+                        "COACHING_RESCHEDULE_PROPOSED",
+                        "⏳ Reschedule Request: " + callerEmp.fullName(),
+                        callerEmp.fullName() + " requested to reschedule '" + session.getTitle() + "' to " + formattedProposedTime + ". Reason: " + request.reason(),
+                        "/coaching?view=sessions",
+                        NotificationChannel.EMAIL
+                );
+            }
         }
 
         return toDto(session);
@@ -535,22 +713,12 @@ public class CoachingSessionService {
             }
         }
 
-        // Reschedule Scope
-        String scope = publicConfig.getCoachingRescheduleScope() != null ? publicConfig.getCoachingRescheduleScope() : "SAME_WEEK";
+        // Reschedule Scope - flexible across the active quarter
+        String scope = publicConfig.getCoachingRescheduleScope() != null ? publicConfig.getCoachingRescheduleScope() : "ACTIVE_QUARTER";
         if ("SAME_DAY_ONLY".equalsIgnoreCase(scope)) {
             if (!currentZdt.toLocalDate().isEqual(newZdt.toLocalDate())) {
                 throw new BusinessException("RESCHEDULE_WINDOW_VIOLATION",
                         "Bank policy restricts rescheduling to different hours on the same calendar day.");
-            }
-        } else if ("SAME_WEEK".equalsIgnoreCase(scope)) {
-            java.time.temporal.WeekFields weekFields = java.time.temporal.WeekFields.ISO;
-            int currentWeek = currentZdt.get(weekFields.weekOfWeekBasedYear());
-            int newWeek = newZdt.get(weekFields.weekOfWeekBasedYear());
-            int currentYear = currentZdt.get(weekFields.weekBasedYear());
-            int newYear = newZdt.get(weekFields.weekBasedYear());
-            if (currentWeek != newWeek || currentYear != newYear) {
-                throw new BusinessException("RESCHEDULE_WINDOW_VIOLATION",
-                        "Bank policy restricts rescheduling to within the same calendar week (Monday to Saturday).");
             }
         }
 
@@ -659,6 +827,20 @@ public class CoachingSessionService {
         return toDto(session);
     }
 
+    @Transactional(readOnly = true)
+    public GeneratedMinutesDto generateMinutes(Long sessionId, MultipartFile audioFile, ApidUserPrincipal actor) {
+        EmployeeDto callerEmp = getCallerEmployeeOrThrow(actor);
+        CoachingSession session = sessionRepository.findById(sessionId)
+                .orElseThrow(() -> new ResourceNotFoundException("Coaching session not found"));
+
+        boolean isCoach = session.getCoachEmployeeId().equals(callerEmp.id());
+        if (!isAdmin(actor) && !isCoach) {
+            throw new AccessDeniedException("Only the designated coach can generate AI session minutes.");
+        }
+
+        return minutesGenerationService.generateMinutes(session, audioFile);
+    }
+
     // ─────────────────────────── 8. SUBMIT FEEDBACK ───────────────────────────
 
     @Transactional
@@ -744,6 +926,32 @@ public class CoachingSessionService {
         proposalRepository.save(proposal);
         sessionRepository.save(session);
 
+        // Notify coachee who proposed the reschedule
+        Employee proposer = employeeRepository.findById(proposal.getProposedByEmployeeId()).orElse(null);
+        if (proposer != null && proposer.getUserId() != null) {
+            String decisionTitle = request.accept() ? "✅ Reschedule Approved" : "❌ Reschedule Declined";
+            String decisionMsg = "Coach " + callerEmp.fullName() + (request.accept()
+                    ? " approved your reschedule request for '" + session.getTitle() + "'."
+                    : " declined your reschedule request for '" + session.getTitle() + "'.");
+            notificationService.notify(
+                    proposer.getUserId(),
+                    NotificationModule.COACHING,
+                    "COACHING_RESCHEDULE_DECISION",
+                    decisionTitle + ": " + session.getTitle(),
+                    decisionMsg,
+                    "/coaching?view=sessions"
+            );
+            notificationService.enqueueViaOutbox(
+                    proposer.getUserId(),
+                    NotificationModule.COACHING,
+                    "COACHING_RESCHEDULE_DECISION",
+                    decisionTitle + ": " + session.getTitle(),
+                    decisionMsg,
+                    "/coaching?view=sessions",
+                    NotificationChannel.EMAIL
+            );
+        }
+
         return toDto(session);
     }
 
@@ -763,15 +971,15 @@ public class CoachingSessionService {
         CoachingSession session = sessionRepository.findById(sessionId)
                 .orElseThrow(() -> new ResourceNotFoundException("Coaching session not found"));
 
-        if (session.getMeetingMode() != SessionMeetingMode.VIRTUAL_VIDEO) {
-            throw new BusinessException("NOT_A_VIDEO_SESSION", "This coaching session is configured for phone or in-person delivery, not video.");
+        if (!session.getMeetingMode().isVideoRequired()) {
+            throw new BusinessException("NOT_A_VIDEO_SESSION", "This coaching session is configured for in-person delivery, not online video.");
         }
 
         SessionParticipant participant = participantRepository.findBySessionIdAndEmployeeId(sessionId, callerEmp.id())
                 .orElseThrow(() -> new AccessDeniedException("You are not authorized to join this coaching video call."));
 
         boolean isCoach = participant.getRole() == ParticipantRole.COACH;
-        String roomName = session.getDailyRoomName();
+        String roomName = session.getMeetingRoomName() != null ? session.getMeetingRoomName() : session.getDailyRoomName();
         if (roomName == null || roomName.isBlank()) {
             roomName = "session-" + session.getId();
         }
@@ -899,7 +1107,11 @@ public class CoachingSessionService {
                 s.getSeriesId(),
                 s.getSequenceNumber(),
                 s.isExtensionSession(),
-                rescheduleCount
+                rescheduleCount,
+                s.getPrepNotes(),
+                s.getReferenceMaterials(),
+                s.isAiSummarizationEnabled(),
+                s.isAiAgentEnabled()
         );
     }
 
@@ -912,5 +1124,102 @@ public class CoachingSessionService {
         return actor.getAuthorities().stream()
                 .anyMatch(a -> a.getAuthority().equals("COACHING_ASSIGNMENT_VIEW_ALL") ||
                                a.getAuthority().equals("USER_MANAGE"));
+    }
+
+    @Transactional
+    public CoachingSessionTurnDto recordTurnByRoom(String roomName, CreateSessionTurnRequest req) {
+        CoachingSession session = sessionRepository.findByDailyRoomName(roomName)
+                .orElseThrow(() -> new BusinessException("SESSION_NOT_FOUND", "No coaching session found for room: " + roomName));
+
+        CoachingSessionTurn turn = new CoachingSessionTurn();
+        turn.setSessionId(session.getId());
+        turn.setTurnIndex(req.turnIndex() != null ? req.turnIndex() : 0);
+        turn.setSpeakerEmployeeId(req.speakerEmployeeId());
+        turn.setSpeakerName(req.speakerName());
+        turn.setSpeakerRole(req.speakerRole() != null ? req.speakerRole() : "COACHEE");
+        turn.setStartTimeOffsetSec(req.startTimeOffsetSec());
+        turn.setDurationSec(req.durationSec());
+        turn.setTranscriptAmharic(req.transcriptAmharic());
+        turn.setTranscriptEnglish(req.transcriptEnglish());
+        turn.setReconciledText(req.reconciledText());
+        turn.setCreatedAt(Instant.now());
+
+        CoachingSessionTurn saved = turnRepository.save(turn);
+        return toTurnDto(saved);
+    }
+
+    @Transactional
+    public CoachingSessionDto prefillMinutesByRoom(String roomName, PrefillMinutesRequest req) {
+        CoachingSession session = sessionRepository.findByDailyRoomName(roomName)
+                .orElseThrow(() -> new BusinessException("SESSION_NOT_FOUND", "No coaching session found for room: " + roomName));
+
+        if (req.sessionNotesMinutes() != null && !req.sessionNotesMinutes().isBlank()) {
+            session.setSessionNotesMinutes(req.sessionNotesMinutes());
+        }
+        if (req.actionItems() != null && !req.actionItems().isBlank()) {
+            session.setActionItems(req.actionItems());
+        }
+        session.setMinutesSynthesisStatus("DRAFT_READY");
+        session.setMinutesSynthesizedAt(Instant.now());
+
+        CoachingSession saved = sessionRepository.save(session);
+        return toDto(saved);
+    }
+
+    public record RoomAiConfigDto(
+            Long sessionId,
+            String title,
+            boolean aiAgentEnabled,
+            boolean aiSummarizationEnabled
+    ) {}
+
+    @Transactional(readOnly = true)
+    public RoomAiConfigDto getRoomAiConfig(String roomName) {
+        CoachingSession session = sessionRepository.findByDailyRoomName(roomName)
+                .or(() -> sessionRepository.findByMeetingRoomName(roomName))
+                .orElse(null);
+
+        if (session == null) {
+            return new RoomAiConfigDto(null, roomName, false, false);
+        }
+
+        return new RoomAiConfigDto(
+                session.getId(),
+                session.getTitle(),
+                Boolean.TRUE.equals(session.getAiAgentEnabled()),
+                session.getAiSummarizationEnabled() != Boolean.FALSE
+        );
+    }
+
+    public List<CoachingSessionTurnDto> getSessionTurns(Long sessionId, ApidUserPrincipal actor) {
+        CoachingSession session = sessionRepository.findById(sessionId)
+                .orElseThrow(() -> new BusinessException("SESSION_NOT_FOUND", "Session not found"));
+        EmployeeDto caller = getCallerEmployeeOrThrow(actor);
+        boolean isCoach = session.getCoachEmployeeId().equals(caller.id());
+        boolean isParticipant = participantRepository.existsBySessionIdAndEmployeeId(sessionId, caller.id());
+        if (!isCoach && !isParticipant && !isAdmin(actor)) {
+            throw new AccessDeniedException("You do not have access to turns for this coaching session.");
+        }
+
+        return turnRepository.findAllBySessionIdOrderByTurnIndexAsc(sessionId).stream()
+                .map(this::toTurnDto)
+                .toList();
+    }
+
+    private CoachingSessionTurnDto toTurnDto(CoachingSessionTurn t) {
+        return new CoachingSessionTurnDto(
+                t.getId(),
+                t.getSessionId(),
+                t.getTurnIndex(),
+                t.getSpeakerEmployeeId(),
+                t.getSpeakerName(),
+                t.getSpeakerRole(),
+                t.getStartTimeOffsetSec(),
+                t.getDurationSec(),
+                t.getTranscriptAmharic(),
+                t.getTranscriptEnglish(),
+                t.getReconciledText(),
+                t.getCreatedAt()
+        );
     }
 }

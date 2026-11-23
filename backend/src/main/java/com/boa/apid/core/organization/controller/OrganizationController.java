@@ -56,12 +56,14 @@ public class OrganizationController {
     public ApiResponse<Page<EmployeeDto>> listEmployees(
             @RequestParam(required = false) String search,
             @RequestParam(required = false) Long departmentId,
+            @RequestParam(required = false) List<Long> departmentIds,
+            @RequestParam(required = false) String position,
             @RequestParam(required = false) EmploymentStatus status,
             @RequestParam(required = false) Long managerId,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size
     ) {
-        return ApiResponse.ok(employeeQueryService.searchEmployees(search, departmentId, status, managerId, page, size));
+        return ApiResponse.ok(employeeQueryService.searchEmployees(search, departmentId, departmentIds, position, status, managerId, page, size));
     }
 
     @GetMapping("/employees/{id}")

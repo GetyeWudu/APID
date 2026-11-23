@@ -13,6 +13,8 @@ public interface SessionParticipantRepository extends JpaRepository<SessionParti
 
     List<SessionParticipant> findAllBySessionIdOrderByRoleAsc(Long sessionId);
 
+    List<SessionParticipant> findAllByAssignmentId(Long assignmentId);
+
     Optional<SessionParticipant> findBySessionIdAndEmployeeId(Long sessionId, Long employeeId);
 
     boolean existsBySessionIdAndEmployeeId(Long sessionId, Long employeeId);

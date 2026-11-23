@@ -22,6 +22,8 @@ public record MyCoacheeItemDto(
         String coachingQuarterLabel,
         int goalCount,
         Instant lastActivityAt,
-        Instant createdAt
+        Instant createdAt,
+        int completedSessions,
+        int requiredTarget
 ) {}
 
