@@ -213,6 +213,35 @@ describe('Portal Home module cards & scoped sidebar isolation', () => {
     expect(screen.getByTestId('module-card-admin')).toBeInTheDocument();
   });
 
+  it('uses the available content width for System Admin but keeps Home centered', () => {
+    vi.spyOn(AuthContextModule, 'useAuth').mockReturnValue(
+      buildAuthMock({
+        id: 1,
+        username: 'admin',
+        mustChangePassword: false,
+        roles: ['Super Admin'],
+        permissions: ['USER_MANAGE'],
+      })
+    );
+
+    const adminView = renderWithProviders(
+      <AppLayout>
+        <div>System Admin Content</div>
+      </AppLayout>,
+      '/admin'
+    );
+    expect(adminView.container.querySelector('main')).toHaveClass('boa-content--full-width');
+    adminView.unmount();
+
+    const homeView = renderWithProviders(
+      <AppLayout>
+        <div>Home Content</div>
+      </AppLayout>,
+      '/home'
+    );
+    expect(homeView.container.querySelector('main')).not.toHaveClass('boa-content--full-width');
+  });
+
   it('scopes the Coaching sidebar strictly to coaching features and hides unauthorized modules', () => {
     vi.spyOn(AuthContextModule, 'useAuth').mockReturnValue(
       buildAuthMock({

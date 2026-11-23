@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import { ShieldAlert } from 'lucide-react';
+import { GraduationCap, ShieldAlert } from 'lucide-react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../../../app/AuthContext';
 import { EMPLOYEE_WORKSPACE_PERMISSIONS } from '../../../shared/auth/workspaceResolver';
@@ -280,6 +280,18 @@ export function MentoringHomePage() {
         <PageHeader
           title="Apply to Become a Mentor"
           subtitle="Complete your profile and supporting documents. A mentor profile is created only after administrator approval."
+          actions={
+            <div className="mentor-application-page-meta">
+              <span className="mentor-application-page-program">
+                <GraduationCap size={17} aria-hidden="true" />
+                Mentor Development Program
+              </span>
+              <span className="mentor-application-page-steps">
+                <strong>09</strong>
+                <span>application steps</span>
+              </span>
+            </div>
+          }
         />
         <ApplyForMentorForm
           activeSkills={activeSkills}

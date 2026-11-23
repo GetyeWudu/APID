@@ -813,7 +813,9 @@ export function AppLayout({ children }: { children: ReactNode }) {
 
         <main
           className={`boa-content${
-            activeModule === 'coaching' || activeModule === 'mentoring'
+            activeModule === 'coaching' ||
+            activeModule === 'mentoring' ||
+            activeModule === 'admin'
               ? ' boa-content--full-width'
               : ''
           }`}

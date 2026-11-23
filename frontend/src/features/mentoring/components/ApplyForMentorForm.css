@@ -1206,3 +1206,396 @@
     justify-content: center;
   }
 }
+
+/* ============================================================
+   MENTOR APPLICATION WIZARD
+   ============================================================ */
+.mentor-application-wizard {
+  padding: 0;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  background: var(--surface);
+  box-shadow: var(--shadow-card);
+}
+
+.mentor-application-progress-panel {
+  padding: 1.3rem 1.85rem 1.2rem;
+  border-bottom: 1px solid var(--border);
+  background: linear-gradient(180deg, #fff 0%, #fbfcfe 100%);
+}
+
+.mentor-application-progress-heading {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 0.7rem;
+}
+
+.mentor-application-progress-heading > div {
+  display: grid;
+  gap: 0.15rem;
+}
+
+.mentor-application-progress-heading > div > span {
+  color: var(--brand-primary);
+  font-size: 0.64rem;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+}
+
+.mentor-application-progress-heading strong {
+  color: var(--text);
+  font-size: 0.92rem;
+}
+
+.mentor-application-progress-caption {
+  color: var(--muted-soft);
+  font-size: 0.72rem;
+}
+
+.mentor-application-progress-track {
+  height: 4px;
+  overflow: hidden;
+  margin-bottom: 1rem;
+  border-radius: 999px;
+  background: #e8edf3;
+}
+
+.mentor-application-progress-track span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--brand-gradient);
+  transition: width 220ms ease;
+}
+
+.mentor-application-stepper {
+  display: grid;
+  grid-template-columns: repeat(9, minmax(0, 1fr));
+  gap: 0.5rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.mentor-application-step {
+  min-width: 0;
+}
+
+.mentor-application-step-button {
+  display: grid;
+  grid-template-columns: 27px minmax(0, 1fr);
+  align-items: center;
+  gap: 0.5rem;
+  width: 100%;
+  min-height: 48px;
+  padding: 0.45rem 0.55rem;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: #fff;
+  color: var(--muted);
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 150ms ease, background 150ms ease, box-shadow 150ms ease, transform 150ms ease;
+}
+
+.mentor-application-step-button:hover:not(:disabled) {
+  transform: translateY(-1px);
+  border-color: var(--brand-soft-border);
+  background: var(--brand-soft);
+}
+
+.mentor-application-step-button:focus-visible {
+  outline: none;
+  border-color: var(--brand-primary);
+  box-shadow: var(--shadow-focus);
+}
+
+.mentor-application-step-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.65;
+}
+
+.mentor-application-step-number {
+  display: grid;
+  width: 26px;
+  height: 26px;
+  place-items: center;
+  border: 1px solid var(--border-strong);
+  border-radius: 50%;
+  background: #f8fafc;
+  color: var(--muted-soft);
+  font-size: 0.68rem;
+  font-weight: 800;
+}
+
+.mentor-application-step-label {
+  min-width: 0;
+  color: var(--text-secondary);
+  font-size: 0.68rem;
+  font-weight: 700;
+  line-height: 1.25;
+}
+
+.mentor-application-step.is-current .mentor-application-step-button {
+  border-color: color-mix(in srgb, var(--brand-primary) 55%, white);
+  background: var(--brand-soft);
+  box-shadow: 0 2px 8px rgba(201, 122, 0, 0.08);
+}
+
+.mentor-application-step.is-current .mentor-application-step-number,
+.mentor-application-step.is-complete .mentor-application-step-number {
+  border-color: var(--brand-primary);
+  background: var(--brand-gradient);
+  color: #fff;
+}
+
+.mentor-application-step.is-current .mentor-application-step-label {
+  color: var(--text);
+}
+
+.mentor-application-form {
+  gap: 1rem;
+  padding: 1.25rem 1.85rem 1.5rem;
+}
+
+.mentor-application-step-content {
+  min-width: 0;
+  min-height: 190px;
+  padding: 1.3rem;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: var(--surface);
+  animation: m-fadein 180ms ease;
+}
+
+.mentor-application-step-content .boa-stack {
+  gap: 1.1rem;
+}
+
+.mentor-application-step-content .boa-stack > div:first-child {
+  padding-bottom: 0.85rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.mentor-application-step-content .boa-card-title {
+  font-size: 1.04rem;
+  letter-spacing: -0.02em;
+}
+
+.mentor-application-step-content .boa-card-subtitle {
+  max-width: 780px;
+  line-height: 1.55;
+}
+
+.mentor-application-wizard .apid-field label {
+  color: var(--text-secondary);
+  font-size: 0.76rem;
+  font-weight: 700;
+}
+
+.mentor-application-wizard .apid-field .boa-muted {
+  font-size: 0.76rem;
+  line-height: 1.5;
+}
+
+.mentor-application-wizard .apid-input {
+  min-height: 44px;
+  border-color: var(--border-strong);
+  border-radius: 9px;
+  background: #fff;
+}
+
+.mentor-application-wizard .apid-input:focus {
+  border-color: var(--brand-primary);
+  box-shadow: var(--shadow-focus);
+}
+
+.mentor-application-wizard .apid-input[readonly] {
+  background: #f8fafc;
+  color: var(--text);
+  font-weight: 600;
+}
+
+.mentor-application-wizard input[type="file"] {
+  padding: 0.45rem;
+}
+
+.mentor-application-wizard input[type="file"]::file-selector-button {
+  margin-right: 0.65rem;
+  padding: 0.45rem 0.7rem;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  background: #fff;
+  color: var(--text-secondary);
+  font: inherit;
+  font-size: 0.76rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.mentor-application-personal-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.25fr) minmax(280px, 0.75fr);
+  align-items: stretch;
+  gap: 1rem;
+}
+
+.mentor-application-name-field,
+.mentor-application-photo-field {
+  min-width: 0;
+  padding: 1rem;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: #fff;
+}
+
+.mentor-application-name-field {
+  justify-content: center;
+}
+
+.mentor-application-photo-field {
+  border-style: dashed;
+  background:
+    radial-gradient(circle at 100% 0, rgba(245, 183, 0, 0.08), transparent 10rem),
+    #fbfcfe;
+}
+
+.mentor-application-photo-field label span {
+  margin-left: 0.3rem;
+  color: var(--muted-soft);
+  font-size: 0.68rem;
+  font-weight: 500;
+}
+
+.mentor-application-photo-preview {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-top: 0.4rem;
+}
+
+.mentor-application-field-error {
+  margin: 0;
+  padding: 0.75rem 0.9rem;
+  border: 1px solid var(--err-border);
+  border-radius: 9px;
+  background: var(--err-soft);
+  color: var(--err);
+  font-size: 0.82rem;
+  font-weight: 600;
+}
+
+.mentor-application-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding-top: 0.25rem;
+}
+
+.mentor-application-draft-hint {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.76rem;
+}
+
+.mentor-application-draft-hint svg {
+  flex: 0 0 auto;
+  color: var(--brand-primary);
+}
+
+.mentor-application-action-buttons {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.55rem;
+  flex-wrap: wrap;
+}
+
+.mentor-application-save-button {
+  border-color: var(--border-strong);
+  background: #fff;
+}
+
+.mentor-application-next-button {
+  min-width: 132px;
+  box-shadow: 0 3px 8px rgba(201, 122, 0, 0.16);
+}
+
+.mentor-application-next-button:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: 0 5px 12px rgba(201, 122, 0, 0.22);
+}
+
+@media (max-width: 1100px) {
+  .mentor-application-stepper {
+    grid-template-columns: repeat(9, minmax(132px, 1fr));
+    overflow-x: auto;
+    padding-bottom: 0.35rem;
+    scroll-snap-type: x proximity;
+  }
+
+  .mentor-application-step {
+    scroll-snap-align: start;
+  }
+}
+
+@media (max-width: 700px) {
+  .mentor-application-progress-panel {
+    padding: 1rem 1.1rem;
+  }
+
+  .mentor-application-progress-caption {
+    display: none;
+  }
+
+  .mentor-application-form {
+    padding: 1rem 1.1rem 1.2rem;
+  }
+
+  .mentor-application-step-content {
+    min-height: 0;
+    padding: 1rem;
+  }
+
+  .mentor-application-personal-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .mentor-application-actions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .mentor-application-draft-hint {
+    order: 1;
+  }
+
+  .mentor-application-action-buttons {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .mentor-application-action-buttons > button {
+    justify-content: center;
+  }
+
+  .mentor-application-next-button {
+    grid-column: 1 / -1;
+    grid-row: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mentor-application-progress-track span,
+  .mentor-application-step-button,
+  .mentor-application-next-button {
+    transition: none;
+  }
+}

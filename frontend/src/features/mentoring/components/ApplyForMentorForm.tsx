@@ -1325,28 +1325,30 @@ export function ApplyForMentorForm({
             <h3 className="boa-card-title">Personal Information</h3>
             <p className="boa-card-subtitle">Your account name is read-only. Add a profile picture if you want to.</p>
           </div>
-          <div className="apid-field">
-            <label htmlFor="mentor-full-name">Full name</label>
-            <input id="mentor-full-name" className="apid-input" value={form.fullName}
-              aria-describedby="mentor-account-name-help" readOnly />
-            <span id="mentor-account-name-help" className="boa-muted">
-              This name comes from your account and cannot be changed here.
-            </span>
-          </div>
-          <div className="apid-field">
-            <label htmlFor="mentor-profile-photo">Profile picture (optional)</label>
-            <input id="mentor-profile-photo" className="apid-input" type="file" accept="image/png,image/jpeg"
-              onClick={(event) => { event.currentTarget.value = ''; }}
-              onChange={(event) => update({ photo: event.target.files?.[0] })} disabled={isSubmitting} />
-            <span className="boa-muted">Add a PNG or JPG image, up to 10 MB, if you would like to include one with your application.</span>
-            {photoPreview && (
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginTop: '0.5rem' }}>
-                <img src={photoPreview} alt="Profile picture preview"
-                  style={{ width: 72, height: 72, borderRadius: '50%', objectFit: 'cover' }} />
-                <button type="button" className="apid-btn apid-btn-outline apid-btn-sm"
-                  onClick={() => update({ photo: undefined })} disabled={isSubmitting}>Remove picture</button>
-              </div>
-            )}
+          <div className="mentor-application-personal-grid">
+            <div className="apid-field mentor-application-name-field">
+              <label htmlFor="mentor-full-name">Full name</label>
+              <input id="mentor-full-name" className="apid-input" value={form.fullName}
+                aria-describedby="mentor-account-name-help" readOnly />
+              <span id="mentor-account-name-help" className="boa-muted">
+                This name comes from your account and cannot be changed here.
+              </span>
+            </div>
+            <div className="apid-field mentor-application-photo-field">
+              <label htmlFor="mentor-profile-photo">Profile picture <span>Optional</span></label>
+              <input id="mentor-profile-photo" className="apid-input" type="file" accept="image/png,image/jpeg"
+                onClick={(event) => { event.currentTarget.value = ''; }}
+                onChange={(event) => update({ photo: event.target.files?.[0] })} disabled={isSubmitting} />
+              <span className="boa-muted">PNG or JPG, up to 10 MB.</span>
+              {photoPreview && (
+                <div className="mentor-application-photo-preview">
+                  <img src={photoPreview} alt="Profile picture preview"
+                    style={{ width: 72, height: 72, borderRadius: '50%', objectFit: 'cover' }} />
+                  <button type="button" className="apid-btn apid-btn-outline apid-btn-sm"
+                    onClick={() => update({ photo: undefined })} disabled={isSubmitting}>Remove picture</button>
+                </div>
+              )}
+            </div>
           </div>
         </div>
       );
@@ -1705,16 +1707,7 @@ export function ApplyForMentorForm({
   };
 
   return (
-    <div className="apid-card">
-      <div className="boa-card-header">
-        <div>
-          <h3 className="boa-card-title">Mentor Application</h3>
-          <p className="boa-card-subtitle">
-            Complete your application and accept the mentor agreement before submission. Your mentor profile is created only after administrator approval.
-          </p>
-        </div>
-        <StatusPill label={`STEP ${step + 1} OF ${STEPS.length}`} tone="neutral" />
-      </div>
+    <section className="apid-card mentor-application-wizard" aria-label="Mentor application form">
       {declinedApplication && !existingApplication && (
         <div role="status" style={{
           display: 'grid',
@@ -1735,17 +1728,35 @@ export function ApplyForMentorForm({
           </span>
         </div>
       )}
-      <ol aria-label="Application progress" style={{
-        display: 'grid',
-        gridTemplateColumns: `repeat(${STEPS.length}, minmax(0, 1fr))`,
-        listStyle: 'none',
-        gap: '0.25rem',
-        padding: 0,
-        margin: '0 0 1.5rem',
-      }}>
-        {STEPS.map((label, index) => (
-          <li key={label} aria-current={index === step ? 'step' : undefined}>
-            <button type="button" className={`apid-btn ${index === step ? 'apid-btn-primary' : 'apid-btn-outline'} apid-btn-sm`}
+      <div className="mentor-application-progress-panel">
+        <div className="mentor-application-progress-heading">
+          <div>
+            <span>STEP {step + 1} OF {STEPS.length}</span>
+            <strong>{STEPS[step]}</strong>
+          </div>
+          <span className="mentor-application-progress-caption">Application progress</span>
+        </div>
+        <div
+          className="mentor-application-progress-track"
+          role="progressbar"
+          aria-label="Application progress"
+          aria-valuemin={1}
+          aria-valuemax={STEPS.length}
+          aria-valuenow={step + 1}
+          aria-valuetext={`Step ${step + 1} of ${STEPS.length}: ${STEPS[step]}`}
+        >
+          <span style={{ width: `${((step + 1) / STEPS.length) * 100}%` }} />
+        </div>
+        <ol aria-label="Application steps" className="mentor-application-stepper">
+          {STEPS.map((label, index) => (
+            <li
+              key={label}
+              className={`mentor-application-step${index === step ? ' is-current' : index < step ? ' is-complete' : ''}`}
+              aria-current={index === step ? 'step' : undefined}
+            >
+              <button
+                type="button"
+                className="mentor-application-step-button"
               onClick={() => {
                 if (index <= step) {
                   setStep(index);
@@ -1761,25 +1772,36 @@ export function ApplyForMentorForm({
                   setStep(index);
                   setFieldError('');
                 }
-              }} disabled={isSubmitting} style={{ width: '100%', minHeight: 44 }}>
-              {index < step ? <Check size={14} aria-hidden="true" /> : null}
-              <span>{label}</span>
+              }}
+              disabled={isSubmitting}
+            >
+                <span className="mentor-application-step-number">
+                  {index < step ? <Check size={14} aria-hidden="true" /> : index + 1}
+                </span>
+                <span className="mentor-application-step-label">{label}</span>
+              </button>
+            </li>
+          ))}
+        </ol>
+      </div>
+      <form className="apid-form mentor-application-form" onSubmit={handleSubmit} noValidate>
+        <div className={`mentor-application-step-content${step === 0 ? ' is-personal' : ''}`}>
+          {stepContent()}
+        </div>
+        {fieldError && <p className="mentor-application-field-error" role="alert">{fieldError}</p>}
+        <footer className="mentor-application-actions">
+          <p className="mentor-application-draft-hint">
+            <FileText size={15} aria-hidden="true" />
+            Save a draft to return to this application later.
+          </p>
+          <div className="mentor-application-action-buttons">
+            <button type="button" className="apid-btn apid-btn-outline" disabled={step === 0 || isSubmitting}
+              onClick={() => { setStep((current) => Math.max(0, current - 1)); setFieldError(''); }}>
+              <ChevronLeft size={16} /> Previous
             </button>
-          </li>
-        ))}
-      </ol>
-      <form className="apid-form" onSubmit={handleSubmit} noValidate>
-        {stepContent()}
-        {fieldError && <p role="alert" style={{ color: 'var(--err)', margin: 0 }}>{fieldError}</p>}
-        <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', gap: '0.5rem' }}>
-          <button type="button" className="apid-btn apid-btn-outline" disabled={step === 0 || isSubmitting}
-            onClick={() => { setStep((current) => Math.max(0, current - 1)); setFieldError(''); }}>
-            <ChevronLeft size={16} /> Previous
-          </button>
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem', marginLeft: 'auto' }}>
             <button
               type="button"
-              className="apid-btn apid-btn-outline"
+              className="apid-btn apid-btn-outline mentor-application-save-button"
               onClick={(event) => {
                 event.preventDefault();
                 event.stopPropagation();
@@ -1787,10 +1809,11 @@ export function ApplyForMentorForm({
               }}
               disabled={isSubmitting}
             >
+              <FileText size={15} aria-hidden="true" />
               Save as Draft
             </button>
             {step < STEPS.length - 1 ? (
-              <button type="button" className="apid-btn apid-btn-primary" disabled={isSubmitting}
+              <button type="button" className="apid-btn apid-btn-primary mentor-application-next-button" disabled={isSubmitting}
                 onClick={() => {
                   const error = validateStep(step);
                   if (error) setFieldError(error);
@@ -1799,7 +1822,7 @@ export function ApplyForMentorForm({
                 Continue <ChevronRight size={16} />
               </button>
             ) : (
-              <button type="submit" className="apid-btn apid-btn-primary"
+              <button type="submit" className="apid-btn apid-btn-primary mentor-application-next-button"
                 disabled={
                   isSubmitting
                   || !mentorAgreementAccepted
@@ -1810,8 +1833,8 @@ export function ApplyForMentorForm({
               </button>
             )}
           </div>
-        </div>
+        </footer>
       </form>
-    </div>
+    </section>
   );
 }

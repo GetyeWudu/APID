@@ -92,6 +92,40 @@
   line-height: 1.6;
 }
 
+.mentor-application-page-meta {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  flex-wrap: wrap;
+}
+
+.mentor-application-page-program,
+.mentor-application-page-steps {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  min-height: 38px;
+  padding: 0.45rem 0.7rem;
+  border: 1px solid rgba(197, 155, 39, 0.22);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.78);
+  color: var(--mentoring-ink-2);
+  font-size: 0.7rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.mentor-application-page-program svg {
+  color: var(--mentoring-accent);
+}
+
+.mentor-application-page-steps strong {
+  color: var(--mentoring-accent);
+  font-size: 0.88rem;
+}
+
 /* ==========================================================================
    Metric Strip — 4-column inline grid
    ========================================================================== */
@@ -672,6 +706,17 @@
 }
 
 @media (max-width: 540px) {
+  .mentor-application-page-meta {
+    gap: 0.4rem;
+  }
+
+  .mentor-application-page-program,
+  .mentor-application-page-steps {
+    min-height: 34px;
+    padding: 0.35rem 0.55rem;
+    font-size: 0.65rem;
+  }
+
   .mentoring-requests__tabs {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
