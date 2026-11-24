@@ -1,4 +1,5 @@
-import React from 'react';
+import React, { useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import {
   X,
   Target,
@@ -12,8 +13,15 @@ import {
   FileText,
   Star,
   User,
+  Download,
+  Loader2,
+  Sparkles,
+  CheckSquare,
+  MessageSquare,
+  ChevronDown,
+  ChevronUp,
 } from 'lucide-react';
-import type { PmsTalentDossier, SessionProgressLog } from '../../api/pmsReportApi';
+import { pmsReportApi, type PmsTalentDossier, SessionProgressLog } from '../../api/pmsReportApi';
 
 interface TalentDossierDrawerProps {
   dossier: PmsTalentDossier | null;
@@ -22,12 +30,139 @@ interface TalentDossierDrawerProps {
   loading: boolean;
 }
 
+function SessionEvidenceDetails({ sessionId }: { sessionId: number }) {
+  const { data, isLoading, isError } = useQuery({
+    queryKey: ['session-evidence', sessionId],
+    queryFn: () => pmsReportApi.getSessionEvidence(sessionId),
+    staleTime: 60_000,
+  });
+
+  if (isLoading) {
+    return (
+      <div style={{ padding: '1rem', textAlign: 'center', fontSize: '0.78rem', color: 'var(--muted)' }}>
+        <Loader2 size={14} className="spin" style={{ display: 'inline-block', marginRight: '0.35rem' }} />
+        Loading speech turns and evidentiary transcript...
+      </div>
+    );
+  }
+
+  if (isError || !data) {
+    return (
+      <div style={{ padding: '0.75rem', fontSize: '0.76rem', color: 'var(--err)', textAlign: 'center' }}>
+        Unable to load live speech turns for this session.
+      </div>
+    );
+  }
+
+  return (
+    <div
+      style={{
+        padding: '0.85rem',
+        borderRadius: '8px',
+        backgroundColor: '#f8fafc',
+        border: '1px solid #e2e8f0',
+        display: 'flex',
+        flexDirection: 'column',
+        gap: '0.75rem',
+      }}
+      className="dark:bg-slate-900/60 dark:border-slate-800"
+    >
+      {/* Topics */}
+      {data.aiKeyTopics && data.aiKeyTopics.length > 0 && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', flexWrap: 'wrap' }}>
+          <span style={{ fontSize: '0.68rem', fontWeight: 700, textTransform: 'uppercase', color: '#64748b' }}>
+            Key Topics:
+          </span>
+          {data.aiKeyTopics.map((topic, i) => (
+            <span
+              key={`topic-${i}`}
+              style={{
+                fontSize: '0.68rem',
+                fontWeight: 600,
+                padding: '0.1rem 0.45rem',
+                borderRadius: '999px',
+                backgroundColor: '#e2e8f0',
+                color: '#334155',
+              }}
+              className="dark:bg-slate-800 dark:text-slate-300"
+            >
+              #{topic}
+            </span>
+          ))}
+        </div>
+      )}
+
+      {/* Speech Turns */}
+      {data.speechTurns && data.speechTurns.length > 0 ? (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.65rem' }}>
+          {data.speechTurns.map((turn, i) => {
+            const isCoach = turn.speakerRole === 'COACH';
+            return (
+              <div
+                key={`turn-${i}`}
+                style={{
+                  padding: '0.65rem 0.85rem',
+                  borderRadius: '8px',
+                  backgroundColor: isCoach ? '#f1f5f9' : '#fffbeb',
+                  border: isCoach ? '1px solid #e2e8f0' : '1px solid #fde68a',
+                  alignSelf: isCoach ? 'flex-start' : 'flex-end',
+                  maxWidth: '90%',
+                  fontSize: '0.78rem',
+                }}
+                className={isCoach ? 'dark:bg-slate-800 dark:border-slate-700' : 'dark:bg-amber-950/20 dark:border-amber-900/40'}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.75rem', marginBottom: '0.25rem' }}>
+                  <span style={{ fontWeight: 700, color: isCoach ? '#1e293b' : '#92400e' }} className="dark:text-white">
+                    {turn.speakerName} ({turn.speakerRole})
+                  </span>
+                  <span style={{ fontSize: '0.68rem', color: '#94a3b8' }}>
+                    Turn #{turn.turnIndex}
+                  </span>
+                </div>
+                {turn.transcriptEnglish && (
+                  <p style={{ margin: '0 0 0.2rem', color: '#334155', lineHeight: 1.4 }} className="dark:text-slate-200">
+                    {turn.transcriptEnglish}
+                  </p>
+                )}
+                {turn.transcriptAmharic && (
+                  <p style={{ margin: 0, color: '#64748b', fontStyle: 'italic', fontSize: '0.76rem' }}>
+                    {turn.transcriptAmharic}
+                  </p>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      ) : (
+        <div style={{ textAlign: 'center', padding: '1rem 0', color: '#94a3b8', fontSize: '0.76rem' }}>
+          No conversational audio/video turns captured yet for this session.
+        </div>
+      )}
+    </div>
+  );
+}
+
 export const TalentDossierDrawer: React.FC<TalentDossierDrawerProps> = ({
   dossier,
   isOpen,
   onClose,
   loading,
 }) => {
+  const [isExportingPdf, setIsExportingPdf] = useState(false);
+  const [expandedSessionId, setExpandedSessionId] = useState<number | null>(null);
+
+  const handleExportPdf = async () => {
+    if (!dossier) return;
+    try {
+      setIsExportingPdf(true);
+      await pmsReportApi.downloadDossierPdf(dossier.assignmentId, dossier.coacheeStaffId);
+    } catch (err) {
+      console.error('Failed to export talent dossier PDF', err);
+    } finally {
+      setIsExportingPdf(false);
+    }
+  };
+
   if (!isOpen) return null;
 
   const getAssessmentBadge = (assessment: SessionProgressLog['coachAssessment']) => {
@@ -165,15 +300,47 @@ export const TalentDossierDrawer: React.FC<TalentDossierDrawerProps> = ({
             </div>
           </div>
 
-          <button
-            type="button"
-            onClick={onClose}
-            className="apid-btn apid-btn-outline apid-btn-sm"
-            style={{ padding: '0.35rem', borderRadius: '8px' }}
-            title="Close Drawer"
-          >
-            <X size={18} />
-          </button>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem' }}>
+            {dossier && (
+              <button
+                type="button"
+                disabled={isExportingPdf}
+                onClick={handleExportPdf}
+                className="apid-btn apid-btn-outline apid-btn-sm"
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '0.35rem',
+                  fontSize: '0.75rem',
+                  fontWeight: 600,
+                  padding: '0.35rem 0.65rem',
+                  borderRadius: '6px',
+                  backgroundColor: isExportingPdf ? '#f3f4f6' : '#ffffff',
+                  border: '1px solid #d1d5db',
+                  color: '#0f172a',
+                  cursor: isExportingPdf ? 'not-allowed' : 'pointer',
+                }}
+                title="Download official Bank of Abyssinia PDF Dossier"
+              >
+                {isExportingPdf ? (
+                  <Loader2 size={13} className="spin" style={{ color: '#0f172a' }} />
+                ) : (
+                  <Download size={13} style={{ color: '#0f172a' }} />
+                )}
+                <span>{isExportingPdf ? 'Exporting...' : 'Export PDF'}</span>
+              </button>
+            )}
+
+            <button
+              type="button"
+              onClick={onClose}
+              className="apid-btn apid-btn-outline apid-btn-sm"
+              style={{ padding: '0.35rem', borderRadius: '8px' }}
+              title="Close Drawer"
+            >
+              <X size={18} />
+            </button>
+          </div>
         </div>
 
         {/* Content Body */}
@@ -460,15 +627,15 @@ export const TalentDossierDrawer: React.FC<TalentDossierDrawerProps> = ({
                                   <span>
                                     {s.conductedAt
                                       ? new Date(s.conductedAt).toLocaleDateString(undefined, {
-                                          month: 'short',
-                                          day: 'numeric',
-                                          year: 'numeric',
-                                        })
+                                        month: 'short',
+                                        day: 'numeric',
+                                        year: 'numeric',
+                                      })
                                       : new Date(s.scheduledStartTime).toLocaleDateString(undefined, {
-                                          month: 'short',
-                                          day: 'numeric',
-                                          year: 'numeric',
-                                        })}
+                                        month: 'short',
+                                        day: 'numeric',
+                                        year: 'numeric',
+                                      })}
                                   </span>
                                 </div>
                               </div>
@@ -485,7 +652,95 @@ export const TalentDossierDrawer: React.FC<TalentDossierDrawerProps> = ({
                             </div>
                           </div>
 
-                          {/* Two-Way Progress: Coach Box vs Coachee Box */}
+                          {/* 1. AI Diagnostic Synthesis & Executive Minutes */}
+                          {s.sessionDiscussionMinutes && (
+                            <div
+                              style={{
+                                padding: '0.85rem',
+                                borderRadius: '8px',
+                                backgroundColor: '#fffbeb',
+                                border: '1px solid #fde68a',
+                                marginBottom: '0.75rem',
+                              }}
+                              className="dark:bg-amber-950/20 dark:border-amber-900/40"
+                            >
+                              <div
+                                style={{
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'space-between',
+                                  marginBottom: '0.4rem',
+                                }}
+                              >
+                                <span
+                                  style={{
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    gap: '0.35rem',
+                                    fontSize: '0.72rem',
+                                    fontWeight: 700,
+                                    textTransform: 'uppercase',
+                                    letterSpacing: '0.03em',
+                                    color: '#92400e',
+                                  }}
+                                  className="dark:text-amber-300"
+                                >
+                                  <Sparkles size={12} /> AI Executive Summary &amp; Discussion Minutes
+                                </span>
+                                <span
+                                  style={{
+                                    fontSize: '0.66rem',
+                                    fontWeight: 700,
+                                    padding: '0.1rem 0.5rem',
+                                    borderRadius: '999px',
+                                    backgroundColor: '#fef08a',
+                                    color: '#854d0e',
+                                  }}
+                                >
+                                  qwen3:8b (CUDA GPU)
+                                </span>
+                              </div>
+                              <p
+                                style={{
+                                  margin: 0,
+                                  fontSize: '0.8rem',
+                                  lineHeight: 1.5,
+                                  color: '#1e293b',
+                                  whiteSpace: 'pre-wrap',
+                                }}
+                                className="dark:text-slate-200"
+                              >
+                                {s.sessionDiscussionMinutes}
+                              </p>
+
+                              {s.actionItemsAssigned && (
+                                <div style={{ borderTop: '1px solid #fde68a', paddingTop: '0.45rem', marginTop: '0.5rem' }}>
+                                  <span
+                                    style={{
+                                      display: 'inline-flex',
+                                      alignItems: 'center',
+                                      gap: '0.3rem',
+                                      fontSize: '0.7rem',
+                                      fontWeight: 700,
+                                      textTransform: 'uppercase',
+                                      color: '#b45309',
+                                      marginBottom: '0.15rem',
+                                    }}
+                                  >
+                                    <CheckSquare size={12} /> Agreed Action Items &amp; Remediation Focus
+                                  </span>
+                                  <p
+                                    style={{ margin: 0, fontSize: '0.78rem', fontWeight: 500, color: '#334155', lineHeight: 1.45 }}
+                                    className="dark:text-slate-300"
+                                  >
+                                    {s.actionItemsAssigned}
+                                  </p>
+                                </div>
+                              )}
+                            </div>
+                          )}
+
+                          {/* 2. Two-Way Progress: Coach Box vs Coachee Box */}
                           <div
                             style={{
                               display: 'grid',
@@ -493,7 +748,7 @@ export const TalentDossierDrawer: React.FC<TalentDossierDrawerProps> = ({
                               gap: '0.75rem',
                             }}
                           >
-                            {/* 1. Coach Log */}
+                            {/* Coach Log */}
                             <div
                               style={{
                                 padding: '0.75rem',
@@ -522,34 +777,15 @@ export const TalentDossierDrawer: React.FC<TalentDossierDrawerProps> = ({
                                 </span>
                               </div>
 
-                              <div style={{ marginBottom: '0.5rem' }}>
+                              <div style={{ marginBottom: '0.35rem' }}>
                                 <span style={{ fontSize: '0.68rem', fontWeight: 700, textTransform: 'uppercase', color: 'var(--muted)', display: 'block', marginBottom: '0.15rem' }}>
-                                  Discussion Minutes
+                                  Assessment Status
                                 </span>
-                                {s.sessionDiscussionMinutes ? (
-                                  <p style={{ margin: 0, color: 'var(--text)', lineHeight: 1.45, whiteSpace: 'pre-wrap' }}>
-                                    {s.sessionDiscussionMinutes}
-                                  </p>
-                                ) : (
-                                  <span style={{ color: 'var(--muted)', fontStyle: 'italic' }}>
-                                    No discussion notes logged.
-                                  </span>
-                                )}
+                                <div>{getAssessmentBadge(s.coachAssessment)}</div>
                               </div>
-
-                              {s.actionItemsAssigned && (
-                                <div style={{ borderTop: '1px solid var(--border)', paddingTop: '0.4rem', marginTop: '0.4rem' }}>
-                                  <span style={{ fontSize: '0.68rem', fontWeight: 700, textTransform: 'uppercase', color: '#b45309', display: 'block', marginBottom: '0.15rem' }}>
-                                    Action Items Assigned
-                                  </span>
-                                  <p style={{ margin: 0, fontWeight: 500, color: 'var(--text)', lineHeight: 1.45 }}>
-                                    {s.actionItemsAssigned}
-                                  </p>
-                                </div>
-                              )}
                             </div>
 
-                            {/* 2. Coachee Progress Log */}
+                            {/* Coachee Progress Log */}
                             <div
                               style={{
                                 padding: '0.75rem',
@@ -574,9 +810,7 @@ export const TalentDossierDrawer: React.FC<TalentDossierDrawerProps> = ({
                                   Coachee: {s.coacheeName}
                                 </span>
                                 <span
-                                  className={`boa-pill ${
-                                    s.coacheeAttendanceStatus === 'ATTENDED' ? 'boa-pill-ok' : 'boa-pill-neutral'
-                                  }`}
+                                  className={`boa-pill ${s.coacheeAttendanceStatus === 'ATTENDED' ? 'boa-pill-ok' : 'boa-pill-neutral'}`}
                                   style={{ fontSize: '0.66rem' }}
                                 >
                                   {s.coacheeAttendanceStatus}
@@ -592,8 +826,8 @@ export const TalentDossierDrawer: React.FC<TalentDossierDrawerProps> = ({
                                     {s.coacheeProgressNotes}
                                   </p>
                                 ) : (
-                                  <span style={{ color: 'var(--warn)', fontStyle: 'italic' }}>
-                                    ⚠️ Awaiting coachee practice submission
+                                  <span style={{ color: 'var(--muted)', fontStyle: 'italic', fontSize: '0.74rem' }}>
+                                    Awaiting coachee practice reflection
                                   </span>
                                 )}
                               </div>
@@ -631,6 +865,38 @@ export const TalentDossierDrawer: React.FC<TalentDossierDrawerProps> = ({
                               )}
                             </div>
                           </div>
+
+                          {/* 3. Expandable Speech Turns & Transcript Inspector */}
+                          <button
+                            type="button"
+                            onClick={() => setExpandedSessionId(expandedSessionId === s.sessionId ? null : s.sessionId)}
+                            className="apid-btn apid-btn-outline apid-btn-sm"
+                            style={{
+                              marginTop: '0.75rem',
+                              width: '100%',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              gap: '0.4rem',
+                              fontSize: '0.74rem',
+                              fontWeight: 600,
+                              padding: '0.4rem 0.75rem',
+                            }}
+                          >
+                            <MessageSquare size={13} style={{ color: '#0284c7' }} />
+                            <span>
+                              {expandedSessionId === s.sessionId
+                                ? 'Hide Speech Turns & Audio Transcript'
+                                : 'Inspect Live Speech Turns & Transcript'}
+                            </span>
+                            {expandedSessionId === s.sessionId ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
+                          </button>
+
+                          {expandedSessionId === s.sessionId && (
+                            <div style={{ marginTop: '0.65rem' }}>
+                              <SessionEvidenceDetails sessionId={s.sessionId} />
+                            </div>
+                          )}
                         </div>
                       );
                     })}

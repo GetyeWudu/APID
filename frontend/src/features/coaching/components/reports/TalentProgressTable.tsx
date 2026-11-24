@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   Search,
   CheckCircle2,
@@ -8,6 +8,7 @@ import {
   Eye,
 } from 'lucide-react';
 import type { PmsTalentProgressItem } from '../../api/pmsReportApi';
+import { TablePagination } from './TablePagination';
 
 interface TalentProgressTableProps {
   talents: PmsTalentProgressItem[];
@@ -34,6 +35,20 @@ export const TalentProgressTable: React.FC<TalentProgressTableProps> = ({
   onSearchChange,
   onSelectTalent,
 }) => {
+  const [currentPage, setCurrentPage] = useState<number>(1);
+  const [pageSize, setPageSize] = useState<number>(10);
+
+  // Reset to page 1 on search, tab, or directorate changes
+  React.useEffect(() => {
+    setCurrentPage(1);
+  }, [activeStatusTab, selectedDirectorate, searchQuery]);
+
+  const totalItems = talents.length;
+  const paginatedTalents = talents.slice(
+    (currentPage - 1) * pageSize,
+    currentPage * pageSize
+  );
+
   const getTrajectoryBadge = (trajectory: PmsTalentProgressItem['progressTrajectory']) => {
     switch (trajectory) {
       case 'MASTERED':
@@ -99,16 +114,15 @@ export const TalentProgressTable: React.FC<TalentProgressTableProps> = ({
                 type="button"
                 onClick={() => onStatusTabChange(tab.id)}
                 style={{
-                  padding: '0.4rem 0.85rem',
+                  padding: '0.35rem 0.75rem',
+                  borderRadius: '999px',
                   fontSize: '0.78rem',
-                  fontWeight: active ? 700 : 500,
-                  borderRadius: '6px',
-                  border: active ? '1px solid var(--brand-gold, #ca8a04)' : '1px solid var(--border)',
-                  background: active ? '#fffbeb' : 'var(--surface)',
-                  color: active ? '#b45309' : 'var(--text)',
+                  fontWeight: 600,
+                  border: active ? '1px solid #ca8a04' : '1px solid var(--border)',
+                  background: active ? '#fef08a' : 'var(--surface)',
+                  color: active ? '#854d0e' : 'var(--muted)',
                   cursor: 'pointer',
                   transition: 'all 0.15s ease',
-                  boxShadow: active ? '0 1px 2px rgba(180, 83, 9, 0.1)' : 'none',
                 }}
               >
                 {tab.label}
@@ -117,8 +131,8 @@ export const TalentProgressTable: React.FC<TalentProgressTableProps> = ({
           })}
         </div>
 
-        {/* Directorate & Search Controls */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem', flexWrap: 'wrap' }}>
+        {/* Search & District Selector */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
           {directorateOptions.length > 0 && (
             <select
               value={selectedDirectorate}
@@ -126,13 +140,14 @@ export const TalentProgressTable: React.FC<TalentProgressTableProps> = ({
               className="apid-input"
               style={{
                 fontSize: '0.8rem',
-                padding: '0.4rem 0.75rem',
+                paddingTop: '0.4rem',
+                paddingBottom: '0.4rem',
                 minWidth: 170,
                 height: 'auto',
                 background: 'var(--surface)',
               }}
             >
-              <option value="ALL">All Bank Directorates</option>
+              <option value="ALL">All Regional Districts</option>
               {directorateOptions.map((dir) => (
                 <option key={dir} value={dir}>
                   {dir}
@@ -196,7 +211,7 @@ export const TalentProgressTable: React.FC<TalentProgressTableProps> = ({
                   </td>
                 </tr>
               ))
-            ) : talents.length === 0 ? (
+            ) : totalItems === 0 ? (
               <tr>
                 <td colSpan={7} style={{ textAlign: 'center', padding: '3rem 1.5rem', color: 'var(--muted)' }}>
                   <Award size={32} style={{ margin: '0 auto 0.75rem', opacity: 0.5 }} />
@@ -209,7 +224,7 @@ export const TalentProgressTable: React.FC<TalentProgressTableProps> = ({
                 </td>
               </tr>
             ) : (
-              talents.map((t) => (
+              paginatedTalents.map((t) => (
                 <tr
                   key={t.assignmentId}
                   style={{
@@ -238,34 +253,33 @@ export const TalentProgressTable: React.FC<TalentProgressTableProps> = ({
                     </div>
                   </td>
 
-                  {/* 2. Starting Rating */}
+                  {/* 2. Starting Score & Band */}
                   <td>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
-                      <strong style={{ fontSize: '0.92rem', color: 'var(--text)' }}>
-                        {Number(t.startingRating).toFixed(2)}
-                      </strong>
-                      {t.ratingBand === 'CRITICAL' ? (
-                        <span className="boa-pill boa-pill-err" style={{ fontSize: '0.68rem', padding: '0.1rem 0.45rem' }}>
-                          Critical
-                        </span>
-                      ) : (
-                        <span className="boa-pill boa-pill-warn" style={{ fontSize: '0.68rem', padding: '0.1rem 0.45rem' }}>
-                          Moderate
-                        </span>
-                      )}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                      <span className="tabular-nums" style={{ fontWeight: 700 }}>
+                        {t.startingRating.toFixed(2)}
+                      </span>
+                      <span
+                        className={`boa-pill ${t.ratingBand === 'CRITICAL' ? 'boa-pill-err' : 'boa-pill-warn'
+                          }`}
+                        style={{ fontSize: '0.68rem', padding: '0.1rem 0.4rem' }}
+                      >
+                        {t.ratingBand}
+                      </span>
                     </div>
                   </td>
 
-                  {/* 3. Primary Focus Gap */}
+                  {/* 3. Primary Weakness */}
                   <td>
                     <div
                       style={{
+                        fontSize: '0.82rem',
                         fontWeight: 500,
                         color: 'var(--text)',
-                        maxWidth: 240,
+                        whiteSpace: 'nowrap',
                         overflow: 'hidden',
                         textOverflow: 'ellipsis',
-                        whiteSpace: 'nowrap',
+                        maxWidth: 220,
                       }}
                       title={t.targetWeaknessKpi}
                     >
@@ -275,35 +289,36 @@ export const TalentProgressTable: React.FC<TalentProgressTableProps> = ({
 
                   {/* 4. Coach */}
                   <td>
-                    <div style={{ fontWeight: 600, color: 'var(--text)' }}>
-                      {t.coachName}
-                    </div>
+                    {t.coachName ? (
+                      <div>
+                        <div style={{ fontWeight: 500, color: 'var(--text)' }}>{t.coachName}</div>
+                      </div>
+                    ) : (
+                      <span style={{ color: 'var(--warn)', fontWeight: 600, fontSize: '0.82rem' }}>
+                        Unassigned
+                      </span>
+                    )}
                   </td>
 
-                  {/* 5. Sessions Done/Target */}
+                  {/* 5. Sessions */}
                   <td>
-                    <div
-                      style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'space-between',
-                        fontSize: '0.78rem',
-                        fontWeight: 600,
-                        color: 'var(--text)',
-                        marginBottom: '0.25rem',
-                      }}
-                    >
-                      <span>{t.completedSessions} of {t.approvedTarget}</span>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                      <span className="tabular-nums" style={{ fontWeight: 600, fontSize: '0.82rem' }}>
+                        {t.completedSessions} of {t.approvedTarget}
+                      </span>
                       <span style={{ fontSize: '0.72rem', color: 'var(--muted)' }}>
-                        ({t.deliveryPercentage}%)
+                        ({t.deliveryPercentage.toFixed(0)}%)
                       </span>
                     </div>
+                    {/* Tiny Progress Bar */}
                     <div
                       style={{
-                        width: '100px',
-                        height: '5px',
+                        width: '100%',
+                        maxWidth: 100,
+                        height: 4,
                         background: 'var(--border)',
-                        borderRadius: '999px',
+                        borderRadius: 2,
+                        marginTop: '0.3rem',
                         overflow: 'hidden',
                       }}
                     >
@@ -311,33 +326,36 @@ export const TalentProgressTable: React.FC<TalentProgressTableProps> = ({
                         style={{
                           width: `${Math.min(100, t.deliveryPercentage)}%`,
                           height: '100%',
-                          background: t.deliveryPercentage >= 100 ? 'var(--ok)' : 'var(--info)',
-                          borderRadius: '999px',
+                          background:
+                            t.deliveryPercentage >= 100
+                              ? 'var(--ok)'
+                              : t.deliveryPercentage > 0
+                                ? 'var(--warn)'
+                                : 'transparent',
                         }}
                       />
                     </div>
                   </td>
 
-                  {/* 6. Competency Status */}
-                  <td>
-                    {getTrajectoryBadge(t.progressTrajectory)}
-                  </td>
+                  {/* 6. Competency Trajectory */}
+                  <td>{getTrajectoryBadge(t.progressTrajectory)}</td>
 
-                  {/* 7. Action Button */}
+                  {/* 7. Action */}
                   <td style={{ textAlign: 'right' }}>
                     <button
                       type="button"
                       onClick={() => onSelectTalent(t.assignmentId)}
                       className="apid-btn apid-btn-outline apid-btn-sm"
                       style={{
-                        padding: '0.3rem 0.65rem',
+                        padding: '0.25rem 0.55rem',
                         fontSize: '0.75rem',
                         display: 'inline-flex',
                         alignItems: 'center',
-                        gap: '0.35rem',
+                        gap: '0.3rem',
                       }}
+                      title="View complete remediation dossier"
                     >
-                      <Eye size={13} style={{ color: 'var(--brand-gold, #ca8a04)' }} />
+                      <Eye size={12} />
                       <span>View Dossier</span>
                     </button>
                   </td>
@@ -348,26 +366,19 @@ export const TalentProgressTable: React.FC<TalentProgressTableProps> = ({
         </table>
       </div>
 
-      {/* Table Footer */}
-      <div
-        style={{
-          padding: '0.75rem 1.15rem',
-          borderTop: '1px solid var(--border)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          fontSize: '0.78rem',
-          color: 'var(--muted)',
-          background: 'var(--surface-subtle)',
-        }}
-      >
-        <span>
-          Showing <strong>{talents.length}</strong> active remediation talent records
-        </span>
-        <span>
-          Click &quot;View Dossier&quot; to inspect session minutes, coach notes, and coachee practice submissions.
-        </span>
-      </div>
+      {/* Pagination Footer */}
+      {!loading && totalItems > 0 && (
+        <TablePagination
+          currentPage={currentPage}
+          totalItems={totalItems}
+          pageSize={pageSize}
+          onPageChange={setCurrentPage}
+          onPageSizeChange={(newSize) => {
+            setPageSize(newSize);
+            setCurrentPage(1);
+          }}
+        />
+      )}
     </div>
   );
 };

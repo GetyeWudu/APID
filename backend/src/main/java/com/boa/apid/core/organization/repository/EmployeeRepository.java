@@ -97,6 +97,15 @@ public interface EmployeeRepository extends JpaRepository<Employee, Long>, JpaSp
 
     boolean existsByUserIdAndIdNot(Long userId, Long id);
 
+    @Query("""
+            SELECT e FROM Employee e
+            LEFT JOIN FETCH e.department d
+            LEFT JOIN FETCH d.parentDepartment
+            WHERE LOWER(e.fullName) LIKE LOWER(CONCAT('%', :term, '%'))
+               OR LOWER(e.employeeNumber) = LOWER(:term)
+            """)
+    List<Employee> searchByNameOrNumber(@Param("term") String term);
+
     @Query("SELECT CASE WHEN COUNT(e) > 0 THEN true ELSE false END FROM Employee e WHERE LOWER(e.employeeNumber) = LOWER(:employeeNumber)")
     boolean existsByEmployeeNumberIgnoreCase(@Param("employeeNumber") String employeeNumber);
 

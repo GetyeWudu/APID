@@ -21,7 +21,9 @@ import com.boa.apid.coaching.session.entity.CoachingSession;
 import com.boa.apid.coaching.session.entity.ParticipantRole;
 import com.boa.apid.coaching.session.entity.SessionParticipant;
 import com.boa.apid.coaching.session.entity.SessionStatus;
+import com.boa.apid.coaching.session.entity.CoachingSessionTurn;
 import com.boa.apid.coaching.session.repository.CoachingSessionRepository;
+import com.boa.apid.coaching.session.repository.CoachingSessionTurnRepository;
 import com.boa.apid.coaching.session.repository.SessionParticipantRepository;
 import com.boa.apid.common.exception.ResourceNotFoundException;
 import com.boa.apid.core.config.entity.FiscalQuarter;
@@ -56,6 +58,7 @@ public class PmsCoachingReportService {
     private final PmsPerformanceRecordRepository performanceRecordRepository;
     private final PmsGoalLineRepository goalLineRepository;
     private final FiscalQuarterRepository fiscalQuarterRepository;
+    private final CoachingSessionTurnRepository turnRepository;
 
     public PmsCoachingReportService(
             CoachingAssignmentRepository assignmentRepository,
@@ -66,7 +69,8 @@ public class PmsCoachingReportService {
             EmployeeRepository employeeRepository,
             PmsPerformanceRecordRepository performanceRecordRepository,
             PmsGoalLineRepository goalLineRepository,
-            FiscalQuarterRepository fiscalQuarterRepository) {
+            FiscalQuarterRepository fiscalQuarterRepository,
+            CoachingSessionTurnRepository turnRepository) {
         this.assignmentRepository = assignmentRepository;
         this.sessionRepository = sessionRepository;
         this.participantRepository = participantRepository;
@@ -76,6 +80,7 @@ public class PmsCoachingReportService {
         this.performanceRecordRepository = performanceRecordRepository;
         this.goalLineRepository = goalLineRepository;
         this.fiscalQuarterRepository = fiscalQuarterRepository;
+        this.turnRepository = turnRepository;
     }
 
     public PmsReportSummaryDto getReportSummary(Long quarterId) {
@@ -234,6 +239,19 @@ public class PmsCoachingReportService {
             String statusFilter,
             Boolean attentionOnly,
             String search) {
+        return getTalentsProgress(quarterId, directorateFilter, statusFilter, attentionOnly, search, null, null, null, null);
+    }
+
+    public List<PmsTalentProgressItemDto> getTalentsProgress(
+            Long quarterId,
+            String directorateFilter,
+            String statusFilter,
+            Boolean attentionOnly,
+            String search,
+            String branchFilter,
+            String performanceBand,
+            String sessionProgress,
+            String kpiType) {
 
         FiscalQuarter quarter = resolveQuarter(quarterId);
         List<CoachingAssignment> assignments = loadAssignmentsForQuarter(quarter);
@@ -248,7 +266,24 @@ public class PmsCoachingReportService {
                     : "Head Office";
 
             if (directorateFilter != null && !directorateFilter.isBlank() && !directorateFilter.equalsIgnoreCase("ALL")) {
-                if (!directorate.equalsIgnoreCase(directorateFilter.trim())) {
+                String cleanDist = directorateFilter.trim().toLowerCase();
+                String dirLower = directorate.toLowerCase();
+                boolean matches = dirLower.equals(cleanDist)
+                        || dirLower.contains(cleanDist)
+                        || cleanDist.contains(dirLower);
+                if (!matches) {
+                    continue;
+                }
+            }
+
+            if (branchFilter != null && !branchFilter.isBlank() && !branchFilter.equalsIgnoreCase("ALL")) {
+                String branchName = coachee.getDepartmentName() != null ? coachee.getDepartmentName() : "";
+                String cleanBr = branchFilter.trim().toLowerCase();
+                String brLower = branchName.toLowerCase();
+                boolean matches = brLower.equals(cleanBr)
+                        || brLower.contains(cleanBr)
+                        || cleanBr.contains(brLower);
+                if (!matches) {
                     continue;
                 }
             }
@@ -264,6 +299,12 @@ public class PmsCoachingReportService {
                     ? perf.getOverallFinalRating()
                     : BigDecimal.valueOf(2.50);
             String ratingBand = rating.compareTo(BigDecimal.valueOf(2.0)) < 0 ? "CRITICAL" : "MODERATE";
+
+            if (performanceBand != null && !performanceBand.isBlank() && !performanceBand.equalsIgnoreCase("ALL")) {
+                if (!ratingBand.equalsIgnoreCase(performanceBand.trim())) {
+                    continue;
+                }
+            }
 
             String targetWeaknessKpi = resolveTargetWeakness(perf);
 
@@ -315,6 +356,30 @@ public class PmsCoachingReportService {
                     missedCount, lastSessionDate, nextScheduledDate, remainingSessions, quarter);
             String attentionReason = buildAttentionReason(
                     missedCount, lastSessionDate, remainingSessions, quarter);
+
+            // Session Progress Filter
+            if (sessionProgress != null && !sessionProgress.isBlank() && !sessionProgress.equalsIgnoreCase("ALL")) {
+                String prog;
+                if (completedSessions == 0) prog = "NOT_STARTED";
+                else if (completedSessions >= approvedTarget) prog = "TARGET_MET";
+                else prog = "IN_PROGRESS";
+                if (!prog.equalsIgnoreCase(sessionProgress.trim())) {
+                    continue;
+                }
+            }
+
+            // KPI Type Filter
+            if (kpiType != null && !kpiType.isBlank() && !kpiType.equalsIgnoreCase("ALL")) {
+                if (kpiType.equalsIgnoreCase("CRITICAL")) {
+                    if (!"CRITICAL".equalsIgnoreCase(ratingBand)) continue;
+                } else if (kpiType.equalsIgnoreCase("MODERATE")) {
+                    if (!"MODERATE".equalsIgnoreCase(ratingBand)) continue;
+                } else if (kpiType.equalsIgnoreCase("OVERDUE") || kpiType.equalsIgnoreCase("ATTENTION")) {
+                    if (!attentionRequired) continue;
+                } else if (kpiType.equalsIgnoreCase("COMPLETED")) {
+                    if (completedSessions < approvedTarget) continue;
+                }
+            }
 
             // Apply Filters
             if (attentionOnly != null && attentionOnly && !attentionRequired) {
@@ -730,6 +795,352 @@ public class PmsCoachingReportService {
             val = "\"" + val.replace("\"", "\"\"") + "\"";
         }
         return val;
+    }
+
+    public DistrictBranchAnalyticsDto getHierarchicalAnalytics(Long quarterId) {
+        FiscalQuarter quarter = resolveQuarter(quarterId);
+        List<CoachingAssignment> assignments = loadAssignmentsForQuarter(quarter);
+        List<Employee> allEmployees = employeeRepository.findAll();
+
+        int totalEmployeesMonitored = allEmployees.size();
+        int totalCoachingAssignments = assignments.size();
+        int bankCriticalCount = 0;
+        int bankModerateCount = 0;
+        int bankTargetSessions = 0;
+        int bankCompletedSessions = 0;
+        int bankAttentionRequiredCount = 0;
+
+        // Map coacheeEmployeeId -> Assignment
+        Map<Long, CoachingAssignment> assignmentByCoachee = new HashMap<>();
+        for (CoachingAssignment a : assignments) {
+            assignmentByCoachee.put(a.getCoacheeEmployeeId(), a);
+        }
+
+        // Map District -> (Branch -> List<Employee>)
+        Map<String, Map<String, List<Employee>>> orgTree = new TreeMap<>(String.CASE_INSENSITIVE_ORDER);
+        for (Employee e : allEmployees) {
+            String district = (e.getParentDepartmentName() != null && !e.getParentDepartmentName().isBlank())
+                    ? e.getParentDepartmentName().trim()
+                    : "Head Office";
+            String branch = (e.getDepartmentName() != null && !e.getDepartmentName().isBlank())
+                    ? e.getDepartmentName().trim()
+                    : "General Operations";
+
+            orgTree.computeIfAbsent(district, d -> new TreeMap<>(String.CASE_INSENSITIVE_ORDER))
+                    .computeIfAbsent(branch, b -> new ArrayList<>())
+                    .add(e);
+        }
+
+        List<DistrictAnalyticsDto> districtDtos = new ArrayList<>();
+
+        for (Map.Entry<String, Map<String, List<Employee>>> distEntry : orgTree.entrySet()) {
+            String districtName = distEntry.getKey();
+            Map<String, List<Employee>> branchMap = distEntry.getValue();
+
+            int distTotalStaff = 0;
+            int distCoacheesCount = 0;
+            int distCriticalCount = 0;
+            int distModerateCount = 0;
+            int distTargetSessions = 0;
+            int distCompletedSessions = 0;
+            int distOverdueCount = 0;
+            double distScoreSum = 0;
+            int distScoreCount = 0;
+            Map<String, Integer> distGapsCount = new HashMap<>();
+
+            List<BranchAnalyticsDto> branchDtos = new ArrayList<>();
+
+            for (Map.Entry<String, List<Employee>> branchEntry : branchMap.entrySet()) {
+                String branchName = branchEntry.getKey();
+                List<Employee> staffList = branchEntry.getValue();
+
+                int branchTotalStaff = staffList.size();
+                int branchCoacheesCount = 0;
+                int branchCriticalCount = 0;
+                int branchModerateCount = 0;
+                int branchTargetSessions = 0;
+                int branchCompletedSessions = 0;
+                int branchOverdueCount = 0;
+                double branchScoreSum = 0;
+                int branchScoreCount = 0;
+                Set<Long> branchCoaches = new HashSet<>();
+                Map<String, Integer> branchGapsCount = new HashMap<>();
+
+                for (Employee staff : staffList) {
+                    CoachingAssignment a = assignmentByCoachee.get(staff.getId());
+                    if (a != null) {
+                        branchCoacheesCount++;
+                        if (a.getCoachEmployeeId() != null) {
+                            branchCoaches.add(a.getCoachEmployeeId());
+                        }
+
+                        PmsPerformanceRecord perf = resolvePerformanceRecord(a);
+                        BigDecimal rating = (perf != null && perf.getOverallFinalRating() != null)
+                                ? perf.getOverallFinalRating()
+                                : BigDecimal.valueOf(2.50);
+
+                        branchScoreSum += rating.doubleValue();
+                        branchScoreCount++;
+
+                        if (rating.compareTo(BigDecimal.valueOf(2.0)) < 0) {
+                            branchCriticalCount++;
+                        } else {
+                            branchModerateCount++;
+                        }
+
+                        CoachingSessionTarget target = sessionTargetRepository.findByAssignmentId(a.getId()).orElse(null);
+                        int approvedTarget = (target != null && target.getApprovedTarget() > 0)
+                                ? target.getApprovedTarget()
+                                : (rating.compareTo(BigDecimal.valueOf(2.0)) < 0 ? 10 : 6);
+                        branchTargetSessions += approvedTarget;
+
+                        List<CoachingSession> sessions = sessionRepository.findAllSessionsForAssignment(a.getId());
+                        int completed = 0;
+                        Instant lastSessionDate = null;
+                        Instant nextScheduledDate = null;
+                        Instant now = Instant.now();
+                        for (CoachingSession s : sessions) {
+                            if (s.getStatus() == SessionStatus.COMPLETED) {
+                                completed++;
+                                if (s.getConductedAt() != null && (lastSessionDate == null || s.getConductedAt().isAfter(lastSessionDate))) {
+                                    lastSessionDate = s.getConductedAt();
+                                }
+                            } else if ((s.getStatus() == SessionStatus.CONFIRMED || s.getStatus() == SessionStatus.PROPOSED) && s.getScheduledStartTime().isAfter(now)) {
+                                if (nextScheduledDate == null || s.getScheduledStartTime().isBefore(nextScheduledDate)) {
+                                    nextScheduledDate = s.getScheduledStartTime();
+                                }
+                            }
+                        }
+                        branchCompletedSessions += completed;
+
+                        int remainingSessions = Math.max(0, approvedTarget - completed);
+                        boolean attentionRequired = isAttentionRequired(a.getMissedSessionsCount(), lastSessionDate, nextScheduledDate, remainingSessions, quarter);
+                        if (attentionRequired) {
+                            branchOverdueCount++;
+                        }
+
+                        String weakness = resolveTargetWeakness(perf);
+                        branchGapsCount.put(weakness, branchGapsCount.getOrDefault(weakness, 0) + 1);
+                        distGapsCount.put(weakness, distGapsCount.getOrDefault(weakness, 0) + 1);
+                    }
+                }
+
+                double branchCompletionRate = branchTargetSessions > 0
+                        ? BigDecimal.valueOf(branchCompletedSessions * 100.0 / branchTargetSessions).setScale(1, RoundingMode.HALF_UP).doubleValue()
+                        : 0.0;
+                double branchAvgScore = branchScoreCount > 0
+                        ? BigDecimal.valueOf(branchScoreSum / branchScoreCount).setScale(2, RoundingMode.HALF_UP).doubleValue()
+                        : 0.0;
+                String branchTopGap = branchGapsCount.entrySet().stream()
+                        .max(Map.Entry.comparingByValue())
+                        .map(Map.Entry::getKey)
+                        .orElse("Branch Operations");
+
+                branchDtos.add(new BranchAnalyticsDto(
+                        branchName,
+                        branchTotalStaff,
+                        branchCoacheesCount,
+                        branchCriticalCount,
+                        branchModerateCount,
+                        branchTargetSessions,
+                        branchCompletedSessions,
+                        branchCompletionRate,
+                        branchOverdueCount,
+                        branchAvgScore,
+                        branchTopGap,
+                        branchCoaches.size()
+                ));
+
+                distTotalStaff += branchTotalStaff;
+                distCoacheesCount += branchCoacheesCount;
+                distCriticalCount += branchCriticalCount;
+                distModerateCount += branchModerateCount;
+                distTargetSessions += branchTargetSessions;
+                distCompletedSessions += branchCompletedSessions;
+                distOverdueCount += branchOverdueCount;
+                distScoreSum += branchScoreSum;
+                distScoreCount += branchScoreCount;
+            }
+
+            double distCompletionRate = distTargetSessions > 0
+                    ? BigDecimal.valueOf(distCompletedSessions * 100.0 / distTargetSessions).setScale(1, RoundingMode.HALF_UP).doubleValue()
+                    : 0.0;
+            double distAvgScore = distScoreCount > 0
+                    ? BigDecimal.valueOf(distScoreSum / distScoreCount).setScale(2, RoundingMode.HALF_UP).doubleValue()
+                    : 0.0;
+            String distTopGap = distGapsCount.entrySet().stream()
+                    .max(Map.Entry.comparingByValue())
+                    .map(Map.Entry::getKey)
+                    .orElse("Branch Operations");
+
+            // Sort branches by coachees count descending
+            branchDtos.sort(Comparator.comparing(BranchAnalyticsDto::coacheesCount).reversed()
+                    .thenComparing(BranchAnalyticsDto::branchName));
+
+            districtDtos.add(new DistrictAnalyticsDto(
+                    districtName,
+                    distTotalStaff,
+                    distCoacheesCount,
+                    distCriticalCount,
+                    distModerateCount,
+                    distTargetSessions,
+                    distCompletedSessions,
+                    distCompletionRate,
+                    distOverdueCount,
+                    distAvgScore,
+                    distTopGap,
+                    branchDtos
+            ));
+
+            bankCriticalCount += distCriticalCount;
+            bankModerateCount += distModerateCount;
+            bankTargetSessions += distTargetSessions;
+            bankCompletedSessions += distCompletedSessions;
+            bankAttentionRequiredCount += distOverdueCount;
+        }
+
+        // Sort districts by coachees count descending
+        districtDtos.sort(Comparator.comparing(DistrictAnalyticsDto::coacheesCount).reversed()
+                .thenComparing(DistrictAnalyticsDto::districtName));
+
+        double overallCompletionRate = bankTargetSessions > 0
+                ? BigDecimal.valueOf(bankCompletedSessions * 100.0 / bankTargetSessions).setScale(1, RoundingMode.HALF_UP).doubleValue()
+                : 0.0;
+
+        String quarterName = quarter != null
+                ? "FY " + quarter.getFiscalYear() + " · Q" + quarter.getQuarter()
+                : "Active Quarter";
+
+        return new DistrictBranchAnalyticsDto(
+                quarter != null ? quarter.getId() : null,
+                quarterName,
+                totalEmployeesMonitored,
+                totalCoachingAssignments,
+                bankCriticalCount,
+                bankModerateCount,
+                bankTargetSessions,
+                bankCompletedSessions,
+                overallCompletionRate,
+                bankAttentionRequiredCount,
+                districtDtos
+        );
+    }
+
+    public ReportingFilterOptionsDto getFilterOptions(Long quarterId) {
+        List<Employee> all = employeeRepository.findAll();
+        Map<String, Set<String>> branchesByDist = new TreeMap<>(String.CASE_INSENSITIVE_ORDER);
+
+        for (Employee e : all) {
+            String district = (e.getParentDepartmentName() != null && !e.getParentDepartmentName().isBlank())
+                    ? e.getParentDepartmentName().trim()
+                    : "Head Office";
+            String branch = (e.getDepartmentName() != null && !e.getDepartmentName().isBlank())
+                    ? e.getDepartmentName().trim()
+                    : "General Operations";
+            branchesByDist.computeIfAbsent(district, d -> new TreeSet<>(String.CASE_INSENSITIVE_ORDER))
+                    .add(branch);
+        }
+
+        List<String> districts = new ArrayList<>(branchesByDist.keySet());
+        Map<String, List<String>> branchMap = new LinkedHashMap<>();
+        for (Map.Entry<String, Set<String>> entry : branchesByDist.entrySet()) {
+            branchMap.put(entry.getKey(), new ArrayList<>(entry.getValue()));
+        }
+
+        return new ReportingFilterOptionsDto(
+                districts,
+                branchMap,
+                List.of("ALL", "CRITICAL", "MODERATE", "SATISFACTORY"),
+                List.of("ALL", "ACTIVE", "COMPLETED", "ATTENTION_REQUIRED"),
+                List.of("ALL", "NOT_STARTED", "IN_PROGRESS", "TARGET_MET")
+        );
+    }
+
+    public SessionInspectionEvidenceDto getSessionInspectionEvidence(Long sessionId) {
+        CoachingSession session = sessionRepository.findById(sessionId)
+                .orElseThrow(() -> new ResourceNotFoundException("Coaching session not found: " + sessionId));
+
+        Employee coach = session.getCoachEmployeeId() != null
+                ? employeeRepository.findById(session.getCoachEmployeeId()).orElse(null)
+                : null;
+        String coachName = coach != null ? coach.getFullName() : "Coach";
+        String coachRole = coach != null ? (coach.getJob() != null ? coach.getJob() : "Coach") : "Coach";
+
+        List<SessionParticipant> participants = participantRepository.findAllBySessionIdOrderByRoleAsc(sessionId);
+        SessionParticipant coacheePart = participants.stream()
+                .filter(p -> p.getRole() == ParticipantRole.COACHEE)
+                .findFirst()
+                .orElse(null);
+
+        Employee coachee = null;
+        if (coacheePart != null) {
+            coachee = employeeRepository.findById(coacheePart.getEmployeeId()).orElse(null);
+        }
+
+        Long coacheeEmployeeId = coachee != null ? coachee.getId() : null;
+        String coacheeName = coachee != null ? coachee.getFullName() : "Coachee";
+        String coacheeStaffId = coachee != null ? coachee.getEmployeeNumber() : "";
+        String district = coachee != null && coachee.getParentDepartmentName() != null
+                ? coachee.getParentDepartmentName()
+                : "Head Office";
+        String branch = coachee != null && coachee.getDepartmentName() != null
+                ? coachee.getDepartmentName()
+                : "General";
+
+        String attendanceStatus = coacheePart != null && coacheePart.getAttendanceStatus() != null
+                ? coacheePart.getAttendanceStatus().name()
+                : "PENDING";
+        String coachAssessment = coacheePart != null && coacheePart.getCoachAssessment() != null
+                ? coacheePart.getCoachAssessment().name()
+                : "PENDING";
+        String coacheeNotes = coacheePart != null ? coacheePart.getCoacheeProgressNotes() : null;
+        Short feedbackRating = coacheePart != null ? coacheePart.getFeedbackRating() : null;
+        String feedbackComment = coacheePart != null ? coacheePart.getFeedbackComment() : null;
+
+        List<CoachingSessionTurn> turns = turnRepository.findAllBySessionIdOrderByTurnIndexAsc(sessionId);
+        List<SessionTurnEvidenceDto> turnDtos = turns.stream()
+                .map(t -> new SessionTurnEvidenceDto(
+                        t.getId(),
+                        t.getTurnIndex(),
+                        t.getSpeakerName(),
+                        t.getSpeakerRole(),
+                        t.getStartTimeOffsetSec(),
+                        t.getDurationSec(),
+                        t.getTranscriptEnglish(),
+                        t.getTranscriptAmharic(),
+                        t.getReconciledText()
+                ))
+                .toList();
+
+        List<String> keyTopics = List.of();
+
+        return new SessionInspectionEvidenceDto(
+                session.getId(),
+                session.getAssignmentId(),
+                session.getTitle() != null ? session.getTitle() : "Coaching Session",
+                session.getMeetingMode() != null ? session.getMeetingMode().name() : "VIRTUAL_VIDEO",
+                session.getStatus() != null ? session.getStatus().name() : "SCHEDULED",
+                session.getConductedAt(),
+                session.getDurationMinutes(),
+                session.getCoachEmployeeId(),
+                coachName,
+                coachRole,
+                coacheeEmployeeId,
+                coacheeName,
+                coacheeStaffId,
+                district,
+                branch,
+                attendanceStatus,
+                coachAssessment,
+                coacheeNotes,
+                feedbackRating,
+                feedbackComment,
+                session.getMinutesSynthesisStatus() != null ? session.getMinutesSynthesisStatus() : "IDLE",
+                session.getSessionNotesMinutes(),
+                session.getActionItems(),
+                keyTopics,
+                turnDtos
+        );
     }
 
     private static class MutableDirectorateSummary {

@@ -1,8 +1,6 @@
 package com.boa.apid.coaching.report.controller;
 
-import com.boa.apid.coaching.report.dto.PmsReportSummaryDto;
-import com.boa.apid.coaching.report.dto.PmsTalentDossierDto;
-import com.boa.apid.coaching.report.dto.PmsTalentProgressItemDto;
+import com.boa.apid.coaching.report.dto.*;
 import com.boa.apid.coaching.report.service.PmsCoachingReportService;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
@@ -31,15 +29,50 @@ public class PmsCoachingReportController {
         return ResponseEntity.ok(reportService.getReportSummary(quarterId));
     }
 
+    @GetMapping("/hierarchical-analytics")
+    public ResponseEntity<DistrictBranchAnalyticsDto> getHierarchicalAnalytics(
+            @RequestParam(name = "quarterId", required = false) Long quarterId
+    ) {
+        return ResponseEntity.ok(reportService.getHierarchicalAnalytics(quarterId));
+    }
+
+    @GetMapping("/filter-options")
+    public ResponseEntity<ReportingFilterOptionsDto> getFilterOptions(
+            @RequestParam(name = "quarterId", required = false) Long quarterId
+    ) {
+        return ResponseEntity.ok(reportService.getFilterOptions(quarterId));
+    }
+
     @GetMapping("/talents")
     public ResponseEntity<List<PmsTalentProgressItemDto>> getTalents(
             @RequestParam(name = "quarterId", required = false) Long quarterId,
             @RequestParam(name = "directorate", required = false) String directorate,
+            @RequestParam(name = "district", required = false) String district,
+            @RequestParam(name = "branch", required = false) String branch,
+            @RequestParam(name = "performanceBand", required = false) String performanceBand,
+            @RequestParam(name = "sessionProgress", required = false) String sessionProgress,
+            @RequestParam(name = "kpiType", required = false) String kpiType,
             @RequestParam(name = "status", required = false) String status,
             @RequestParam(name = "attentionOnly", required = false) Boolean attentionOnly,
             @RequestParam(name = "search", required = false) String search
     ) {
-        return ResponseEntity.ok(reportService.getTalentsProgress(quarterId, directorate, status, attentionOnly, search));
+        String effectiveDistrict = (district != null && !district.isBlank()) ? district : directorate;
+        return ResponseEntity.ok(reportService.getTalentsProgress(
+                quarterId, effectiveDistrict, status, attentionOnly, search,
+                branch, performanceBand, sessionProgress, kpiType));
+    }
+
+    @GetMapping("/cohort")
+    public ResponseEntity<List<PmsTalentProgressItemDto>> getCohort(
+            @RequestParam(name = "quarterId", required = false) Long quarterId,
+            @RequestParam(name = "kpiType", required = false) String kpiType,
+            @RequestParam(name = "district", required = false) String district,
+            @RequestParam(name = "branch", required = false) String branch,
+            @RequestParam(name = "performanceBand", required = false) String performanceBand
+    ) {
+        return ResponseEntity.ok(reportService.getTalentsProgress(
+                quarterId, district, null, null, null,
+                branch, performanceBand, null, kpiType));
     }
 
     @GetMapping("/talents/{assignmentId}/dossier")
@@ -47,6 +80,13 @@ public class PmsCoachingReportController {
             @PathVariable("assignmentId") Long assignmentId
     ) {
         return ResponseEntity.ok(reportService.getTalentDossier(assignmentId));
+    }
+
+    @GetMapping("/sessions/{sessionId}/evidence")
+    public ResponseEntity<SessionInspectionEvidenceDto> getSessionEvidence(
+            @PathVariable("sessionId") Long sessionId
+    ) {
+        return ResponseEntity.ok(reportService.getSessionInspectionEvidence(sessionId));
     }
 
     @GetMapping("/export")

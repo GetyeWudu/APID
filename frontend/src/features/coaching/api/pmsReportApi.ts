@@ -111,6 +111,98 @@ export interface PmsTalentDossier {
   sessionLogs: SessionProgressLog[];
 }
 
+export interface BranchAnalytics {
+  branchName: string;
+  totalStaff: number;
+  coacheesCount: number;
+  criticalCount: number;
+  moderateCount: number;
+  targetSessions: number;
+  completedSessions: number;
+  completionRate: number;
+  overdueCount: number;
+  averageStartingScore: number;
+  primarySkillGap: string;
+  activeCoachesCount: number;
+}
+
+export interface DistrictAnalytics {
+  districtName: string;
+  totalStaff: number;
+  coacheesCount: number;
+  criticalCount: number;
+  moderateCount: number;
+  targetSessions: number;
+  completedSessions: number;
+  completionRate: number;
+  overdueCount: number;
+  averageStartingScore: number;
+  primarySkillGap: string;
+  branches: BranchAnalytics[];
+}
+
+export interface DistrictBranchAnalytics {
+  fiscalQuarterId: number | null;
+  fiscalQuarterName: string;
+  totalEmployeesMonitored: number;
+  totalCoachingAssignments: number;
+  criticalCount: number;
+  moderateCount: number;
+  totalTargetSessions: number;
+  totalCompletedSessions: number;
+  overallCompletionRate: number;
+  attentionRequiredCount: number;
+  districts: DistrictAnalytics[];
+}
+
+export interface ReportingFilterOptions {
+  districts: string[];
+  branchesByDistrict: Record<string, string[]>;
+  performanceBands: string[];
+  coachingLifecycles: string[];
+  sessionProgressStatuses: string[];
+}
+
+export interface SessionTurnEvidence {
+  turnId: number;
+  turnIndex: number;
+  speakerName: string;
+  speakerRole: string;
+  startTimeOffsetSec: number | null;
+  durationSec: number | null;
+  transcriptEnglish: string | null;
+  transcriptAmharic: string | null;
+  reconciledText: string | null;
+}
+
+export interface SessionInspectionEvidence {
+  sessionId: number;
+  assignmentId: number;
+  sessionTitle: string;
+  meetingMode: string;
+  sessionStatus: string;
+  conductedAt: string | null;
+  durationMinutes: number;
+  coachEmployeeId: number | null;
+  coachName: string;
+  coachRole: string;
+  coacheeEmployeeId: number | null;
+  coacheeName: string;
+  coacheeStaffId: string;
+  districtName: string;
+  branchName: string;
+  attendanceStatus: string;
+  coachAssessment: string;
+  coacheeProgressNotes: string | null;
+  coacheeFeedbackRating: number | null;
+  coacheeFeedbackComment: string | null;
+  minutesSynthesisStatus: string;
+  aiSessionNotesMinutes: string | null;
+  aiActionItems: string | null;
+  aiKeyTopics: string[];
+  speechTurns: SessionTurnEvidence[];
+}
+
 export const pmsReportApi = {
   getSummary: async (quarterId?: number): Promise<PmsReportSummary> => {
     const params = quarterId ? { quarterId } : {};
@@ -118,9 +210,26 @@ export const pmsReportApi = {
     return res.data;
   },
 
+  getHierarchicalAnalytics: async (quarterId?: number): Promise<DistrictBranchAnalytics> => {
+    const params = quarterId ? { quarterId } : {};
+    const res = await apiClient.get<DistrictBranchAnalytics>('/coaching/reports/hierarchical-analytics', { params });
+    return res.data;
+  },
+
+  getFilterOptions: async (quarterId?: number): Promise<ReportingFilterOptions> => {
+    const params = quarterId ? { quarterId } : {};
+    const res = await apiClient.get<ReportingFilterOptions>('/coaching/reports/filter-options', { params });
+    return res.data;
+  },
+
   getTalents: async (params?: {
     quarterId?: number;
     directorate?: string;
+    district?: string;
+    branch?: string;
+    performanceBand?: string;
+    sessionProgress?: string;
+    kpiType?: string;
     status?: string;
     attentionOnly?: boolean;
     search?: string;
@@ -129,8 +238,24 @@ export const pmsReportApi = {
     return res.data;
   },
 
+  getCohort: async (params?: {
+    quarterId?: number;
+    kpiType?: string;
+    district?: string;
+    branch?: string;
+    performanceBand?: string;
+  }): Promise<PmsTalentProgressItem[]> => {
+    const res = await apiClient.get<PmsTalentProgressItem[]>('/coaching/reports/cohort', { params });
+    return res.data;
+  },
+
   getTalentDossier: async (assignmentId: number): Promise<PmsTalentDossier> => {
     const res = await apiClient.get<PmsTalentDossier>(`/coaching/reports/talents/${assignmentId}/dossier`);
+    return res.data;
+  },
+
+  getSessionEvidence: async (sessionId: number): Promise<SessionInspectionEvidence> => {
+    const res = await apiClient.get<SessionInspectionEvidence>(`/coaching/reports/sessions/${sessionId}/evidence`);
     return res.data;
   },
 
@@ -149,6 +274,46 @@ export const pmsReportApi = {
     const link = document.createElement('a');
     link.href = url;
     link.setAttribute('download', 'boa-pms-coaching-performance-report.csv');
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    window.URL.revokeObjectURL(url);
+  },
+
+  downloadDossierPdf: async (assignmentId: number, coacheeStaffId?: string): Promise<void> => {
+    const res = await apiClient.get('/coaching/pms/export/dossier/pdf', {
+      params: { assignmentId },
+      responseType: 'blob',
+    });
+    const blob = new Blob([res.data], { type: 'application/pdf' });
+    const url = window.URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    const fileId = coacheeStaffId ? coacheeStaffId.replace(/[^a-zA-Z0-9_-]/g, '_') : assignmentId;
+    link.setAttribute('download', `Bank_of_Abyssinia_Talent_Dossier_${fileId}.pdf`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    window.URL.revokeObjectURL(url);
+  },
+
+  downloadDistrictExcel: async (quarterId: number = 2, district?: string): Promise<void> => {
+    const params: Record<string, any> = { quarterId };
+    if (district && district !== 'ALL') {
+      params.district = district;
+    }
+    const res = await apiClient.get('/coaching/pms/export/district/excel', {
+      params,
+      responseType: 'blob',
+    });
+    const blob = new Blob([res.data], {
+      type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    });
+    const url = window.URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    const distClean = district && district !== 'ALL' ? district.replace(/[^a-zA-Z0-9_-]/g, '_') : 'National_BankWide';
+    link.setAttribute('download', `Bank_of_Abyssinia_PMS_Scorecard_${distClean}.xlsx`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);

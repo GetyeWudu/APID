@@ -76,6 +76,60 @@ public class OllamaAIProvider implements AIProvider {
     }
 
     @Override
+    public void generateStream(String prompt, AIRequestOptions options, java.util.function.Consumer<String> chunkConsumer) {
+        try {
+            String url = getCleanBaseUrl() + "/api/generate";
+            Map<String, Object> body = new HashMap<>();
+            body.put("model", properties.getModel());
+            body.put("prompt", prompt);
+            body.put("stream", true);
+
+            if (options != null && options.temperature() != null) {
+                Map<String, Object> opts = new HashMap<>();
+                opts.put("temperature", options.temperature());
+                body.put("options", opts);
+            }
+
+            restTemplate.execute(url, HttpMethod.POST, clientHttpRequest -> {
+                clientHttpRequest.getHeaders().setContentType(MediaType.APPLICATION_JSON);
+                objectMapper.writeValue(clientHttpRequest.getBody(), body);
+            }, clientHttpResponse -> {
+                try (java.io.BufferedReader reader = new java.io.BufferedReader(
+                        new java.io.InputStreamReader(clientHttpResponse.getBody(), java.nio.charset.StandardCharsets.UTF_8))) {
+                    String line;
+                    boolean inThinking = false;
+                    while ((line = reader.readLine()) != null) {
+                        if (line.isBlank()) continue;
+                        JsonNode node = objectMapper.readTree(line);
+                        String chunk = node.path("response").asText("");
+                        if (!chunk.isEmpty()) {
+                            if (chunk.contains("<think>")) inThinking = true;
+                            if (inThinking) {
+                                if (chunk.contains("</think>")) {
+                                    inThinking = false;
+                                    chunk = chunk.substring(chunk.indexOf("</think>") + 8);
+                                } else {
+                                    continue;
+                                }
+                            }
+                            if (!chunk.isEmpty()) {
+                                chunkConsumer.accept(chunk);
+                            }
+                        }
+                        if (node.path("done").asBoolean(false)) {
+                            break;
+                        }
+                    }
+                }
+                return null;
+            });
+        } catch (Exception ex) {
+            log.error("Ollama streaming execution error: {}", ex.getMessage(), ex);
+            throw new RuntimeException("Ollama streaming failed: " + ex.getMessage(), ex);
+        }
+    }
+
+    @Override
     public AIChatResponse chat(List<AIChatMessage> messages, AIRequestOptions options) {
         long start = System.currentTimeMillis();
         try {

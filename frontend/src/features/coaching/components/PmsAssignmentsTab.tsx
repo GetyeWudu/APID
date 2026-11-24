@@ -1,798 +1,633 @@
-import { useState, type FormEvent } from 'react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { AlertTriangle, History, RefreshCw, Search, UserCheck, UserPlus, XCircle } from 'lucide-react';
+import { useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
+import {
+  RefreshCw,
+  Eye,
+  BarChart2,
+  AlertTriangle,
+  Download,
+  Loader2,
+  Users,
+  Layers,
+  ShieldAlert,
+  Calendar,
+} from 'lucide-react';
 import {
   DataSourceBadge,
   EmptyState,
   ErrorState,
   LoadingSkeleton,
-  PermissionGate,
-  SlideOverDrawer,
-  StatusPill,
   useToast,
 } from '../../../shared/components/ui';
-import {
-  coachingAssignmentApi,
-  type AssignmentClosureReason,
-  type AssignmentListFilters,
-  type AssignmentStatus,
-  type CoachingAssignmentItem,
-} from '../api/coachingAssignmentApi';
-import { organizationApi } from '../../admin/organization/api/organizationApi';
-import { classifyRating, RATING_BAND_METADATA } from '../utils/ratingClassification';
+import { pmsReportApi } from '../api/pmsReportApi';
+import { DistrictBarChart } from './reports/DistrictBarChart';
+import { CoachingLifecycleDonut } from './reports/CoachingLifecycleDonut';
+import { OperationalAlertsRadar } from './reports/OperationalAlertsRadar';
+import { SharedCascadingFilterBar, type SharedFilterValues } from './reports/SharedCascadingFilterBar';
+import { DistrictComparativeMatrix } from './reports/DistrictComparativeMatrix';
+import { TalentDossierDrawer } from './reports/TalentDossierDrawer';
+import { TablePagination } from './reports/TablePagination';
+import { AiExecutiveBriefingBanner } from './ai/AiExecutiveBriefingBanner';
+import { AskApidCopilotDrawer } from './ai/AskApidCopilotDrawer';
 
 export function PmsAssignmentsTab() {
   const { pushToast } = useToast();
-  const queryClient = useQueryClient();
 
-  // Filters state (strictly separating status, closureReason, and atRisk)
-  const [filters, setFilters] = useState<AssignmentListFilters>({
-    status: '',
-    closureReason: '',
-    atRisk: undefined,
-    search: '',
-    page: 0,
-    size: 20,
-  });
+  // Active Quarter ID
+  const activeQuarterId = 2; // FY 2026/27 · Q2
 
-  // Selected assignment for history drawer
-  const [selectedHistoryId, setSelectedHistoryId] = useState<number | null>(null);
+  // Excel Export State
+  const [isExportingExcel, setIsExportingExcel] = useState(false);
 
-  // Modals state
-  const [assignTarget, setAssignTarget] = useState<CoachingAssignmentItem | null>(null);
-  const [replaceTarget, setReplaceTarget] = useState<CoachingAssignmentItem | null>(null);
-  const [closeTarget, setCloseTarget] = useState<CoachingAssignmentItem | null>(null);
-
-  const [selectedCoachId, setSelectedCoachId] = useState<number | ''>('');
-  const [actionReason, setActionReason] = useState('');
-  const [closeReason, setCloseReason] = useState<AssignmentClosureReason>('ADMINISTRATIVE_CLOSURE');
-
-  // Query live assignments
-  const assignmentsQuery = useQuery({
-    queryKey: ['coaching', 'assignments', filters],
-    queryFn: () => coachingAssignmentApi.listAssignments(filters),
-  });
-
-  // Query active employees for coach selection
-  const employeesQuery = useQuery({
-    queryKey: ['core', 'active-employees-for-coach'],
-    queryFn: () => organizationApi.searchEmployees({ status: 'ACTIVE', size: 100 }),
-    staleTime: 5 * 60_000,
-  });
-
-  // Query detail for history drawer
-  const detailQuery = useQuery({
-    queryKey: ['coaching', 'assignment-detail', selectedHistoryId],
-    queryFn: () => coachingAssignmentApi.getAssignmentDetail(selectedHistoryId!),
-    enabled: selectedHistoryId !== null,
-  });
-
-  // Mutation: Assign Coach
-  const assignCoachMutation = useMutation({
-    mutationFn: ({ id, coachId, note }: { id: number; coachId: number; note?: string }) =>
-      coachingAssignmentApi.assignCoach(id, { coachEmployeeId: coachId, note }),
-    onSuccess: () => {
-      pushToast({ title: 'Coach Assigned', message: 'Coach was successfully assigned.', tone: 'ok' });
-      queryClient.invalidateQueries({ queryKey: ['coaching', 'assignments'] });
-      setAssignTarget(null);
-      setSelectedCoachId('');
-      setActionReason('');
-    },
-    onError: (err: any) => {
-      const msg = err?.response?.data?.error?.message ?? err?.message ?? 'Failed to assign coach';
-      pushToast({ title: 'Assignment Failed', message: msg, tone: 'err' });
-    },
-  });
-
-  // Mutation: Replace Coach
-  const replaceCoachMutation = useMutation({
-    mutationFn: ({ id, coachId, reason }: { id: number; coachId: number; reason: string }) =>
-      coachingAssignmentApi.replaceCoach(id, { newCoachEmployeeId: coachId, reason }),
-    onSuccess: () => {
-      pushToast({ title: 'Coach Replaced', message: 'Coach replacement logged and updated.', tone: 'ok' });
-      queryClient.invalidateQueries({ queryKey: ['coaching', 'assignments'] });
-      setReplaceTarget(null);
-      setSelectedCoachId('');
-      setActionReason('');
-    },
-    onError: (err: any) => {
-      const msg = err?.response?.data?.error?.message ?? err?.message ?? 'Failed to replace coach';
-      pushToast({ title: 'Replacement Failed', message: msg, tone: 'err' });
-    },
-  });
-
-  // Mutation: Close Assignment
-  const closeAssignmentMutation = useMutation({
-    mutationFn: ({ id, closureReason, notes }: { id: number; closureReason: AssignmentClosureReason; notes?: string }) =>
-      coachingAssignmentApi.closeAssignment(id, { closureReason, notes }),
-    onSuccess: () => {
-      pushToast({ title: 'Assignment Closed', message: 'Coaching assignment has been closed.', tone: 'info' });
-      queryClient.invalidateQueries({ queryKey: ['coaching', 'assignments'] });
-      setCloseTarget(null);
-      setActionReason('');
-    },
-    onError: (err: any) => {
-      const msg = err?.response?.data?.error?.message ?? err?.message ?? 'Failed to close assignment';
-      pushToast({ title: 'Close Failed', message: msg, tone: 'err' });
-    },
-  });
-
-  const handleAssignSubmit = (e: FormEvent) => {
-    e.preventDefault();
-    if (!assignTarget || !selectedCoachId) return;
-    assignCoachMutation.mutate({
-      id: assignTarget.id,
-      coachId: Number(selectedCoachId),
-      note: actionReason.trim() || undefined,
-    });
-  };
-
-  const handleReplaceSubmit = (e: FormEvent) => {
-    e.preventDefault();
-    if (!replaceTarget || !selectedCoachId || !actionReason.trim()) return;
-    replaceCoachMutation.mutate({
-      id: replaceTarget.id,
-      coachId: Number(selectedCoachId),
-      reason: actionReason.trim(),
-    });
-  };
-
-  const handleCloseSubmit = (e: FormEvent) => {
-    e.preventDefault();
-    if (!closeTarget || !actionReason.trim()) return;
-    closeAssignmentMutation.mutate({
-      id: closeTarget.id,
-      closureReason: closeReason,
-      notes: actionReason.trim(),
-    });
-  };
-
-  const renderStatusPill = (status: AssignmentStatus) => {
-    switch (status) {
-      case 'PENDING_COACH_ASSIGNMENT':
-        return <StatusPill label="NEEDS COACH" tone="warn" />;
-      case 'ACTIVE':
-        return <StatusPill label="ACTIVE" tone="info" />;
-      case 'COMPLETED':
-        return <StatusPill label="COMPLETED" tone="ok" />;
-      case 'CLOSED':
-        return <StatusPill label="CLOSED" tone="neutral" />;
-      case 'CANCELLED':
-        return <StatusPill label="CANCELLED" tone="err" />;
-      default:
-        return <StatusPill label={status} tone="neutral" />;
+  const handleExportExcel = async () => {
+    try {
+      setIsExportingExcel(true);
+      await pmsReportApi.downloadDistrictExcel(
+        activeQuarterId,
+        filterValues.district !== 'ALL' ? filterValues.district : undefined
+      );
+    } catch (err) {
+      console.error('Failed to export district Excel scorecard', err);
+      pushToast({
+        title: 'Export Failed',
+        message: 'Could not export district Excel scorecard.',
+        tone: 'err',
+      });
+    } finally {
+      setIsExportingExcel(false);
     }
   };
 
-  const activeEmployees = employeesQuery.data?.content ?? [];
-  const assignments = assignmentsQuery.data?.content ?? [];
-  const totalElements = assignmentsQuery.data?.totalElements ?? 0;
+  // Copilot Drawer State
+  const [isCopilotOpen, setIsCopilotOpen] = useState<boolean>(false);
+
+  // Pagination State
+  const [currentPage, setCurrentPage] = useState<number>(1);
+  const [pageSize, setPageSize] = useState<number>(10);
+
+  // Shared Cascading Filters State
+  const [filterValues, setFilterValues] = useState<SharedFilterValues>({
+    district: 'ALL',
+    branch: 'ALL',
+    performanceBand: 'ALL',
+    status: 'ALL',
+    search: '',
+  });
+
+  // KPI Quick Filter (e.g. clicking a macro card)
+  const [kpiFilter, setKpiFilter] = useState<string>('ALL');
+
+  // Selected dossier for drawer
+  const [selectedDossierAssignmentId, setSelectedDossierAssignmentId] = useState<number | null>(null);
+
+  // 1. Fetch Hierarchical Analytics (District & Branch Rollup + Macro KPIs)
+  const analyticsQuery = useQuery({
+    queryKey: ['hierarchical-analytics', activeQuarterId],
+    queryFn: () => pmsReportApi.getHierarchicalAnalytics(activeQuarterId),
+    staleTime: 30_000,
+  });
+
+  // 2. Fetch Filtered Coachee Talents Roster
+  const talentsQuery = useQuery({
+    queryKey: [
+      'pms-coaching-talents-roster',
+      activeQuarterId,
+      filterValues.district,
+      filterValues.branch,
+      filterValues.performanceBand,
+      filterValues.status,
+      filterValues.search,
+      kpiFilter,
+    ],
+    queryFn: () =>
+      pmsReportApi.getTalents({
+        quarterId: activeQuarterId,
+        district: filterValues.district !== 'ALL' ? filterValues.district : undefined,
+        branch: filterValues.branch !== 'ALL' ? filterValues.branch : undefined,
+        performanceBand: filterValues.performanceBand !== 'ALL' ? filterValues.performanceBand : undefined,
+        status: filterValues.status !== 'ALL' ? filterValues.status : undefined,
+        kpiType: kpiFilter !== 'ALL' ? kpiFilter : undefined,
+        search: filterValues.search.trim() || undefined,
+      }),
+    staleTime: 15_000,
+  });
+
+  // 3. Query dossier for talent drawer
+  const dossierQuery = useQuery({
+    queryKey: ['pms-talent-dossier', selectedDossierAssignmentId],
+    queryFn: () =>
+      selectedDossierAssignmentId ? pmsReportApi.getTalentDossier(selectedDossierAssignmentId) : null,
+    enabled: !!selectedDossierAssignmentId,
+  });
+
+  const resetAllFilters = () => {
+    setFilterValues({
+      district: 'ALL',
+      branch: 'ALL',
+      performanceBand: 'ALL',
+      status: 'ALL',
+      search: '',
+    });
+    setKpiFilter('ALL');
+    setCurrentPage(1);
+  };
+
+  const analytics = analyticsQuery.data;
+  const talents = talentsQuery.data ?? [];
+
+  const totalItems = talents.length;
+  const paginatedTalents = talents.slice(
+    (currentPage - 1) * pageSize,
+    currentPage * pageSize
+  );
 
   return (
-    <div className="apid-card">
-      <div className="boa-card-header">
+    <div className="space-y-4">
+      {/* 1. Header Banner */}
+      <div className="apid-card bg-gradient-to-r from-amber-500/10 via-slate-500/5 to-transparent p-5 flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h3 className="boa-card-title">Quarterly Coaching Roster</h3>
-          <p className="boa-card-subtitle">
-            Manage mandatory (<code>RoundedOverallFinalRating &lt; 3</code>) and self-development coaching assignments.
+          <div className="flex items-center gap-2 mb-1">
+            <span className="text-[11px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-amber-100 dark:bg-amber-950 text-amber-800 dark:text-amber-300 flex items-center gap-1">
+              <BarChart2 size={12} /> APID Coaching Intelligence
+            </span>
+            <span className="text-xs text-slate-500 dark:text-slate-400">
+              {analytics?.fiscalQuarterName || 'FY 2026/27 · Q2'}
+            </span>
+          </div>
+          <h2 className="text-xl font-bold text-slate-900 dark:text-white">
+            Quarterly Coaching Administration &amp; Operational Roster
+          </h2>
+          <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+            Executive oversight, district-level performance tracking, and actionable remediation monitoring.
           </p>
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
+
+        <div className="flex items-center gap-2">
           <DataSourceBadge source="live" />
           <button
             type="button"
+            disabled={isExportingExcel}
             className="apid-btn apid-btn-outline apid-btn-sm"
-            onClick={() => void assignmentsQuery.refetch()}
-            disabled={assignmentsQuery.isFetching}
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '0.35rem',
+              backgroundColor: isExportingExcel ? '#f3f4f6' : '#ffffff',
+              color: '#0f172a',
+              fontWeight: 600,
+            }}
+            onClick={handleExportExcel}
+            title="Download official multi-tab Bank of Abyssinia Excel Scorecard"
           >
-            <RefreshCw size={13} className={assignmentsQuery.isFetching ? 'spin' : ''} /> Refresh
+            {isExportingExcel ? (
+              <Loader2 size={13} className="spin" style={{ color: '#16a34a' }} />
+            ) : (
+              <Download size={13} style={{ color: '#16a34a' }} />
+            )}
+            <span>{isExportingExcel ? 'Exporting...' : 'Export Excel'}</span>
+          </button>
+          <button
+            type="button"
+            className="apid-btn apid-btn-outline apid-btn-sm"
+            onClick={() => {
+              void analyticsQuery.refetch();
+              void talentsQuery.refetch();
+            }}
+            disabled={analyticsQuery.isFetching || talentsQuery.isFetching}
+          >
+            <RefreshCw
+              size={13}
+              className={analyticsQuery.isFetching || talentsQuery.isFetching ? 'spin' : ''}
+            />{' '}
+            Refresh Analytics
           </button>
         </div>
       </div>
 
-      {/* Structured Filter Bar */}
+      {/* 1.5. AI Executive Intelligence Briefing */}
+      <AiExecutiveBriefingBanner
+        quarterId={activeQuarterId}
+        onOpenCopilot={() => setIsCopilotOpen(true)}
+      />
+
+      {/* 2. Clickable Executive Macro KPI Ribbon */}
       <div
         style={{
           display: 'grid',
           gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
           gap: '0.75rem',
-          padding: '0.75rem 0',
-          borderBottom: '1px solid var(--border)',
           marginBottom: '1rem',
         }}
       >
-        <div className="apid-field" style={{ marginBottom: 0 }}>
-          <label htmlFor="filter-status">Lifecycle Status</label>
-          <select
-            id="filter-status"
-            className="apid-input"
-            value={filters.status ?? ''}
-            onChange={(e) =>
-              setFilters((f) => ({ ...f, status: (e.target.value as AssignmentStatus) || '', page: 0 }))
-            }
-          >
-            <option value="">All Statuses</option>
-            <option value="PENDING_COACH_ASSIGNMENT">Pending Coach Assignment</option>
-            <option value="ACTIVE">Active</option>
-            <option value="COMPLETED">Completed</option>
-            <option value="CLOSED">Closed</option>
-            <option value="CANCELLED">Cancelled</option>
-          </select>
+        {/* Total Monitored */}
+        <div
+          onClick={resetAllFilters}
+          className="apid-card p-3.5 cursor-pointer hover:border-slate-400 dark:hover:border-slate-600 transition flex flex-col justify-between"
+        >
+          <div className="flex items-center justify-between text-xs text-slate-500 dark:text-slate-400">
+            <span>Total Monitored</span>
+            <Users size={14} className="text-slate-400" />
+          </div>
+          <div className="text-2xl font-extrabold text-slate-900 dark:text-white mt-1">
+            {analytics?.totalEmployeesMonitored || 151}
+          </div>
+          <div className="text-[10px] text-slate-400 mt-1 flex items-center justify-between">
+            <span>Bank-wide staff</span>
+            <span className="text-amber-600 dark:text-amber-400 font-medium">Reset Filters &rarr;</span>
+          </div>
         </div>
 
-        <div className="apid-field" style={{ marginBottom: 0 }}>
-          <label htmlFor="filter-closure">Closure Reason</label>
-          <select
-            id="filter-closure"
-            className="apid-input"
-            value={filters.closureReason ?? ''}
-            onChange={(e) =>
-              setFilters((f) => ({
-                ...f,
-                closureReason: (e.target.value as AssignmentClosureReason) || '',
-                page: 0,
-              }))
-            }
-          >
-            <option value="">All Closure Reasons</option>
-            <option value="CLEARED_BY_PMS">Cleared by PMS</option>
-            <option value="CONTINUED_NEXT_QUARTER">Continued Next Quarter</option>
-            <option value="SUCCESSFULLY_COMPLETED">Successfully Completed</option>
-            <option value="ADMINISTRATIVE_CLOSURE">Administrative Closure</option>
-          </select>
+        {/* Requiring Remediation */}
+        <div
+          onClick={() => {
+            resetAllFilters();
+            setKpiFilter('REQUIRING_COACHING');
+          }}
+          className={`apid-card p-3.5 cursor-pointer transition flex flex-col justify-between ${
+            kpiFilter === 'REQUIRING_COACHING'
+              ? 'ring-2 ring-amber-500 border-amber-500'
+              : 'hover:border-amber-400 dark:hover:border-amber-600'
+          }`}
+        >
+          <div className="flex items-center justify-between text-xs text-amber-600 dark:text-amber-400 font-medium">
+            <span>In Remediation</span>
+            <Layers size={14} />
+          </div>
+          <div className="text-2xl font-extrabold text-amber-600 dark:text-amber-400 mt-1">
+            {analytics?.totalCoachingAssignments || 49}
+          </div>
+          <div className="text-[10px] text-slate-400 mt-1 flex items-center justify-between">
+            <span>Score &lt; 3.0 trigger</span>
+            <span className="text-amber-600 dark:text-amber-400 font-medium">Filter Roster &rarr;</span>
+          </div>
         </div>
 
-        <div className="apid-field" style={{ marginBottom: 0 }}>
-          <label htmlFor="filter-risk">Risk Condition</label>
-          <select
-            id="filter-risk"
-            className="apid-input"
-            value={filters.atRisk === undefined ? '' : String(filters.atRisk)}
-            onChange={(e) => {
-              const val = e.target.value;
-              setFilters((f) => ({
-                ...f,
-                atRisk: val === '' ? undefined : val === 'true',
-                page: 0,
-              }));
-            }}
-          >
-            <option value="">All (Risk &amp; Non-Risk)</option>
-            <option value="true">At Risk Only</option>
-            <option value="false">On Track Only</option>
-          </select>
+        {/* Critical Tier */}
+        <div
+          onClick={() => {
+            setFilterValues((prev) => ({ ...prev, performanceBand: 'CRITICAL' }));
+            setKpiFilter('CRITICAL');
+          }}
+          className={`apid-card p-3.5 cursor-pointer transition flex flex-col justify-between ${
+            kpiFilter === 'CRITICAL' || filterValues.performanceBand === 'CRITICAL'
+              ? 'ring-2 ring-red-500 border-red-500'
+              : 'hover:border-red-400 dark:hover:border-red-600'
+          }`}
+        >
+          <div className="flex items-center justify-between text-xs text-red-600 dark:text-red-400 font-medium">
+            <span>Critical Tier (&lt; 2.0)</span>
+            <ShieldAlert size={14} />
+          </div>
+          <div className="text-2xl font-extrabold text-red-600 dark:text-red-400 mt-1">
+            {analytics?.criticalCount || 17}
+          </div>
+          <div className="text-[10px] text-slate-400 mt-1 flex items-center justify-between">
+            <span>10 Mandatory Sess.</span>
+            <span className="text-red-600 dark:text-red-400 font-medium">Inspect Cohort &rarr;</span>
+          </div>
         </div>
 
-        <div className="apid-field" style={{ marginBottom: 0 }}>
-          <label htmlFor="filter-search">Search Staff</label>
-          <div style={{ position: 'relative' }}>
-            <input
-              id="filter-search"
-              type="text"
-              placeholder="Name or employee code..."
-              value={filters.search ?? ''}
-              onChange={(e) => setFilters((f) => ({ ...f, search: e.target.value, page: 0 }))}
-              style={{ width: '100%', paddingLeft: '2rem' }}
-            />
-            <Search
-              size={14}
-              style={{
-                position: 'absolute',
-                left: '0.65rem',
-                top: '50%',
-                transform: 'translateY(-50%)',
-                color: 'var(--muted)',
-              }}
-            />
+        {/* Target Sessions Delivery */}
+        <div className="apid-card p-3.5 flex flex-col justify-between">
+          <div className="flex items-center justify-between text-xs text-slate-500 dark:text-slate-400">
+            <span>Session Delivery</span>
+            <Calendar size={14} className="text-slate-400" />
+          </div>
+          <div className="text-2xl font-extrabold text-slate-900 dark:text-white mt-1">
+            {analytics?.totalCompletedSessions || 0}{' '}
+            <span className="text-xs font-normal text-slate-400">
+              / {analytics?.totalTargetSessions || 362}
+            </span>
+          </div>
+          <div className="text-[10px] text-emerald-600 dark:text-emerald-400 mt-1 font-semibold">
+            {analytics?.overallCompletionRate || 0.0}% Target Met
+          </div>
+        </div>
+
+        {/* Overdue / At-Risk */}
+        <div
+          onClick={() => {
+            setKpiFilter('OVERDUE');
+          }}
+          className={`apid-card p-3.5 cursor-pointer transition flex flex-col justify-between ${
+            kpiFilter === 'OVERDUE'
+              ? 'ring-2 ring-amber-500 border-amber-500'
+              : 'hover:border-amber-400 dark:hover:border-amber-600'
+          }`}
+        >
+          <div className="flex items-center justify-between text-xs text-amber-600 dark:text-amber-400 font-medium">
+            <span>Attention Required</span>
+            <AlertTriangle size={14} />
+          </div>
+          <div className="text-2xl font-extrabold text-amber-600 dark:text-amber-400 mt-1">
+            {analytics?.attentionRequiredCount || 17}
+          </div>
+          <div className="text-[10px] text-slate-400 mt-1 flex items-center justify-between">
+            <span>Stalled &gt; 14 days</span>
+            <span className="text-amber-600 dark:text-amber-400 font-medium">Review &rarr;</span>
           </div>
         </div>
       </div>
 
-      {assignmentsQuery.isLoading ? (
-        <LoadingSkeleton rows={6} height={28} />
-      ) : assignmentsQuery.isError ? (
-        <ErrorState
-          message="Failed to load live coaching assignments from server."
-          onRetry={() => void assignmentsQuery.refetch()}
-        />
-      ) : assignments.length === 0 ? (
-        <EmptyState
-          title="No Coaching Assignments Found"
-          description={
-            totalElements === 0
-              ? 'No coaching assignments exist in the database yet. Import PMS appraisal reports or create assignments to populate this roster.'
-              : 'No assignments match the selected status, closure reason, or search filters.'
-          }
-        />
-      ) : (
-        <div className="apid-table-wrap">
-          <table className="apid-table">
-            <thead>
-              <tr>
-                <th>Coachee</th>
-                <th>Quarter</th>
-                <th>Rating &amp; Band</th>
-                <th>Assigned Coach</th>
-                <th>Status</th>
-                <th>Risk / Closure</th>
-                <th>Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {assignments.map((a) => {
-                const bandMeta =
-                  a.roundedOverallFinalRating != null
-                    ? RATING_BAND_METADATA[classifyRating(a.roundedOverallFinalRating)]
-                    : null;
-                return (
-                  <tr key={a.id}>
-                    <td>
-                      <div style={{ fontWeight: 700 }}>{a.coacheeFullName}</div>
-                      <div className="boa-muted" style={{ fontSize: '0.77rem' }}>
-                        {a.coacheeEmployeeNumber} · {a.coacheeDepartment ?? '—'}
-                      </div>
-                    </td>
-                    <td>
-                      <div style={{ fontSize: '0.8rem' }}>
-                        <strong>Coaching:</strong> {a.coachingQuarterLabel ?? '—'}
-                      </div>
-                      {a.performanceQuarterLabel && (
+      {/* 3. Interactive Graphical Visualizations Grid (Recharts) */}
+      <div
+        style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(360px, 1fr))',
+          gap: '1rem',
+          marginBottom: '1rem',
+        }}
+      >
+        {/* District Bar Chart */}
+        <div className="apid-card p-4">
+          <DistrictBarChart
+            districts={analytics?.districts ?? []}
+            selectedDistrict={filterValues.district}
+            onSelectDistrict={(district) =>
+              setFilterValues((prev) => ({
+                ...prev,
+                district,
+                branch: 'ALL',
+              }))
+            }
+          />
+        </div>
+
+        {/* Lifecycle & Risk Donut Chart */}
+        <div className="apid-card p-4">
+          <CoachingLifecycleDonut
+            criticalCount={analytics?.criticalCount || 0}
+            moderateCount={analytics?.moderateCount || 0}
+            completedSessions={analytics?.totalCompletedSessions || 0}
+            totalTargetSessions={analytics?.totalTargetSessions || 0}
+            attentionCount={analytics?.attentionRequiredCount || 0}
+            onFilterBand={(band) => {
+              setFilterValues((prev) => ({ ...prev, performanceBand: band }));
+              setKpiFilter(band);
+            }}
+          />
+        </div>
+      </div>
+
+      {/* 4. Operational Priority Alerts */}
+      <OperationalAlertsRadar
+        analytics={analytics ?? null}
+        onFilterBranch={(district, branch) => {
+          setFilterValues((prev) => ({
+            ...prev,
+            district,
+            branch,
+          }));
+        }}
+        onFilterCritical={() => {
+          setFilterValues((prev) => ({ ...prev, performanceBand: 'CRITICAL' }));
+          setKpiFilter('CRITICAL');
+        }}
+      />
+
+      {/* 4.5. Regional & Branch Comparative Performance Matrix */}
+      <DistrictComparativeMatrix
+        analytics={analytics ?? null}
+        loading={analyticsQuery.isLoading}
+        selectedDistrict={filterValues.district}
+        onSelectDistrict={(dist) => {
+          setFilterValues((prev) => ({
+            ...prev,
+            district: dist,
+            branch: 'ALL',
+          }));
+        }}
+        onSelectBranch={(dist, branch) => {
+          setFilterValues((prev) => ({
+            ...prev,
+            district: dist,
+            branch,
+          }));
+        }}
+      />
+
+      {/* 5. Cascading Multi-Tier Filter Bar */}
+      <SharedCascadingFilterBar
+        quarterId={activeQuarterId}
+        filters={filterValues}
+        onChange={(updates) => setFilterValues((prev) => ({ ...prev, ...updates }))}
+        onReset={resetAllFilters}
+      />
+
+      {/* 6. Active Coaching Roster Table */}
+      <div className="apid-card">
+        <div className="p-4 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between flex-wrap gap-2">
+          <div>
+            <h3 className="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
+              Coaching Assignments Roster
+              <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300">
+                {talents.length} Coachees
+              </span>
+            </h3>
+            <p className="text-xs text-slate-500 dark:text-slate-400">
+              Inspect session evidence, AI minutes, and manage coach allocations.
+            </p>
+          </div>
+
+          {(filterValues.district !== 'ALL' ||
+            filterValues.branch !== 'ALL' ||
+            filterValues.performanceBand !== 'ALL' ||
+            kpiFilter !== 'ALL') && (
+            <div className="flex items-center gap-1.5 text-xs">
+              <span className="text-slate-400">Active filter:</span>
+              <span className="font-semibold text-amber-600 dark:text-amber-400">
+                {[
+                  filterValues.district !== 'ALL' ? filterValues.district : null,
+                  filterValues.branch !== 'ALL' ? filterValues.branch.replace(' Branch Operations', '') : null,
+                  filterValues.performanceBand !== 'ALL' ? filterValues.performanceBand : null,
+                  kpiFilter !== 'ALL' ? `KPI: ${kpiFilter}` : null,
+                ]
+                  .filter(Boolean)
+                  .join(' · ')}
+              </span>
+              <button
+                type="button"
+                onClick={resetAllFilters}
+                className="text-[11px] text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 underline cursor-pointer ml-1"
+              >
+                Clear
+              </button>
+            </div>
+          )}
+        </div>
+
+        {talentsQuery.isLoading ? (
+          <LoadingSkeleton rows={6} height={28} />
+        ) : talentsQuery.isError ? (
+          <ErrorState
+            message="Failed to load coaching talents from server."
+            onRetry={() => void talentsQuery.refetch()}
+          />
+        ) : talents.length === 0 ? (
+          <EmptyState
+            title="No Coachees Found"
+            description="No staff members match the selected district, branch, or performance filter."
+          />
+        ) : (
+          <div className="apid-table-wrap">
+            <table className="apid-table">
+              <thead>
+                <tr>
+                  <th>Coachee &amp; Branch</th>
+                  <th>Starting Score</th>
+                  <th>Primary Focus Gap</th>
+                  <th>Assigned Coach</th>
+                  <th>Sessions Progress</th>
+                  <th>Trajectory</th>
+                  <th>Action</th>
+                </tr>
+              </thead>
+              <tbody>
+                {paginatedTalents.map((item) => {
+                  const isCritical = item.startingRating < 2.0;
+                  return (
+                    <tr
+                      key={item.assignmentId}
+                      className="cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800/60 transition-colors"
+                      onClick={() => setSelectedDossierAssignmentId(item.assignmentId)}
+                      title="Click anywhere to open full coachee development dossier"
+                    >
+                      <td>
+                        <div style={{ fontWeight: 700 }}>{item.coacheeName}</div>
                         <div className="boa-muted" style={{ fontSize: '0.77rem' }}>
-                          <strong>PMS:</strong> {a.performanceQuarterLabel}
+                          {item.coacheeStaffId} · {item.department.replace(' Branch Operations', '')}
                         </div>
-                      )}
-                    </td>
-                    <td>
-                      {a.overallFinalRating != null ? (
-                        <>
-                          <div className="tabular-nums" style={{ fontWeight: 700 }}>
-                            {a.overallFinalRating.toFixed(4)}{' '}
-                            <span className="boa-muted" style={{ fontWeight: 400, fontSize: '0.76rem' }}>
-                              (Round {a.roundedOverallFinalRating})
-                            </span>
-                          </div>
-                          {bandMeta && (
-                            <div style={{ marginTop: '0.2rem' }}>
-                              <StatusPill label={bandMeta.shortLabel} tone={bandMeta.tone} />
+                        <div className="text-[10px] text-slate-400">
+                          {item.directorate}
+                        </div>
+                      </td>
+
+                      <td>
+                        <div className="tabular-nums" style={{ fontWeight: 700 }}>
+                          {item.startingRating.toFixed(4)}
+                        </div>
+                        <div style={{ marginTop: '0.2rem' }}>
+                          <span
+                            className={`boa-pill ${
+                              isCritical ? 'boa-pill-err' : 'boa-pill-warn'
+                            }`}
+                            style={{ fontSize: '0.7rem' }}
+                          >
+                            {isCritical ? 'CRITICAL (<2.0)' : 'MODERATE'}
+                          </span>
+                        </div>
+                      </td>
+
+                      <td>
+                        <div className="text-xs text-slate-700 dark:text-slate-300 max-w-[200px] truncate" title={item.targetWeaknessKpi}>
+                          {item.targetWeaknessKpi}
+                        </div>
+                      </td>
+
+                      <td>
+                        {item.coachName ? (
+                          <div>
+                            <div style={{ fontWeight: 600 }}>{item.coachName}</div>
+                            <div className="boa-muted" style={{ fontSize: '0.76rem' }}>
+                              Coach
                             </div>
-                          )}
-                        </>
-                      ) : (
-                        <span className="boa-muted" style={{ fontSize: '0.82rem' }}>
-                          Self Development
-                        </span>
-                      )}
-                    </td>
-                    <td>
-                      {a.coachFullName ? (
-                        <div>
-                          <div style={{ fontWeight: 600 }}>{a.coachFullName}</div>
-                          <div className="boa-muted" style={{ fontSize: '0.76rem' }}>
-                            {a.coachEmployeeNumber}
                           </div>
-                        </div>
-                      ) : (
-                        <span style={{ color: 'var(--warn)', fontWeight: 600, fontSize: '0.82rem' }}>
-                          Unassigned
-                        </span>
-                      )}
-                    </td>
-                    <td>{renderStatusPill(a.status)}</td>
-                    <td>
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
-                        {a.atRisk && <StatusPill label="AT RISK" tone="err" />}
-                        {a.closureReason && (
-                          <span className="boa-muted" style={{ fontSize: '0.76rem' }}>
-                            {a.closureReason.replace(/_/g, ' ')}
+                        ) : (
+                          <span style={{ color: 'var(--warn)', fontWeight: 600, fontSize: '0.82rem' }}>
+                            Unassigned
                           </span>
                         )}
-                      </div>
-                    </td>
-                    <td className="apid-actions-cell">
-                      <button
-                        type="button"
-                        className="apid-btn apid-btn-outline apid-btn-sm"
-                        onClick={() => setSelectedHistoryId(a.id)}
-                        title="View assignment details and immutable coach replacement history"
-                      >
-                        <History size={13} /> History
-                      </button>
+                      </td>
 
-                      {a.status === 'PENDING_COACH_ASSIGNMENT' && (
-                        <PermissionGate permission="COACHING_COACH_REPLACE">
-                          <button
-                            type="button"
-                            className="apid-btn apid-btn-primary apid-btn-sm"
-                            onClick={() => {
-                              setAssignTarget(a);
-                              setSelectedCoachId('');
-                              setActionReason('');
-                            }}
-                          >
-                            <UserPlus size={13} /> Assign Coach
-                          </button>
-                        </PermissionGate>
-                      )}
-
-                      {a.status === 'ACTIVE' && (
-                        <PermissionGate permission="COACHING_COACH_REPLACE">
-                          <button
-                            type="button"
-                            className="apid-btn apid-btn-sm"
-                            onClick={() => {
-                              setReplaceTarget(a);
-                              setSelectedCoachId('');
-                              setActionReason('');
-                            }}
-                          >
-                            <UserCheck size={13} /> Replace Coach
-                          </button>
-                        </PermissionGate>
-                      )}
-
-                      {(a.status === 'ACTIVE' || a.status === 'PENDING_COACH_ASSIGNMENT') && (
-                        <PermissionGate permission="COACHING_COACH_REPLACE">
-                          <button
-                            type="button"
-                            className="apid-btn apid-btn-outline apid-btn-sm"
-                            style={{ color: 'var(--err)', borderColor: 'var(--border)' }}
-                            onClick={() => {
-                              setCloseTarget(a);
-                              setCloseReason('ADMINISTRATIVE_CLOSURE');
-                              setActionReason('');
-                            }}
-                            title="Administratively close assignment"
-                          >
-                            <XCircle size={13} /> Close
-                          </button>
-                        </PermissionGate>
-                      )}
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-      )}
-
-      {/* History & Details SlideOverDrawer */}
-      <SlideOverDrawer
-        open={selectedHistoryId !== null}
-        title={`Assignment Details · #${selectedHistoryId}`}
-        subtitle={
-          detailQuery.data
-            ? `${detailQuery.data.assignment.coacheeFullName} (${detailQuery.data.assignment.coacheeEmployeeNumber})`
-            : undefined
-        }
-        onClose={() => setSelectedHistoryId(null)}
-      >
-        {detailQuery.isLoading ? (
-          <LoadingSkeleton rows={5} height={28} />
-        ) : detailQuery.data ? (
-          (() => {
-            const replacementHistory = detailQuery.data.replacementHistory ?? [];
-            const participants = detailQuery.data.participants ?? [];
-            const triggeringGoals = detailQuery.data.triggeringGoals ?? detailQuery.data.goalLines ?? [];
-
-            return (
-              <div className="boa-stack">
-                {/* Status overview */}
-                <div
-                  style={{
-                    background: 'var(--surface-subtle)',
-                    padding: '0.85rem',
-                    borderRadius: 8,
-                    border: '1px solid var(--border)',
-                  }}
-                >
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <span style={{ fontWeight: 600 }}>Lifecycle Status</span>
-                    {renderStatusPill(detailQuery.data.assignment.status)}
-                  </div>
-                  {detailQuery.data.assignment.closureReason && (
-                    <div style={{ marginTop: '0.4rem', fontSize: '0.82rem' }}>
-                      <strong>Closure Reason:</strong>{' '}
-                      {detailQuery.data.assignment.closureReason.replace(/_/g, ' ')}
-                    </div>
-                  )}
-                  {detailQuery.data.assignment.atRisk && (
-                    <div style={{ marginTop: '0.4rem', color: 'var(--err)', fontWeight: 600, fontSize: '0.82rem' }}>
-                      <AlertTriangle size={13} style={{ display: 'inline', marginRight: 4 }} /> Flagged as At Risk
-                    </div>
-                  )}
-                </div>
-
-                {/* Replacement History Trail */}
-                <div>
-                  <h4 style={{ margin: '0.75rem 0 0.4rem 0' }}>Coach Replacement Audit Log</h4>
-                  {replacementHistory.length === 0 ? (
-                    <div className="boa-muted" style={{ fontSize: '0.84rem' }}>
-                      No coach replacements recorded.
-                    </div>
-                  ) : (
-                    <div className="boa-stack">
-                      {replacementHistory.map((h) => (
-                        <div
-                          key={h.id}
-                          style={{
-                            border: '1px solid var(--border)',
-                            borderRadius: 8,
-                            padding: '0.75rem',
-                            background: 'var(--surface-subtle)',
-                          }}
-                        >
-                          <div style={{ fontSize: '0.78rem', fontWeight: 700, color: 'var(--muted)' }}>
-                            {new Date(h.changedAt).toLocaleString()} · Actor: {h.changedByUsername ?? 'Admin'}
-                          </div>
-                          <div style={{ marginTop: '0.25rem', fontSize: '0.86rem' }}>
-                            <strong>{h.fromCoachFullName || 'Unassigned'}</strong> →{' '}
-                            <strong>{h.toCoachFullName}</strong>
-                          </div>
-                          <div className="boa-muted" style={{ fontSize: '0.82rem', marginTop: '0.2rem' }}>
-                            Reason: {h.reason}
-                          </div>
+                      <td>
+                        <div className="flex items-center gap-2">
+                          <span className="font-bold text-xs">
+                            {item.completedSessions} / {item.approvedTarget}
+                          </span>
+                          <span className="text-[10px] text-slate-400">
+                            ({item.deliveryPercentage}%)
+                          </span>
                         </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
+                        <div className="w-24 h-1.5 bg-slate-100 dark:bg-slate-800 rounded-full mt-1 overflow-hidden">
+                          <div
+                            className={`h-full rounded-full ${
+                              item.deliveryPercentage >= 100
+                                ? 'bg-emerald-500'
+                                : item.deliveryPercentage > 0
+                                ? 'bg-amber-500'
+                                : 'bg-slate-300 dark:bg-slate-700'
+                            }`}
+                            style={{ width: `${Math.min(100, item.deliveryPercentage)}%` }}
+                          />
+                        </div>
+                      </td>
 
-                {/* Participants */}
-                <div>
-                  <h4 style={{ margin: '0.75rem 0 0.4rem 0' }}>Coaching Participants</h4>
-                  <div className="apid-table-wrap">
-                    <table className="apid-table">
-                      <thead>
-                        <tr>
-                          <th>Participant</th>
-                          <th>Role</th>
-                          <th>Status</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {participants.map((p) => (
-                          <tr key={p.id}>
-                            <td>
-                              <div style={{ fontWeight: 600 }}>{p.employeeFullName}</div>
-                              <div className="boa-muted" style={{ fontSize: '0.75rem' }}>
-                                {p.employeeNumber}
-                              </div>
-                            </td>
-                            <td>{p.role}</td>
-                            <td>
-                              <StatusPill
-                                label={p.active ? 'ACTIVE' : 'INACTIVE'}
-                                tone={p.active ? 'ok' : 'neutral'}
-                              />
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
+                      <td>
+                        {item.attentionRequired ? (
+                          <span className="boa-pill boa-pill-err" style={{ fontSize: '0.7rem' }} title={item.attentionReason || 'Needs Attention'}>
+                            <AlertTriangle size={11} /> AT RISK
+                          </span>
+                        ) : (
+                          <span className="boa-pill boa-pill-neutral" style={{ fontSize: '0.7rem' }}>
+                            {item.progressTrajectory}
+                          </span>
+                        )}
+                      </td>
 
-                {/* Triggering Goals Breakdown */}
-                {triggeringGoals.length > 0 && (
-                  <div>
-                    <h4 style={{ margin: '0.75rem 0 0.4rem 0' }}>Triggering PMS Goal Breakdown</h4>
-                    <div className="apid-table-wrap">
-                      <table className="apid-table">
-                        <thead>
-                          <tr>
-                            <th>#</th>
-                            <th>Goal</th>
-                            <th>Score</th>
-                            <th>Weight</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {triggeringGoals.map((g) => (
-                            <tr key={g.sourceRowNumber}>
-                              <td className="tabular-nums">{g.sourceRowNumber}</td>
-                              <td>{g.goalName}</td>
-                              <td className="tabular-nums">{g.goalScore?.toFixed(4) ?? '—'}</td>
-                              <td className="tabular-nums">{g.weight != null ? `${g.weight}%` : '—'}</td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  </div>
-                )}
-              </div>
-            );
-          })()
-        ) : null}
-      </SlideOverDrawer>
-
-      {/* Assign Coach Modal */}
-      {assignTarget && (
-        <div className="apid-modal-backdrop" role="dialog" aria-modal="true" aria-label="Assign Coach">
-          <div className="apid-card apid-modal">
-            <h3 style={{ marginTop: 0 }}>Assign Coach · {assignTarget.coacheeFullName}</h3>
-            <p className="boa-muted" style={{ fontSize: '0.83rem' }}>
-              Resolving pending assignment for quarter: <strong>{assignTarget.coachingQuarterLabel}</strong>
-            </p>
-            <form onSubmit={handleAssignSubmit} className="apid-form">
-              <div className="apid-field">
-                <label htmlFor="assign-coach-select">Select Active Bank Coach (Mandatory)</label>
-                <select
-                  id="assign-coach-select"
-                  className="apid-input"
-                  required
-                  value={selectedCoachId}
-                  onChange={(e) => setSelectedCoachId(e.target.value ? Number(e.target.value) : '')}
-                >
-                  <option value="">-- Choose Eligible Employee --</option>
-                  {activeEmployees
-                    .filter((emp) => emp.id !== assignTarget.coacheeEmployeeId)
-                    .map((emp) => (
-                      <option key={emp.id} value={emp.id}>
-                        {emp.fullName} ({emp.employeeNumber}) · {emp.departmentName ?? 'General'}
-                      </option>
-                    ))}
-                </select>
-              </div>
-
-              <div className="apid-field">
-                <label htmlFor="assign-note">Optional Assignment Note</label>
-                <input
-                  id="assign-note"
-                  type="text"
-                  placeholder="e.g., Assigned direct line manager as designated coach"
-                  value={actionReason}
-                  onChange={(e) => setActionReason(e.target.value)}
-                />
-              </div>
-
-              <div className="apid-modal-actions">
-                <button
-                  type="button"
-                  className="apid-btn apid-btn-outline"
-                  onClick={() => setAssignTarget(null)}
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="apid-btn apid-btn-primary"
-                  disabled={!selectedCoachId || assignCoachMutation.isPending}
-                >
-                  {assignCoachMutation.isPending ? 'Assigning...' : 'Confirm Assignment'}
-                </button>
-              </div>
-            </form>
+                      <td className="apid-actions-cell" onClick={(e) => e.stopPropagation()}>
+                        {/* Single Unified Action Button */}
+                        <button
+                          type="button"
+                          className="apid-btn apid-btn-outline apid-btn-sm"
+                          onClick={() => setSelectedDossierAssignmentId(item.assignmentId)}
+                          title="Open full coachee development dossier & session evidence"
+                          style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem', fontWeight: 600 }}
+                        >
+                          <Eye size={13} /> View Dossier
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
           </div>
-        </div>
-      )}
+        )}
 
-      {/* Replace Coach Modal */}
-      {replaceTarget && (
-        <div className="apid-modal-backdrop" role="dialog" aria-modal="true" aria-label="Replace Coach">
-          <div className="apid-card apid-modal">
-            <h3 style={{ marginTop: 0 }}>Replace Coach · {replaceTarget.coacheeFullName}</h3>
-            <p className="boa-muted" style={{ fontSize: '0.83rem' }}>
-              Current Coach: <strong>{replaceTarget.coachFullName ?? 'Unassigned'}</strong> · Quarter:{' '}
-              <strong>{replaceTarget.coachingQuarterLabel}</strong>
-            </p>
-            <form onSubmit={handleReplaceSubmit} className="apid-form">
-              <div className="apid-field">
-                <label htmlFor="replace-coach-select">Select Successor Coach (Mandatory)</label>
-                <select
-                  id="replace-coach-select"
-                  className="apid-input"
-                  required
-                  value={selectedCoachId}
-                  onChange={(e) => setSelectedCoachId(e.target.value ? Number(e.target.value) : '')}
-                >
-                  <option value="">-- Choose Successor Active Employee --</option>
-                  {activeEmployees
-                    .filter(
-                      (emp) =>
-                        emp.id !== replaceTarget.coacheeEmployeeId &&
-                        emp.id !== replaceTarget.coachEmployeeId
-                    )
-                    .map((emp) => (
-                      <option key={emp.id} value={emp.id}>
-                        {emp.fullName} ({emp.employeeNumber}) · {emp.departmentName ?? 'General'}
-                      </option>
-                    ))}
-                </select>
-              </div>
+        {/* Pagination Footer */}
+        {!talentsQuery.isLoading && totalItems > 0 && (
+          <TablePagination
+            currentPage={currentPage}
+            totalItems={totalItems}
+            pageSize={pageSize}
+            onPageChange={setCurrentPage}
+            onPageSizeChange={(newSize) => {
+              setPageSize(newSize);
+              setCurrentPage(1);
+            }}
+          />
+        )}
+      </div>
 
-              <div className="apid-field">
-                <label htmlFor="replace-audit-reason">Mandatory Audit Reason</label>
-                <textarea
-                  id="replace-audit-reason"
-                  className="apid-input"
-                  rows={3}
-                  required
-                  placeholder="Specify reason (e.g., branch reassignment, medical leave, workload rebalance)..."
-                  value={actionReason}
-                  onChange={(e) => setActionReason(e.target.value)}
-                />
-              </div>
+      {/* 7. Drawers & Modals */}
 
-              <div className="apid-modal-actions">
-                <button
-                  type="button"
-                  className="apid-btn apid-btn-outline"
-                  onClick={() => setReplaceTarget(null)}
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="apid-btn apid-btn-primary"
-                  disabled={!selectedCoachId || !actionReason.trim() || replaceCoachMutation.isPending}
-                >
-                  {replaceCoachMutation.isPending ? 'Updating...' : 'Confirm Replacement'}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
+      {/* Talent Dossier Drawer */}
+      <TalentDossierDrawer
+        dossier={dossierQuery.data ?? null}
+        isOpen={selectedDossierAssignmentId !== null}
+        onClose={() => setSelectedDossierAssignmentId(null)}
+        loading={dossierQuery.isLoading}
+      />
 
-      {/* Close Assignment Modal */}
-      {closeTarget && (
-        <div className="apid-modal-backdrop" role="dialog" aria-modal="true" aria-label="Close Assignment">
-          <div className="apid-card apid-modal">
-            <h3 style={{ marginTop: 0 }}>Close Assignment · {closeTarget.coacheeFullName}</h3>
-            <p className="boa-muted" style={{ fontSize: '0.83rem' }}>
-              Are you sure you want to administratively close this coaching assignment?
-            </p>
-            <form onSubmit={handleCloseSubmit} className="apid-form">
-              <div className="apid-field">
-                <label htmlFor="close-reason-select">Closure Reason</label>
-                <select
-                  id="close-reason-select"
-                  className="apid-input"
-                  value={closeReason}
-                  onChange={(e) => setCloseReason(e.target.value as AssignmentClosureReason)}
-                >
-                  <option value="ADMINISTRATIVE_CLOSURE">Administrative Closure</option>
-                  <option value="CLEARED_BY_PMS">Cleared by PMS</option>
-                  <option value="CONTINUED_NEXT_QUARTER">Continued Next Quarter</option>
-                </select>
-              </div>
-
-              <div className="apid-field">
-                <label htmlFor="close-audit-reason">Mandatory Audit Reason</label>
-                <textarea
-                  id="close-audit-reason"
-                  className="apid-input"
-                  rows={3}
-                  required
-                  placeholder="State the justification for closing this assignment..."
-                  value={actionReason}
-                  onChange={(e) => setActionReason(e.target.value)}
-                />
-              </div>
-
-              <div className="apid-modal-actions">
-                <button
-                  type="button"
-                  className="apid-btn apid-btn-outline"
-                  onClick={() => setCloseTarget(null)}
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="apid-btn apid-btn-primary"
-                  style={{ background: 'var(--err)', borderColor: 'var(--err)' }}
-                  disabled={!actionReason.trim() || closeAssignmentMutation.isPending}
-                >
-                  {closeAssignmentMutation.isPending ? 'Closing...' : 'Close Assignment'}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
+      {/* Ask APID Decision Copilot Drawer */}
+      <AskApidCopilotDrawer
+        isOpen={isCopilotOpen}
+        onClose={() => setIsCopilotOpen(false)}
+        quarterId={activeQuarterId}
+        onOpenDossier={(assignmentId) => setSelectedDossierAssignmentId(assignmentId)}
+        onFilterBranch={(district, branch) => setFilterValues((prev) => ({ ...prev, district, branch }))}
+        onFilterDistrict={(district) => setFilterValues((prev) => ({ ...prev, district, branch: 'ALL' }))}
+      />
     </div>
   );
 }

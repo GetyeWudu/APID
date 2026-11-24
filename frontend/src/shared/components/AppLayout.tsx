@@ -298,13 +298,6 @@ export function AppLayout({ children }: { children: ReactNode }) {
               matchSearch: '?tab=approvals',
             },
             {
-              to: '/coaching/pms?tab=reports',
-              label: 'Coaching Reports',
-              icon: <LayoutDashboard size={17} />,
-              requiredAnyPermissions: ['COACHING_REPORT_VIEW_ALL'],
-              matchSearch: '?tab=reports',
-            },
-            {
               to: '/coaching/pms?tab=policies',
               label: 'Coaching Rules & Policies',
               icon: <SlidersHorizontal size={17} />,
