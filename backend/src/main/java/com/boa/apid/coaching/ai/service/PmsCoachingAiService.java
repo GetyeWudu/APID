@@ -230,11 +230,17 @@ public class PmsCoachingAiService {
                     AiCopilotResponseDto cachedDto = objectMapper.readValue(cachedJson, AiCopilotResponseDto.class);
                     long duration = System.currentTimeMillis() - start;
                     log.info("Redis cache HIT for query '{}' in {}ms [key: {}]", cleanQuery, duration, cacheKey);
+                    String cachedOrigin = cachedDto.model();
+                    if (cachedOrigin == null || cachedOrigin.isBlank()) {
+                        cachedOrigin = "APID Cache";
+                    } else if (!cachedOrigin.contains("Cache")) {
+                        cachedOrigin = cachedOrigin + " (Cache)";
+                    }
                     return new AiCopilotResponseDto(
                             cachedDto.query(),
                             cachedDto.answer(),
                             cachedDto.actionLinks(),
-                            "qwen3:8b (Redis Cache)",
+                            cachedOrigin,
                             duration
                     );
                 }
