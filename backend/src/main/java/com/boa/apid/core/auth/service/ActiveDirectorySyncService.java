@@ -44,10 +44,6 @@ public class ActiveDirectorySyncService {
     private static final Map<String, String> DEFAULT_GROUP_ROLE_MAPPINGS = Map.of(
             "APID-SUPER-ADMINS", "Super Admin",
             "Domain Admins", "Super Admin",
-            "APID-PMS-DISTRICT-DIRECTORS", "District Director",
-            "District-Directors", "District Director",
-            "APID-PMS-BRANCH-MANAGERS", "Branch Manager",
-            "Branch-Managers", "Branch Manager",
             "APID-PMS-OVERSIGHT", "HR Admin",
             "APID-ALL-EMPLOYEES", "Employee",
             "APID-PMS-EMPLOYEES", "Employee"
