@@ -9,6 +9,45 @@ export interface DirectorateSummary {
   atRiskCount: number;
 }
 
+export interface TopCoachRatingItem {
+  coachEmployeeId: number;
+  coachName: string;
+  coachStaffId: string;
+  department: string;
+  district: string;
+  averageRating: number | null;
+  totalRatings: number;
+  completedSessions: number;
+  activeCoachees: number;
+  excellenceBadge: string;
+}
+
+export interface MidQuarterInactivityItem {
+  assignmentId: number;
+  coachEmployeeId: number | null;
+  coachName: string;
+  coachStaffId: string;
+  coachEmail: string | null;
+  coacheeName: string;
+  coacheeStaffId: string;
+  coacheeEmail: string | null;
+  department: string;
+  district: string;
+  elapsedWeeks: number;
+  completedSessions: number;
+  targetSessions: number;
+  severity: 'CRITICAL_STALL' | 'BEHIND_PACING' | 'PENDING_KICKOFF' | 'ON_TRACK';
+  lastActivityAt: string | null;
+  recommendedAction: string;
+}
+
+export interface BatchNotificationResult {
+  totalStalledCoaches: number;
+  notificationsDispatched: number;
+  emailsQueued: number;
+  executionStatus: string;
+}
+
 export interface PmsReportSummary {
   fiscalQuarterName: string;
   totalInRemediation: number;
@@ -278,6 +317,27 @@ export const pmsReportApi = {
     link.click();
     document.body.removeChild(link);
     window.URL.revokeObjectURL(url);
+  },
+
+  getTopCoaches: async (quarterId: number = 2): Promise<TopCoachRatingItem[]> => {
+    const res = await apiClient.get<TopCoachRatingItem[]>('/coaching/reports/top-coaches', {
+      params: { quarterId },
+    });
+    return res.data;
+  },
+
+  getMidQuarterInactivity: async (quarterId: number = 2): Promise<MidQuarterInactivityItem[]> => {
+    const res = await apiClient.get<MidQuarterInactivityItem[]>('/coaching/reports/midquarter-inactivity', {
+      params: { quarterId },
+    });
+    return res.data;
+  },
+
+  notifyAllStalledCoaches: async (quarterId: number = 2): Promise<BatchNotificationResult> => {
+    const res = await apiClient.post<BatchNotificationResult>('/coaching/reports/midquarter-inactivity/notify-all', null, {
+      params: { quarterId },
+    });
+    return res.data;
   },
 
   downloadDossierPdf: async (assignmentId: number, coacheeStaffId?: string): Promise<void> => {

@@ -111,6 +111,15 @@ public class CoachingSessionController {
         return ApiResponse.ok(sessionService.generateMinutes(id, file, actor));
     }
 
+    @PostMapping("/{id:\\d+}/synthesize-ai-minutes")
+    @PreAuthorize("hasAuthority('EMPLOYEE_PORTAL_ACCESS')")
+    public ApiResponse<GeneratedMinutesDto> synthesizeAiMinutes(
+            @PathVariable Long id,
+            @AuthenticationPrincipal ApidUserPrincipal actor
+    ) {
+        return ApiResponse.ok(sessionService.synthesizeAiMinutes(id, actor));
+    }
+
     @PostMapping("/{id:\\d+}/feedback")
     @PreAuthorize("hasAuthority('EMPLOYEE_PORTAL_ACCESS')")
     public ApiResponse<CoachingSessionDto> submitFeedback(

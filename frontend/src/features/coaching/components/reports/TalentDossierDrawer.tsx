@@ -30,6 +30,128 @@ interface TalentDossierDrawerProps {
   loading: boolean;
 }
 
+function FormalMinutesViewer({ text }: { text: string }) {
+  const lines = text.split('\n');
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.45rem', fontSize: '0.8rem', lineHeight: 1.55 }}>
+      {lines.map((line, idx) => {
+        const trimmed = line.trim();
+        if (!trimmed) return <div key={idx} style={{ height: '0.2rem' }} />;
+
+        // Numbered section header (e.g., "1. EXECUTIVE DIAGNOSTIC SUMMARY")
+        const isSectionHeader = /^\d+\.\s+[A-Z\s&:-]{4,}/.test(trimmed);
+        if (isSectionHeader) {
+          return (
+            <div
+              key={idx}
+              style={{
+                fontWeight: 800,
+                fontSize: '0.82rem',
+                color: '#78350f',
+                letterSpacing: '0.02em',
+                marginTop: idx > 0 ? '0.5rem' : '0',
+                paddingBottom: '0.2rem',
+                borderBottom: '1px solid rgba(245, 158, 11, 0.3)',
+              }}
+              className="dark:text-amber-300 dark:border-amber-900/40"
+            >
+              {trimmed}
+            </div>
+          );
+        }
+
+        // Key-value pairs (e.g., "Primary Focus: Branch FX", "Daily Target: 50 checklists")
+        const colonIdx = trimmed.indexOf(':');
+        if (colonIdx > 0 && colonIdx < 35 && !trimmed.startsWith('http')) {
+          const label = trimmed.slice(0, colonIdx);
+          const value = trimmed.slice(colonIdx + 1);
+          return (
+            <div
+              key={idx}
+              style={{
+                paddingLeft: '1rem',
+                borderLeft: '2px solid rgba(217, 119, 6, 0.35)',
+                color: '#1e293b',
+              }}
+              className="dark:text-slate-200"
+            >
+              <strong style={{ color: '#92400e', fontWeight: 700 }} className="dark:text-amber-400">
+                {label}:
+              </strong>
+              <span>{value}</span>
+            </div>
+          );
+        }
+
+        // Standard formal indented paragraph
+        return (
+          <div
+            key={idx}
+            style={{
+              paddingLeft: '0.75rem',
+              color: '#334155',
+            }}
+            className="dark:text-slate-300"
+          >
+            {trimmed}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function FormalActionItemsViewer({ text }: { text: string }) {
+  const items = text.split('\n').map((l) => l.trim()).filter(Boolean);
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem', marginTop: '0.35rem' }}>
+      {items.map((item, idx) => {
+        const match = item.match(/^(\d+)[\.\)]\s*(.*)$/);
+        const num = match ? match[1] : `${idx + 1}`;
+        const content = match ? match[2] : item;
+        return (
+          <div
+            key={idx}
+            style={{
+              display: 'flex',
+              alignItems: 'flex-start',
+              gap: '0.55rem',
+              padding: '0.45rem 0.65rem',
+              borderRadius: '6px',
+              backgroundColor: 'rgba(254, 243, 199, 0.55)',
+              border: '1px solid rgba(251, 191, 36, 0.35)',
+              fontSize: '0.78rem',
+              lineHeight: 1.45,
+            }}
+            className="dark:bg-amber-950/30 dark:border-amber-900/40"
+          >
+            <span
+              style={{
+                flexShrink: 0,
+                width: 18,
+                height: 18,
+                borderRadius: '4px',
+                backgroundColor: '#d97706',
+                color: '#ffffff',
+                fontWeight: 800,
+                fontSize: '0.68rem',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}
+            >
+              {num}
+            </span>
+            <span style={{ fontWeight: 500, color: '#1e293b' }} className="dark:text-slate-200">
+              {content}
+            </span>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 function SessionEvidenceDetails({ sessionId }: { sessionId: number }) {
   const { data, isLoading, isError } = useQuery({
     queryKey: ['session-evidence', sessionId],
@@ -700,41 +822,26 @@ export const TalentDossierDrawer: React.FC<TalentDossierDrawerProps> = ({
                                   qwen3:8b (CUDA GPU)
                                 </span>
                               </div>
-                              <p
-                                style={{
-                                  margin: 0,
-                                  fontSize: '0.8rem',
-                                  lineHeight: 1.5,
-                                  color: '#1e293b',
-                                  whiteSpace: 'pre-wrap',
-                                }}
-                                className="dark:text-slate-200"
-                              >
-                                {s.sessionDiscussionMinutes}
-                              </p>
+                              <FormalMinutesViewer text={s.sessionDiscussionMinutes} />
 
                               {s.actionItemsAssigned && (
-                                <div style={{ borderTop: '1px solid #fde68a', paddingTop: '0.45rem', marginTop: '0.5rem' }}>
+                                <div style={{ borderTop: '1px solid #fde68a', paddingTop: '0.55rem', marginTop: '0.65rem' }}>
                                   <span
                                     style={{
                                       display: 'inline-flex',
                                       alignItems: 'center',
-                                      gap: '0.3rem',
-                                      fontSize: '0.7rem',
-                                      fontWeight: 700,
+                                      gap: '0.35rem',
+                                      fontSize: '0.72rem',
+                                      fontWeight: 800,
                                       textTransform: 'uppercase',
-                                      color: '#b45309',
-                                      marginBottom: '0.15rem',
+                                      letterSpacing: '0.03em',
+                                      color: '#92400e',
+                                      marginBottom: '0.25rem',
                                     }}
                                   >
-                                    <CheckSquare size={12} /> Agreed Action Items &amp; Remediation Focus
+                                    <CheckSquare size={13} /> Agreed Action Items &amp; Remediation Targets
                                   </span>
-                                  <p
-                                    style={{ margin: 0, fontSize: '0.78rem', fontWeight: 500, color: '#334155', lineHeight: 1.45 }}
-                                    className="dark:text-slate-300"
-                                  >
-                                    {s.actionItemsAssigned}
-                                  </p>
+                                  <FormalActionItemsViewer text={s.actionItemsAssigned} />
                                 </div>
                               )}
                             </div>

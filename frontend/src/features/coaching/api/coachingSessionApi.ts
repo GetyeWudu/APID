@@ -237,6 +237,13 @@ export const coachingSessionApi = {
     return res.data.data;
   },
 
+  async synthesizeAiMinutes(sessionId: number): Promise<GeneratedMinutesResponse> {
+    const res = await apiClient.post<ApiResponse<GeneratedMinutesResponse>>(
+      `/coaching/sessions/${sessionId}/synthesize-ai-minutes`
+    );
+    return res.data.data;
+  },
+
   async submitFeedback(id: number, payload: SubmitFeedbackPayload): Promise<CoachingSessionItem> {
     const res = await apiClient.post<ApiResponse<CoachingSessionItem>>(
       `/coaching/sessions/${id}/feedback`,

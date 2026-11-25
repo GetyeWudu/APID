@@ -23,6 +23,7 @@ export const DailyVideoModal: React.FC<DailyVideoModalProps> = ({
       participantCount={session.participants?.length || 2}
       fetchToken={() => coachingSessionApi.getJoinToken(session.id)}
       moduleContext="COACHING"
+      aiSummarizationEnabled={session.aiSummarizationEnabled !== false}
     />
   );
 };

@@ -19,6 +19,7 @@ export interface LiveKitVideoModalProps {
   participantCount?: number;
   fetchToken: () => Promise<VideoSessionJoinToken>;
   moduleContext?: 'COACHING' | 'MENTORING';
+  aiSummarizationEnabled?: boolean;
 }
 
 function extractServerUrl(roomUrlWithToken: string): string {
@@ -37,6 +38,7 @@ export const LiveKitVideoModal: React.FC<LiveKitVideoModalProps> = ({
   participantCount = 2,
   fetchToken,
   moduleContext = 'COACHING',
+  aiSummarizationEnabled = true,
 }) => {
   const [tokenData, setTokenData] = useState<VideoSessionJoinToken | null>(null);
   const [loading, setLoading] = useState(false);
@@ -203,7 +205,56 @@ export const LiveKitVideoModal: React.FC<LiveKitVideoModalProps> = ({
             </div>
           </div>
 
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+            {/* Visual LiveKit Server VAD & Dual-Pass ASR Guarantee Badge */}
+            {aiSummarizationEnabled ? (
+              <div
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '0.5rem',
+                  backgroundColor: 'rgba(15, 23, 42, 0.85)',
+                  border: '1px solid rgba(16, 185, 129, 0.45)',
+                  padding: '0.35rem 0.85rem',
+                  borderRadius: '999px',
+                  fontSize: '0.74rem',
+                  color: '#f8fafc',
+                  boxShadow: '0 2px 8px rgba(0,0,0,0.25)',
+                }}
+              >
+                <span
+                  style={{
+                    width: 8,
+                    height: 8,
+                    borderRadius: '999px',
+                    backgroundColor: '#10b981',
+                    boxShadow: '0 0 10px #10b981',
+                    display: 'inline-block',
+                    animation: 'pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite',
+                  }}
+                />
+                <span style={{ fontWeight: 600 }}>
+                  LiveKit Server VAD &amp; Dual-Pass ASR (faster-whisper + Amharic ASR) Active
+                </span>
+                <span style={{ color: '#94a3b8' }}>• Output: 100% English Executive Minutes</span>
+              </div>
+            ) : (
+              <div
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  padding: '0.25rem 0.65rem',
+                  borderRadius: '999px',
+                  fontSize: '0.72rem',
+                  color: '#94a3b8',
+                  backgroundColor: 'rgba(30, 41, 59, 0.6)',
+                  border: '1px solid rgba(71, 85, 105, 0.4)',
+                }}
+              >
+                AI Notetaker: Disabled
+              </div>
+            )}
+
             {tokenData?.roomUrlWithToken && (
               <a
                 href={tokenData.roomUrlWithToken}

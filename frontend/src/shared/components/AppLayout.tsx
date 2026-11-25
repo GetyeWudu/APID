@@ -274,6 +274,30 @@ export function AppLayout({ children }: { children: ReactNode }) {
               ],
             },
             {
+              to: '/coaching/pms?tab=quality',
+              label: 'Coach Quality & CSAT',
+              icon: <Award size={17} />,
+              requiredAnyPermissions: [
+                'COACHING_ASSIGNMENT_VIEW_ALL',
+                'COACHING_COACH_REPLACE',
+                'COACHING_INITIATIVE_CREATE',
+                'COACHING_REPORT_VIEW_ALL',
+              ],
+              matchSearch: '?tab=quality',
+            },
+            {
+              to: '/coaching/pms?tab=matrix',
+              label: 'Regional & Branch Matrix',
+              icon: <Building2 size={17} />,
+              requiredAnyPermissions: [
+                'COACHING_ASSIGNMENT_VIEW_ALL',
+                'COACHING_COACH_REPLACE',
+                'COACHING_INITIATIVE_CREATE',
+                'COACHING_REPORT_VIEW_ALL',
+              ],
+              matchSearch: '?tab=matrix',
+            },
+            {
               to: '/coaching/pms?tab=referrals',
               label: 'Persistent Referrals (< 3.0)',
               icon: <ShieldAlert size={17} />,

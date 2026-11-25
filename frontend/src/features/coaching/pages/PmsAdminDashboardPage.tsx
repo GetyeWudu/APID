@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import { Sliders } from 'lucide-react';
+import { Sliders, Award, Building, LayoutDashboard } from 'lucide-react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../../../app/AuthContext';
 import {
@@ -9,12 +9,14 @@ import {
 } from '../../../shared/components/ui';
 import { PMS_MODULE_PERMISSIONS } from '../../../shared/auth/workspaceResolver';
 import { PmsAssignmentsTab } from '../components/PmsAssignmentsTab';
+import { CoachQualityTab } from '../components/CoachQualityTab';
+import { RegionalMatrixTab } from '../components/RegionalMatrixTab';
 import { PmsUploadPreviewTab } from '../components/PmsUploadPreviewTab';
 import { SkillDevApprovalTab } from '../components/SkillDevApprovalTab';
 import { CoachingRulesTab } from '../components/CoachingRulesTab';
 import { PmsReferralsTab } from '../components/PmsReferralsTab';
 
-type PmsTabKey = 'overview' | 'referrals' | 'uploads' | 'approvals' | 'policies';
+type PmsTabKey = 'overview' | 'quality' | 'matrix' | 'referrals' | 'uploads' | 'approvals' | 'policies';
 
 interface PmsTabMeta {
   key: PmsTabKey;
@@ -26,6 +28,26 @@ const PMS_TABS: PmsTabMeta[] = [
   {
     key: 'overview',
     label: 'Coaching Overview',
+    anyPermissions: [
+      'COACHING_ASSIGNMENT_VIEW_ALL',
+      'COACHING_COACH_REPLACE',
+      'COACHING_INITIATIVE_CREATE',
+      'COACHING_REPORT_VIEW_ALL',
+    ],
+  },
+  {
+    key: 'quality',
+    label: 'Coach Quality & CSAT',
+    anyPermissions: [
+      'COACHING_ASSIGNMENT_VIEW_ALL',
+      'COACHING_COACH_REPLACE',
+      'COACHING_INITIATIVE_CREATE',
+      'COACHING_REPORT_VIEW_ALL',
+    ],
+  },
+  {
+    key: 'matrix',
+    label: 'Regional & Branch Matrix',
     anyPermissions: [
       'COACHING_ASSIGNMENT_VIEW_ALL',
       'COACHING_COACH_REPLACE',
@@ -99,7 +121,11 @@ export function PmsAdminDashboardPage() {
         subtitle={
           activeTab === 'policies'
             ? 'Configure minimum sessions, early video call access windows, and reschedule limits for the entire bank.'
-            : 'Review appraisal ratings (Rounded < 3 requires coaching), manage assigned coaches, and approve skill requests.'
+            : activeTab === 'quality'
+            ? 'Coachee post-session evaluations, top-rated coach recognition, and proactive mid-quarter remediation pacing.'
+            : activeTab === 'matrix'
+            ? 'Scalable hierarchical performance comparison across 200+ districts, branch execution pacing, and primary competency deficits.'
+            : 'Executive oversight, AI briefing, KPI distribution, and verified coaching remediation assignments roster.'
         }
         source={activeTab === 'policies' ? 'live' : 'preview'}
       />
@@ -143,6 +169,9 @@ export function PmsAdminDashboardPage() {
                 transition: 'all 0.15s ease',
               }}
             >
+              {tab.key === 'overview' && <LayoutDashboard size={14} />}
+              {tab.key === 'quality' && <Award size={14} />}
+              {tab.key === 'matrix' && <Building size={14} />}
               {tab.key === 'policies' && <Sliders size={14} />}
               {tab.label}
             </button>
@@ -150,7 +179,29 @@ export function PmsAdminDashboardPage() {
         })}
       </div>
 
-      {activeTab === 'referrals' ? (
+      {activeTab === 'quality' ? (
+        <PermissionGate
+          anyPermissions={[
+            'COACHING_ASSIGNMENT_VIEW_ALL',
+            'COACHING_COACH_REPLACE',
+            'COACHING_INITIATIVE_CREATE',
+            'COACHING_REPORT_VIEW_ALL',
+          ]}
+        >
+          <CoachQualityTab />
+        </PermissionGate>
+      ) : activeTab === 'matrix' ? (
+        <PermissionGate
+          anyPermissions={[
+            'COACHING_ASSIGNMENT_VIEW_ALL',
+            'COACHING_COACH_REPLACE',
+            'COACHING_INITIATIVE_CREATE',
+            'COACHING_REPORT_VIEW_ALL',
+          ]}
+        >
+          <RegionalMatrixTab />
+        </PermissionGate>
+      ) : activeTab === 'referrals' ? (
         <PermissionGate
           anyPermissions={[
             'COACHING_ASSIGNMENT_VIEW_ALL',

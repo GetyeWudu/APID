@@ -157,10 +157,14 @@ public class OpenPdfDossierExporter {
                     String statusStr = logItem.sessionStatus() != null ? logItem.sessionStatus().name() : "SCHEDULED";
                     String assessStr = logItem.coachAssessment() != null ? logItem.coachAssessment().name() : (logItem.feedbackRating() != null ? logItem.feedbackRating() + "/5" : "Pending Evaluation");
 
-                    addCell(sessionBlock, seq + " (" + logItem.meetingMode() + ")", boldFont, BOA_NAVY, Color.WHITE);
-                    addCell(sessionBlock, dateStr, normalFont, BOA_LIGHT_BG);
-                    addCell(sessionBlock, statusStr, boldFont, BOA_LIGHT_BG);
-                    addCell(sessionBlock, assessStr, boldFont, BOA_LIGHT_BG);
+                    Font seqFont = FontFactory.getFont(FontFactory.HELVETICA_BOLD, 8.5f, BOA_NAVY);
+                    Font statusFont = FontFactory.getFont(FontFactory.HELVETICA_BOLD, 8.5f, "COMPLETED".equals(statusStr) ? new Color(5, 150, 105) : BOA_GOLD);
+                    Color rowBg = new Color(241, 245, 249); // Clean soft slate header
+
+                    addCell(sessionBlock, seq + " (" + logItem.meetingMode() + ")", seqFont, rowBg, BOA_NAVY);
+                    addCell(sessionBlock, dateStr, normalFont, rowBg, TEXT_DARK);
+                    addCell(sessionBlock, statusStr, statusFont, rowBg, "COMPLETED".equals(statusStr) ? new Color(5, 150, 105) : BOA_GOLD);
+                    addCell(sessionBlock, assessStr, boldFont, rowBg, TEXT_DARK);
                     document.add(sessionBlock);
 
                     // AI Executive Minutes & Agreed Action Items Box
@@ -175,17 +179,49 @@ public class OpenPdfDossierExporter {
                         noteCell.setPadding(8);
 
                         Paragraph minHeader = new Paragraph("AI EXECUTIVE SUMMARY & DIAGNOSTIC MINUTES (qwen3:8b):", FontFactory.getFont(FontFactory.HELVETICA_BOLD, 8, BOA_GOLD));
-                        Paragraph minBody = new Paragraph(logItem.sessionDiscussionMinutes(), normalFont);
-                        minBody.setSpacingAfter(4);
+                        minHeader.setSpacingAfter(4);
                         noteCell.addElement(minHeader);
-                        noteCell.addElement(minBody);
+
+                        // Formal indented layout without bullet dots
+                        String[] minuteLines = logItem.sessionDiscussionMinutes().split("\\r?\\n");
+                        for (String mLine : minuteLines) {
+                            String trimmed = mLine.trim();
+                            if (trimmed.isEmpty()) continue;
+                            if (trimmed.matches("^\\d+\\.\\s+[A-Z\\s&:-]{4,}.*")) {
+                                Paragraph secHead = new Paragraph(trimmed, FontFactory.getFont(FontFactory.HELVETICA_BOLD, 7.5f, BOA_NAVY));
+                                secHead.setSpacingBefore(3);
+                                secHead.setSpacingAfter(1);
+                                noteCell.addElement(secHead);
+                            } else if (trimmed.contains(":") && trimmed.indexOf(":") < 35 && !trimmed.startsWith("http")) {
+                                int cIdx = trimmed.indexOf(":");
+                                String lbl = trimmed.substring(0, cIdx);
+                                String val = trimmed.substring(cIdx + 1);
+                                Paragraph kvPara = new Paragraph();
+                                kvPara.setIndentationLeft(8);
+                                kvPara.add(new Phrase(lbl + ":", FontFactory.getFont(FontFactory.HELVETICA_BOLD, 7.2f, BOA_GOLD)));
+                                kvPara.add(new Phrase(val, FontFactory.getFont(FontFactory.HELVETICA, 7.2f, Color.DARK_GRAY)));
+                                noteCell.addElement(kvPara);
+                            } else {
+                                Paragraph normPara = new Paragraph(trimmed, FontFactory.getFont(FontFactory.HELVETICA, 7.2f, Color.DARK_GRAY));
+                                normPara.setIndentationLeft(6);
+                                noteCell.addElement(normPara);
+                            }
+                        }
 
                         if (logItem.actionItemsAssigned() != null && !logItem.actionItemsAssigned().isBlank()) {
-                            Paragraph actHeader = new Paragraph("AGREED ACTION ITEMS & REMEDIATION HOMEWORK:", FontFactory.getFont(FontFactory.HELVETICA_BOLD, 8, BOA_NAVY));
-                            Paragraph actBody = new Paragraph(logItem.actionItemsAssigned(), normalFont);
-                            actHeader.setSpacingBefore(3);
+                            Paragraph actHeader = new Paragraph("AGREED ACTION ITEMS & REMEDIATION TARGETS:", FontFactory.getFont(FontFactory.HELVETICA_BOLD, 8, BOA_NAVY));
+                            actHeader.setSpacingBefore(5);
+                            actHeader.setSpacingAfter(3);
                             noteCell.addElement(actHeader);
-                            noteCell.addElement(actBody);
+
+                            String[] actLines = logItem.actionItemsAssigned().split("\\r?\\n");
+                            for (String aLine : actLines) {
+                                String trimmedAct = aLine.trim();
+                                if (trimmedAct.isEmpty()) continue;
+                                Paragraph actPara = new Paragraph(trimmedAct, FontFactory.getFont(FontFactory.HELVETICA, 7.2f, Color.DARK_GRAY));
+                                actPara.setIndentationLeft(8);
+                                noteCell.addElement(actPara);
+                            }
                         }
 
                         noteTable.addCell(noteCell);
@@ -238,7 +274,11 @@ public class OpenPdfDossierExporter {
     }
 
     private void addCell(PdfPTable table, String text, Font font, Color bgColor, Color textColor) {
-        PdfPCell cell = new PdfPCell(new Phrase(text != null ? text : "—", font));
+        Font cellFont = new Font(font);
+        if (textColor != null) {
+            cellFont.setColor(textColor);
+        }
+        PdfPCell cell = new PdfPCell(new Phrase(text != null ? text : "—", cellFont));
         cell.setBackgroundColor(bgColor);
         cell.setBorderColor(BOA_BORDER);
         cell.setPadding(6);

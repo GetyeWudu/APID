@@ -64,7 +64,7 @@ export const CompleteSessionModal: React.FC<CompleteSessionModalProps> = ({
     setSessionNotesMinutes(session.sessionNotesMinutes || '');
     setActionItems(session.actionItems || '');
     setError(null);
-    if (session.sessionNotesMinutes && session.sessionNotesMinutes.trim()) {
+    if (session.aiSummarizationEnabled !== false && session.sessionNotesMinutes && session.sessionNotesMinutes.trim()) {
       setAiSuccessMessage(
         '✨ Meeting minutes & action items were automatically pre-filled by the in-meeting AI Notetaker! Please review, edit if needed, and complete the session.'
       );
@@ -89,6 +89,40 @@ export const CompleteSessionModal: React.FC<CompleteSessionModalProps> = ({
 
   // Guard after all hooks
   if (!isOpen || !session) return null;
+
+  const handleAutoSynthesize = async () => {
+    if (!session) return;
+    try {
+      setGeneratingAi(true);
+      setError(null);
+      setAiSuccessMessage(null);
+
+      const result = await coachingSessionApi.synthesizeAiMinutes(session.id);
+
+      if (result.sessionNotesMinutes) {
+        setSessionNotesMinutes(result.sessionNotesMinutes);
+      }
+      if (result.actionItems) {
+        setActionItems(result.actionItems);
+      }
+      if (result.keyTopics && result.keyTopics.length > 0) {
+        setKeyTopics(result.keyTopics);
+      }
+      if (result.rawCandidates) {
+        setRawCandidates(result.rawCandidates);
+      }
+
+      setAiSuccessMessage(
+        '✨ Meeting minutes & action items generated 100% in English by qwen3:8b! Please review, edit if needed, and complete the session.'
+      );
+      setShowRawCandidates(false);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Failed to auto-synthesize AI minutes.';
+      setError(msg);
+    } finally {
+      setGeneratingAi(false);
+    }
+  };
 
   const handleAiGenerate = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -265,155 +299,178 @@ export const CompleteSessionModal: React.FC<CompleteSessionModalProps> = ({
             </div>
           )}
 
-          {/* AI Minutes Assistant Banner */}
-          <div
-            style={{
-              padding: '0.9rem 1.15rem',
-              borderRadius: '10px',
-              border: '1px solid #e0e7ff',
-              background: 'linear-gradient(135deg, #f8faff 0%, #f1f5f9 100%)',
-              display: 'flex',
-              flexDirection: 'column',
-              gap: '0.65rem',
-            }}
-          >
+          {/* AI Minutes Assistant Banner - Displayed ONLY when AI Auto Summarization is enabled */}
+          {session.aiSummarizationEnabled !== false && (
             <div
               style={{
+                padding: '0.9rem 1.15rem',
+                borderRadius: '10px',
+                border: '1px solid #e0e7ff',
+                background: 'linear-gradient(135deg, #f8faff 0%, #f1f5f9 100%)',
                 display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                flexWrap: 'wrap',
-                gap: '0.75rem',
+                flexDirection: 'column',
+                gap: '0.65rem',
               }}
             >
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
-                <span
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    width: '34px',
-                    height: '34px',
-                    borderRadius: '8px',
-                    background: 'rgba(202, 138, 4, 0.15)',
-                    color: '#ca8a04',
-                    flexShrink: 0,
-                  }}
-                >
-                  <Sparkles size={18} />
-                </span>
-                <div>
-                  <h4 style={{ margin: 0, fontSize: '0.95rem', fontWeight: 600, color: '#1e293b' }}>
-                    AI Meeting Minutes Assistant (Bilingual Amharic + English)
-                  </h4>
-                  <p style={{ margin: '0.15rem 0 0', fontSize: '0.8rem', color: '#64748b' }}>
-                    Upload meeting audio to auto-synthesize discussion minutes & action items via on-premise Dual-Pass ASR.
-                  </p>
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  flexWrap: 'wrap',
+                  gap: '0.75rem',
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+                  <span
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      width: '34px',
+                      height: '34px',
+                      borderRadius: '8px',
+                      background: 'rgba(202, 138, 4, 0.15)',
+                      color: '#ca8a04',
+                      flexShrink: 0,
+                    }}
+                  >
+                    <Sparkles size={18} />
+                  </span>
+                  <div>
+                    <h4 style={{ margin: 0, fontSize: '0.95rem', fontWeight: 600, color: '#1e293b' }}>
+                      AI Meeting Minutes Assistant (Dual-Pass ASR + qwen3:8b)
+                    </h4>
+                    <p style={{ margin: '0.15rem 0 0', fontSize: '0.8rem', color: '#64748b' }}>
+                      Server-side VAD &amp; ASR (75% Amharic / 25% English) &bull; Generated report is <strong>100% in English</strong>.
+                    </p>
+                  </div>
+                </div>
+
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
+                  <input
+                    type="file"
+                    ref={fileInputRef}
+                    onChange={handleAiGenerate}
+                    accept="audio/*,.wav,.ogg,.mp3,.m4a"
+                    style={{ display: 'none' }}
+                  />
+                  {/* Instant Auto-Generate Trigger (No audio file required) */}
+                  <button
+                    type="button"
+                    disabled={generatingAi || loading}
+                    onClick={handleAutoSynthesize}
+                    className="apid-btn apid-btn-primary"
+                    style={{
+                      padding: '0.45rem 1rem',
+                      fontSize: '0.84rem',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '0.45rem',
+                      cursor: generatingAi ? 'not-allowed' : 'pointer',
+                      backgroundColor: 'var(--brand-gold, #ca8a04)',
+                      borderColor: 'var(--brand-gold, #ca8a04)',
+                      color: '#fff',
+                      fontWeight: 600,
+                    }}
+                  >
+                    {generatingAi ? (
+                      <>
+                        <Loader2 size={16} className="animate-spin" />
+                        <span>Synthesizing (100% English)...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Sparkles size={16} />
+                        <span>Auto-Generate AI Minutes</span>
+                      </>
+                    )}
+                  </button>
+
+                  {/* Upload Recording & Auto-Generate (Retained for ASR testing) */}
+                  <button
+                    type="button"
+                    disabled={generatingAi || loading}
+                    onClick={() => fileInputRef.current?.click()}
+                    className="apid-btn apid-btn-outline"
+                    style={{
+                      padding: '0.45rem 0.85rem',
+                      fontSize: '0.82rem',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '0.4rem',
+                      fontWeight: 500,
+                    }}
+                    title="Upload an audio file for ASR test verification"
+                  >
+                    <Upload size={14} />
+                    <span>Upload Audio (Test)</span>
+                  </button>
                 </div>
               </div>
 
-              <div>
-                <input
-                  type="file"
-                  ref={fileInputRef}
-                  onChange={handleAiGenerate}
-                  accept="audio/*,.wav,.ogg,.mp3,.m4a"
-                  style={{ display: 'none' }}
-                />
-                <button
-                  type="button"
-                  disabled={generatingAi || loading}
-                  onClick={() => fileInputRef.current?.click()}
-                  className="apid-btn apid-btn-primary"
+              {generatingAi && (
+                <div
                   style={{
-                    padding: '0.45rem 1rem',
-                    fontSize: '0.84rem',
+                    fontSize: '0.82rem',
+                    color: '#475569',
                     display: 'flex',
                     alignItems: 'center',
-                    gap: '0.45rem',
-                    cursor: generatingAi ? 'not-allowed' : 'pointer',
-                    backgroundColor: 'var(--brand-gold, #ca8a04)',
-                    borderColor: 'var(--brand-gold, #ca8a04)',
-                    color: '#fff',
-                    fontWeight: 600,
+                    gap: '0.5rem',
+                    padding: '0.55rem 0.85rem',
+                    background: 'rgba(202, 138, 4, 0.08)',
+                    borderRadius: '6px',
+                    border: '1px dashed #ca8a04',
                   }}
                 >
-                  {generatingAi ? (
-                    <>
-                      <Loader2 size={16} className="animate-spin" />
-                      <span>Transcribing & Synthesizing...</span>
-                    </>
-                  ) : (
-                    <>
-                      <Upload size={16} />
-                      <span>Upload Recording & Auto-Generate</span>
-                    </>
-                  )}
-                </button>
-              </div>
-            </div>
-
-            {generatingAi && (
-              <div
-                style={{
-                  fontSize: '0.82rem',
-                  color: '#475569',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '0.5rem',
-                  padding: '0.55rem 0.85rem',
-                  background: 'rgba(202, 138, 4, 0.08)',
-                  borderRadius: '6px',
-                  border: '1px dashed #ca8a04',
-                }}
-              >
-                <Loader2 size={15} className="animate-spin" style={{ color: '#ca8a04' }} />
-                <span>
-                  Running Ethio-ASR (Amharic) and Faster-Whisper (English) in parallel, then synthesizing with Qwen3 on-premise. This typically takes 5–15 seconds...
-                </span>
-              </div>
-            )}
-
-            {aiSuccessMessage && !generatingAi && (
-              <div
-                style={{
-                  fontSize: '0.82rem',
-                  color: '#15803d',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '0.5rem',
-                  padding: '0.55rem 0.85rem',
-                  background: 'rgba(34, 197, 94, 0.1)',
-                  borderRadius: '6px',
-                  border: '1px solid #bbf7d0',
-                }}
-              >
-                <CheckCircle2 size={16} />
-                <span>{aiSuccessMessage}</span>
-              </div>
-            )}
-
-            {keyTopics.length > 0 && (
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', flexWrap: 'wrap', paddingTop: '0.15rem' }}>
-                <span style={{ fontSize: '0.78rem', fontWeight: 600, color: '#475569' }}>Detected Topics:</span>
-                {keyTopics.map((topic, i) => (
-                  <span
-                    key={i}
-                    style={{
-                      fontSize: '0.75rem',
-                      background: '#e2e8f0',
-                      color: '#1e293b',
-                      padding: '0.15rem 0.55rem',
-                      borderRadius: '12px',
-                      fontWeight: 500,
-                    }}
-                  >
-                    {topic}
+                  <Loader2 size={15} className="animate-spin" style={{ color: '#ca8a04' }} />
+                  <span>
+                    Transcribing speech with Dual-Pass ASR and synthesizing official minutes 100% in English via qwen3:8b...
                   </span>
-                ))}
-              </div>
-            )}
-          </div>
+                </div>
+              )}
+
+              {aiSuccessMessage && !generatingAi && (
+                <div
+                  style={{
+                    fontSize: '0.82rem',
+                    color: '#15803d',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '0.5rem',
+                    padding: '0.55rem 0.85rem',
+                    background: 'rgba(34, 197, 94, 0.1)',
+                    borderRadius: '6px',
+                    border: '1px solid #bbf7d0',
+                  }}
+                >
+                  <CheckCircle2 size={16} />
+                  <span>{aiSuccessMessage}</span>
+                </div>
+              )}
+
+              {keyTopics.length > 0 && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', flexWrap: 'wrap', paddingTop: '0.15rem' }}>
+                  <span style={{ fontSize: '0.78rem', fontWeight: 600, color: '#475569' }}>Detected Topics:</span>
+                  {keyTopics.map((topic, i) => (
+                    <span
+                      key={i}
+                      style={{
+                        fontSize: '0.75rem',
+                        background: '#e2e8f0',
+                        color: '#1e293b',
+                        padding: '0.15rem 0.55rem',
+                        borderRadius: '12px',
+                        fontWeight: 500,
+                      }}
+                    >
+                      #{topic}
+                    </span>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Two-Column Grid: Report on Left, Attendance & Audit on Right */}
           <div

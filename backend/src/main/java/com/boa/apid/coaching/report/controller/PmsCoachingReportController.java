@@ -89,6 +89,27 @@ public class PmsCoachingReportController {
         return ResponseEntity.ok(reportService.getSessionInspectionEvidence(sessionId));
     }
 
+    @GetMapping("/top-coaches")
+    public ResponseEntity<List<TopCoachRatingDto>> getTopCoaches(
+            @RequestParam(name = "quarterId", required = false) Long quarterId
+    ) {
+        return ResponseEntity.ok(reportService.getTopRatedCoaches(quarterId));
+    }
+
+    @GetMapping("/midquarter-inactivity")
+    public ResponseEntity<List<MidQuarterInactivityDto>> getMidQuarterInactivity(
+            @RequestParam(name = "quarterId", required = false) Long quarterId
+    ) {
+        return ResponseEntity.ok(reportService.getMidQuarterInactivity(quarterId));
+    }
+
+    @PostMapping("/midquarter-inactivity/notify-all")
+    public ResponseEntity<BatchNotificationResultDto> notifyAllStalledCoaches(
+            @RequestParam(name = "quarterId", required = false) Long quarterId
+    ) {
+        return ResponseEntity.ok(reportService.notifyStalledCoaches(quarterId));
+    }
+
     @GetMapping("/export")
     public ResponseEntity<byte[]> exportCsv(
             @RequestParam(name = "quarterId", required = false) Long quarterId,

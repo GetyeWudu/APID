@@ -28,6 +28,8 @@ import com.boa.apid.coaching.session.repository.SessionParticipantRepository;
 import com.boa.apid.common.exception.ResourceNotFoundException;
 import com.boa.apid.core.config.entity.FiscalQuarter;
 import com.boa.apid.core.config.repository.FiscalQuarterRepository;
+import com.boa.apid.core.notifications.entity.NotificationModule;
+import com.boa.apid.core.notifications.service.NotificationService;
 import com.boa.apid.core.organization.entity.Employee;
 import com.boa.apid.core.organization.repository.EmployeeRepository;
 import org.slf4j.Logger;
@@ -59,6 +61,7 @@ public class PmsCoachingReportService {
     private final PmsGoalLineRepository goalLineRepository;
     private final FiscalQuarterRepository fiscalQuarterRepository;
     private final CoachingSessionTurnRepository turnRepository;
+    private final NotificationService notificationService;
 
     public PmsCoachingReportService(
             CoachingAssignmentRepository assignmentRepository,
@@ -70,7 +73,8 @@ public class PmsCoachingReportService {
             PmsPerformanceRecordRepository performanceRecordRepository,
             PmsGoalLineRepository goalLineRepository,
             FiscalQuarterRepository fiscalQuarterRepository,
-            CoachingSessionTurnRepository turnRepository) {
+            CoachingSessionTurnRepository turnRepository,
+            NotificationService notificationService) {
         this.assignmentRepository = assignmentRepository;
         this.sessionRepository = sessionRepository;
         this.participantRepository = participantRepository;
@@ -81,6 +85,7 @@ public class PmsCoachingReportService {
         this.goalLineRepository = goalLineRepository;
         this.fiscalQuarterRepository = fiscalQuarterRepository;
         this.turnRepository = turnRepository;
+        this.notificationService = notificationService;
     }
 
     public PmsReportSummaryDto getReportSummary(Long quarterId) {
@@ -1140,6 +1145,194 @@ public class PmsCoachingReportService {
                 session.getActionItems(),
                 keyTopics,
                 turnDtos
+        );
+    }
+
+    public List<TopCoachRatingDto> getTopRatedCoaches(Long quarterId) {
+        FiscalQuarter quarter = resolveQuarter(quarterId);
+        List<CoachingAssignment> assignments = loadAssignmentsForQuarter(quarter);
+
+        Map<Long, List<CoachingAssignment>> coachAssignments = assignments.stream()
+                .filter(a -> a.getCoachEmployeeId() != null)
+                .collect(Collectors.groupingBy(CoachingAssignment::getCoachEmployeeId));
+
+        List<TopCoachRatingDto> result = new ArrayList<>();
+
+        for (Map.Entry<Long, List<CoachingAssignment>> entry : coachAssignments.entrySet()) {
+            Long coachId = entry.getKey();
+            List<CoachingAssignment> coachAsgList = entry.getValue();
+            Employee coach = employeeRepository.findById(coachId).orElse(null);
+            if (coach == null) continue;
+
+            List<CoachingSession> completedSessions = new ArrayList<>();
+            List<Short> ratings = new ArrayList<>();
+
+            for (CoachingAssignment asg : coachAsgList) {
+                List<CoachingSession> sessions = sessionRepository.findAllByAssignmentId(asg.getId());
+                for (CoachingSession s : sessions) {
+                    if (s.getStatus() == SessionStatus.COMPLETED) {
+                        completedSessions.add(s);
+                        List<SessionParticipant> participants = participantRepository.findAllBySessionIdOrderByRoleAsc(s.getId());
+                        for (SessionParticipant p : participants) {
+                            if (p.getRole() == ParticipantRole.COACHEE && p.getFeedbackRating() != null) {
+                                ratings.add(p.getFeedbackRating());
+                            }
+                        }
+                    }
+                }
+            }
+
+            Double avgRating = null;
+            if (!ratings.isEmpty()) {
+                double sum = 0;
+                for (Short r : ratings) sum += r;
+                avgRating = Math.round((sum / ratings.size()) * 100.0) / 100.0;
+            }
+
+            String badge;
+            if (avgRating != null && avgRating >= 4.8 && ratings.size() >= 3) {
+                badge = "MASTER COACH";
+            } else if (avgRating != null && avgRating >= 4.5) {
+                badge = "EXCELLENCE";
+            } else if (avgRating != null && avgRating >= 4.0) {
+                badge = "COMMENDED";
+            } else if (avgRating != null && avgRating > 0) {
+                badge = "DEVELOPING";
+            } else {
+                badge = "PENDING EVALUATION";
+            }
+
+            result.add(new TopCoachRatingDto(
+                    coachId,
+                    coach.getFullName(),
+                    coach.getEmployeeNumber(),
+                    coach.getDepartmentName() != null ? coach.getDepartmentName() : "General",
+                    coach.getParentDepartmentName() != null ? coach.getParentDepartmentName() : "Head Office",
+                    avgRating,
+                    ratings.size(),
+                    completedSessions.size(),
+                    coachAsgList.size(),
+                    badge
+            ));
+        }
+
+        result.sort((a, b) -> {
+            if (a.averageRating() == null && b.averageRating() == null) return 0;
+            if (a.averageRating() == null) return 1;
+            if (b.averageRating() == null) return -1;
+            int cmp = Double.compare(b.averageRating(), a.averageRating());
+            if (cmp != 0) return cmp;
+            return Integer.compare(b.totalRatings(), a.totalRatings());
+        });
+
+        return result;
+    }
+
+    public List<MidQuarterInactivityDto> getMidQuarterInactivity(Long quarterId) {
+        FiscalQuarter quarter = resolveQuarter(quarterId);
+        List<CoachingAssignment> assignments = loadAssignmentsForQuarter(quarter);
+
+        LocalDate today = LocalDate.now();
+        long elapsedDays = ChronoUnit.DAYS.between(quarter.getStartDate(), today);
+        int elapsedWeeks = Math.max(1, (int) (elapsedDays / 7));
+
+        List<MidQuarterInactivityDto> items = new ArrayList<>();
+
+        for (CoachingAssignment a : assignments) {
+            if (a.getStatus() != AssignmentStatus.ACTIVE && a.getStatus() != AssignmentStatus.PENDING_COACH_ASSIGNMENT) {
+                continue;
+            }
+
+            Employee coach = a.getCoachEmployeeId() != null
+                    ? employeeRepository.findById(a.getCoachEmployeeId()).orElse(null)
+                    : null;
+            Employee coachee = employeeRepository.findById(a.getCoacheeEmployeeId()).orElse(null);
+
+            List<CoachingSession> sessions = sessionRepository.findAllByAssignmentId(a.getId());
+            long completed = sessions.stream().filter(s -> s.getStatus() == SessionStatus.COMPLETED).count();
+
+            String severity = "ON_TRACK";
+            String recommendation = "Maintain bi-weekly coaching cadence.";
+
+            if (completed == 0) {
+                if (elapsedWeeks >= 5) {
+                    severity = "CRITICAL_STALL";
+                    recommendation = "Immediate executive escalation: kickoff session pending past mid-quarter gate (Week " + elapsedWeeks + "). Mandate immediate scheduling or trigger coach reassignment.";
+                } else {
+                    severity = "PENDING_KICKOFF";
+                    recommendation = "Kickoff session due within the first 3 weeks.";
+                }
+            } else if (completed < 3 && elapsedWeeks >= 5) {
+                severity = "BEHIND_PACING";
+                recommendation = "Behind pacing target: " + completed + " of 10 completed by Week " + elapsedWeeks + ". Accelerate session frequency.";
+            }
+
+            if (!"ON_TRACK".equals(severity)) {
+                items.add(new MidQuarterInactivityDto(
+                        a.getId(),
+                        coach != null ? coach.getId() : null,
+                        coach != null ? coach.getFullName() : "Unassigned Coach",
+                        coach != null ? coach.getEmployeeNumber() : "N/A",
+                        coach != null ? coach.getEmail() : null,
+                        coachee != null ? coachee.getFullName() : "Coachee",
+                        coachee != null ? coachee.getEmployeeNumber() : "N/A",
+                        coachee != null ? coachee.getEmail() : null,
+                        coachee != null ? coachee.getDepartmentName() : "General",
+                        coachee != null ? coachee.getParentDepartmentName() : "Head Office",
+                        elapsedWeeks,
+                        (int) completed,
+                        10,
+                        severity,
+                        a.getLastActivityAt(),
+                        recommendation
+                ));
+            }
+        }
+
+        items.sort(Comparator.comparingInt(item -> {
+            if ("CRITICAL_STALL".equals(item.severity())) return 0;
+            if ("BEHIND_PACING".equals(item.severity())) return 1;
+            return 2;
+        }));
+
+        return items;
+    }
+
+    @Transactional
+    public BatchNotificationResultDto notifyStalledCoaches(Long quarterId) {
+        List<MidQuarterInactivityDto> stalled = getMidQuarterInactivity(quarterId);
+        int notifiedCount = 0;
+        int emailsQueued = 0;
+
+        for (MidQuarterInactivityDto item : stalled) {
+            if (item.coachEmployeeId() != null) {
+                Employee coach = employeeRepository.findById(item.coachEmployeeId()).orElse(null);
+                if (coach != null && coach.getUserId() != null) {
+                    try {
+                        notificationService.notify(
+                                coach.getUserId(),
+                                NotificationModule.COACHING,
+                                "COACHING_STALLED_ESCALATION",
+                                "⚠️ Mandatory Coaching Stalled: Week " + item.elapsedWeeks() + " Mid-Quarter Check",
+                                "You have completed " + item.completedSessions() + " of " + item.targetSessions() +
+                                        " required sessions for coachee " + item.coacheeName() + " (" + item.coacheeStaffId() + "). " +
+                                        item.recommendedAction(),
+                                "/coaching/sessions"
+                        );
+                        notifiedCount++;
+                        emailsQueued++;
+                    } catch (Exception ex) {
+                        log.warn("Could not dispatch mid-quarter notification to coach userId {}: {}", coach.getUserId(), ex.getMessage());
+                    }
+                }
+            }
+        }
+
+        return new BatchNotificationResultDto(
+                stalled.size(),
+                notifiedCount,
+                emailsQueued,
+                "Successfully dispatched " + notifiedCount + " mid-quarter escalation notifications to stalled coaches."
         );
     }
 

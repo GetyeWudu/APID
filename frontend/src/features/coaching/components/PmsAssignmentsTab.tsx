@@ -24,7 +24,6 @@ import { DistrictBarChart } from './reports/DistrictBarChart';
 import { CoachingLifecycleDonut } from './reports/CoachingLifecycleDonut';
 import { OperationalAlertsRadar } from './reports/OperationalAlertsRadar';
 import { SharedCascadingFilterBar, type SharedFilterValues } from './reports/SharedCascadingFilterBar';
-import { DistrictComparativeMatrix } from './reports/DistrictComparativeMatrix';
 import { TalentDossierDrawer } from './reports/TalentDossierDrawer';
 import { TablePagination } from './reports/TablePagination';
 import { AiExecutiveBriefingBanner } from './ai/AiExecutiveBriefingBanner';
@@ -76,6 +75,9 @@ export function PmsAssignmentsTab() {
 
   // KPI Quick Filter (e.g. clicking a macro card)
   const [kpiFilter, setKpiFilter] = useState<string>('ALL');
+
+  // Filter for Mid-Quarter Stalled Assignments (0 sessions past mid-quarter gate)
+  const [isStalledFilterActive, setIsStalledFilterActive] = useState<boolean>(false);
 
   // Selected dossier for drawer
   const [selectedDossierAssignmentId, setSelectedDossierAssignmentId] = useState<number | null>(null);
@@ -129,11 +131,15 @@ export function PmsAssignmentsTab() {
       search: '',
     });
     setKpiFilter('ALL');
+    setIsStalledFilterActive(false);
     setCurrentPage(1);
   };
 
   const analytics = analyticsQuery.data;
-  const talents = talentsQuery.data ?? [];
+  const rawTalents = talentsQuery.data ?? [];
+  const talents = isStalledFilterActive
+    ? rawTalents.filter((t) => t.completedSessions === 0)
+    : rawTalents;
 
   const totalItems = talents.length;
   const paginatedTalents = talents.slice(
@@ -385,27 +391,6 @@ export function PmsAssignmentsTab() {
         }}
       />
 
-      {/* 4.5. Regional & Branch Comparative Performance Matrix */}
-      <DistrictComparativeMatrix
-        analytics={analytics ?? null}
-        loading={analyticsQuery.isLoading}
-        selectedDistrict={filterValues.district}
-        onSelectDistrict={(dist) => {
-          setFilterValues((prev) => ({
-            ...prev,
-            district: dist,
-            branch: 'ALL',
-          }));
-        }}
-        onSelectBranch={(dist, branch) => {
-          setFilterValues((prev) => ({
-            ...prev,
-            district: dist,
-            branch,
-          }));
-        }}
-      />
-
       {/* 5. Cascading Multi-Tier Filter Bar */}
       <SharedCascadingFilterBar
         quarterId={activeQuarterId}
@@ -432,11 +417,15 @@ export function PmsAssignmentsTab() {
           {(filterValues.district !== 'ALL' ||
             filterValues.branch !== 'ALL' ||
             filterValues.performanceBand !== 'ALL' ||
-            kpiFilter !== 'ALL') && (
+            kpiFilter !== 'ALL' ||
+            isStalledFilterActive ||
+            filterValues.search) && (
             <div className="flex items-center gap-1.5 text-xs">
               <span className="text-slate-400">Active filter:</span>
               <span className="font-semibold text-amber-600 dark:text-amber-400">
                 {[
+                  isStalledFilterActive ? '⚠️ Stalled (0 Sessions)' : null,
+                  filterValues.search ? `Search: "${filterValues.search}"` : null,
                   filterValues.district !== 'ALL' ? filterValues.district : null,
                   filterValues.branch !== 'ALL' ? filterValues.branch.replace(' Branch Operations', '') : null,
                   filterValues.performanceBand !== 'ALL' ? filterValues.performanceBand : null,
