@@ -211,7 +211,8 @@ export function WorkspaceDashboardPage() {
   );
   const activeHrMentorCount = activeHrMentorUserIds.size;
   const pendingHrApplications = (hrApplicationsQuery.data ?? [])
-    .filter((application) => application.status === 'PENDING').length;
+    .filter((application) => application.status === 'PENDING' && application.applicationType !== 'PROFILE_UPDATE')
+    .length;
   const openHrMatchRequests = (hrMatchRequestsQuery.data ?? [])
     .filter((request) => request.status === 'OPEN').length;
 

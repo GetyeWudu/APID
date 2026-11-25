@@ -6,6 +6,10 @@ import type { ApiErrorPayload } from '../../../shared/api/apiClient';
 import { EmptyState, useToast } from '../../../shared/components/ui';
 import type { TrainerEmployeeCandidate, TrainerRosterItem } from '../api/mentoringTrainerApi';
 import { mentoringMatchApi } from '../api/mentoringMatchApi';
+import {
+  filterByOrganizationLocation,
+  OrganizationLocationFilter,
+} from './OrganizationLocationFilter';
 
 export function HrDirectMatchingTab({
   employees,
@@ -17,6 +21,7 @@ export function HrDirectMatchingTab({
   const [mentorUserId, setMentorUserId] = useState('');
   const [traineeUserId, setTraineeUserId] = useState('');
   const [skillId, setSkillId] = useState('');
+  const [selectedLocationId, setSelectedLocationId] = useState('');
   const queryClient = useQueryClient();
   const { pushToast } = useToast();
 
@@ -70,13 +75,19 @@ export function HrDirectMatchingTab({
     return Array.from(map.values()).sort((a, b) => a.name.localeCompare(b.name));
   }, [eligibleMentors]);
 
-  // 3. Mentors filtered by chosen skill (if a skill is selected first)
+  // 3. Mentors filtered by location and chosen skill (if a skill is selected first)
+  const locationPaths = useMemo(
+    () => eligibleMentors.map((mentor) => mentor.organizationPath ?? []),
+    [eligibleMentors]
+  );
+
   const availableMentors = useMemo(() => {
-    if (!skillId) return eligibleMentors;
-    return eligibleMentors.filter((m) =>
+    const byLocation = filterByOrganizationLocation(eligibleMentors, selectedLocationId);
+    if (!skillId) return byLocation;
+    return byLocation.filter((m) =>
       m.skills.some((s) => String(s.id) === skillId && (s.status === 'ACTIVE' || s.status === undefined))
     );
-  }, [eligibleMentors, skillId]);
+  }, [eligibleMentors, selectedLocationId, skillId]);
 
   // 4. Skills filtered by chosen mentor (if a mentor is selected first)
   const selectedMentor = eligibleMentors.find((m) => String(m.userId) === mentorUserId);
@@ -110,6 +121,22 @@ export function HrDirectMatchingTab({
         />
       ) : (
         <div className="boa-stack" style={{ gap: '1.25rem' }}>
+          <OrganizationLocationFilter
+            paths={locationPaths}
+            value={selectedLocationId}
+            onChange={(nextLocationId) => {
+              setSelectedLocationId(nextLocationId);
+              if (
+                mentorUserId &&
+                !filterByOrganizationLocation(eligibleMentors, nextLocationId).some(
+                  (m) => String(m.userId) === mentorUserId
+                )
+              ) {
+                setMentorUserId('');
+              }
+            }}
+            label="Filter mentors by district, branch, or department"
+          />
           <div style={{
             display: 'grid',
             gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))',

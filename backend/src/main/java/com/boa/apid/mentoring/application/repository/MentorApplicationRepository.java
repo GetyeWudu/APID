@@ -35,6 +35,8 @@ public interface MentorApplicationRepository extends JpaRepository<MentorApplica
 
     long countByStatus(MentorApplicationStatus status);
 
+    long countByStatusAndApplicationTypeNot(MentorApplicationStatus status, MentorApplicationType applicationType);
+
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("SELECT application FROM MentorApplication application WHERE application.id = :id")
     Optional<MentorApplication> findByIdForUpdate(@Param("id") Long id);

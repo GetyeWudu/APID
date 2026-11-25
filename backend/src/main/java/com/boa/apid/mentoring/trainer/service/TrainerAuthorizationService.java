@@ -874,9 +874,12 @@ public class TrainerAuthorizationService {
                 YearMonth.now(ZoneOffset.UTC)
         );
         return new MentoringHrOverviewDto(
-                applicationRepository.countByStatus(MentorApplicationStatus.PENDING),
-                applicationRepository.countByStatus(MentorApplicationStatus.APPROVED),
-                applicationRepository.countByStatus(MentorApplicationStatus.DECLINED),
+                applicationRepository.countByStatusAndApplicationTypeNot(
+                        MentorApplicationStatus.PENDING, MentorApplicationType.PROFILE_UPDATE),
+                applicationRepository.countByStatusAndApplicationTypeNot(
+                        MentorApplicationStatus.APPROVED, MentorApplicationType.PROFILE_UPDATE),
+                applicationRepository.countByStatusAndApplicationTypeNot(
+                        MentorApplicationStatus.DECLINED, MentorApplicationType.PROFILE_UPDATE),
                 current.stream()
                         .filter(auth -> auth.getStatus() == TrainerAuthorizationStatus.ACTIVE)
                         .filter(auth -> hasActiveSkill(auth, null))

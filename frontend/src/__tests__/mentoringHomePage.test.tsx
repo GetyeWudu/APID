@@ -270,9 +270,11 @@ describe('MentoringHomePage Find a Mentor', () => {
 
     expect(await screen.findByText('Mentor 20')).toBeInTheDocument();
     expect(screen.queryByText('Mentor 30')).not.toBeInTheDocument();
-    const locationFilter = screen.getByLabelText('Filter mentors by district, branch, or department');
-    expect(locationFilter).toHaveValue('department:2');
-    fireEvent.change(locationFilter, { target: { value: '' } });
+    const districtFilter = screen.getByLabelText('Filter by district');
+    const branchFilter = screen.getByLabelText('Filter by branch');
+    expect(districtFilter).toHaveValue('department:1');
+    expect(branchFilter).toHaveValue('department:2');
+    fireEvent.change(districtFilter, { target: { value: '' } });
     expect(screen.getByText('Mentor 30')).toBeInTheDocument();
   });
 

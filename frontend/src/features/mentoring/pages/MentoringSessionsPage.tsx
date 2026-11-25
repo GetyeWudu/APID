@@ -10,6 +10,7 @@ import {
   MapPin,
   Ban,
   Calendar,
+  Video,
 } from 'lucide-react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../../../app/AuthContext';
@@ -40,7 +41,10 @@ import {
   BANK_OPERATING_TIME_OPTIONS,
   toEthiopianTime,
 } from '../../coaching/utils/ethiopianTimeUtils';
-import { getMentoringDeliveryModeLabel } from '../utils/mentoringSessionUtils';
+import {
+  getMentoringDeliveryModeLabel,
+  isMentoringSessionDay,
+} from '../utils/mentoringSessionUtils';
 import './MentoringDashboard.css';
 
 type SessionView = 'mentor' | 'trainee';

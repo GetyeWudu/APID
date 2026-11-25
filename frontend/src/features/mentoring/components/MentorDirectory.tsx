@@ -288,52 +288,52 @@ export function MentorDirectory({
           <h3 className="boa-card-title">Mentor Directory</h3>
           <p className="boa-card-subtitle">Browse mentors by skill or department and send a direct mentorship request.</p>
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-          <div className="boa-stack" style={{ gap: '0.35rem' }}>
-            <OrganizationLocationFilter
-              paths={locationPaths}
-              value={activeLocationId}
-              onChange={setSelectedLocationId}
-              label="Filter mentors by district, branch, or department"
-            />
-            <select
-              className="apid-input"
-              aria-label="Filter mentors by skill"
-              value={skillFilter}
-              onChange={(event) => {
-                setSkillFilter(event.target.value);
-                setPage(0);
-              }}
-            >
-              <option value="ALL">All Skills</option>
-              {skills.map((skill) => (
-                <option key={skill.id} value={skill.id}>
-                  {skill.name}
-                </option>
-              ))}
-            </select>
+        <div style={{ display: 'flex', alignItems: 'flex-end', gap: '0.65rem', flexWrap: 'wrap' }}>
+          <OrganizationLocationFilter
+            paths={locationPaths}
+            value={activeLocationId}
+            onChange={setSelectedLocationId}
+            label="Filter mentors by district, branch, or department"
+          />
+          <select
+            className="apid-input"
+            style={{ width: 'auto', minWidth: '10rem' }}
+            aria-label="Filter mentors by skill"
+            value={skillFilter}
+            onChange={(event) => {
+              setSkillFilter(event.target.value);
+              setPage(0);
+            }}
+          >
+            <option value="ALL">All Skills</option>
+            {skills.map((skill) => (
+              <option key={skill.id} value={skill.id}>
+                {skill.name}
+              </option>
+            ))}
+          </select>
+          <input
+            className="apid-input"
+            style={{ width: 'auto', minWidth: '10rem' }}
+            aria-label="Filter mentors by department"
+            placeholder="Department"
+            value={departmentFilter}
+            onChange={(event) => {
+              setDepartmentFilter(event.target.value);
+              setPage(0);
+            }}
+          />
+          <label style={{ display: 'flex', gap: '0.35rem', alignItems: 'center', fontSize: '0.82rem', paddingBottom: '0.5rem' }}>
             <input
-              className="apid-input"
-              aria-label="Filter mentors by department"
-              placeholder="Department"
-              value={departmentFilter}
+              type="checkbox"
+              checked={availableOnly}
               onChange={(event) => {
-                setDepartmentFilter(event.target.value);
+                setAvailableOnly(event.target.checked);
                 setPage(0);
               }}
             />
-            <label style={{ display: 'flex', gap: '0.35rem', alignItems: 'center', fontSize: '0.82rem' }}>
-              <input
-                type="checkbox"
-                checked={availableOnly}
-                onChange={(event) => {
-                  setAvailableOnly(event.target.checked);
-                  setPage(0);
-                }}
-              />
-              Available capacity only
-            </label>
-          </div>
+            Available capacity only
+          </label>
           <DataSourceBadge source="live" />
         </div>
       </div>
