@@ -288,6 +288,39 @@ export const CoachingSessionsTab: React.FC<CoachingSessionsTabProps> = ({
     return { isCallActive, isMeetingStarted, isMeetingEnded, isPastUncompleted, isCompleted };
   };
 
+  const minNoticeHours = activeConfig?.publicConfig?.coachingMinRescheduleNoticeHours ?? 4;
+  const maxReschedulesPerSession = activeConfig?.publicConfig?.coachingMaxReschedulesPerSession ?? 2;
+
+  const canRescheduleSession = (session: CoachingSessionItem) => {
+    const st = getSessionActionState(session);
+    if (st.isCompleted || st.isPastUncompleted || st.isMeetingEnded || st.isMeetingStarted || session.status === 'CANCELLED') {
+      return false;
+    }
+    const startMs = new Date(session.scheduledStartTime).getTime();
+    const noticeMs = minNoticeHours * 60 * 60 * 1000;
+    if (Date.now() + noticeMs > startMs) {
+      return false;
+    }
+    if (session.rescheduleCount != null && session.rescheduleCount >= maxReschedulesPerSession) {
+      return false;
+    }
+    return true;
+  };
+
+  const getCoacheeFeedbackInfo = (session: CoachingSessionItem) => {
+    const participant = currentEmployeeId
+      ? session.participants.find((p) => p.employeeId === currentEmployeeId)
+      : session.participants.find((p) => p.role === 'COACHEE');
+    const hasSubmitted = Boolean(
+      participant?.feedbackRating != null || participant?.feedbackSubmittedAt != null
+    );
+    return {
+      hasSubmitted,
+      rating: participant?.feedbackRating ?? null,
+      submittedAt: participant?.feedbackSubmittedAt ?? null,
+    };
+  };
+
   // Render Modern Compact Agenda View (Row height ~64px)
   const renderAgendaListView = (sessionList: CoachingSessionItem[]) => {
     // 1. Calculate Status Counts
@@ -746,18 +779,9 @@ export const CoachingSessionsTab: React.FC<CoachingSessionsTabProps> = ({
                               >
                                 Edit
                               </button>
-                              <button
-                                type="button"
-                                className="apid-btn apid-btn-outline apid-btn-sm"
-                                onClick={(e) => { e.stopPropagation(); setSelectedForFeedback(session); }}
-                                title="Coachee Feedback"
-                                style={{ fontSize: '0.7rem', padding: '0.25rem 0.45rem' }}
-                              >
-                                <Star size={11} style={{ color: '#d97706' }} />
-                              </button>
                             </>
                           )}
-                          {!st.isCompleted && !st.isPastUncompleted && (
+                          {!st.isCompleted && !st.isPastUncompleted && canRescheduleSession(session) && (
                             <button
                               type="button"
                               className="apid-btn apid-btn-outline apid-btn-sm"
@@ -803,27 +827,68 @@ export const CoachingSessionsTab: React.FC<CoachingSessionsTabProps> = ({
                                 <FileText size={11} />
                                 <span>Minutes</span>
                               </button>
-                              <button
-                                type="button"
-                                className="apid-btn apid-btn-primary apid-btn-sm"
-                                onClick={(e) => { e.stopPropagation(); setSelectedForFeedback(session); }}
-                                style={{
-                                  fontSize: '0.7rem',
-                                  padding: '0.25rem 0.6rem',
-                                  backgroundColor: '#b45309',
-                                  borderColor: '#b45309',
-                                  color: '#ffffff',
-                                  display: 'inline-flex',
-                                  alignItems: 'center',
-                                  gap: '0.2rem',
-                                }}
-                              >
-                                <Star size={11} />
-                                <span>Give Feedback</span>
-                              </button>
+                              {getCoacheeFeedbackInfo(session).hasSubmitted ? (
+                                <span
+                                  style={{
+                                    fontSize: '0.68rem',
+                                    fontWeight: 700,
+                                    padding: '0.22rem 0.55rem',
+                                    borderRadius: '6px',
+                                    backgroundColor: '#fef3c7',
+                                    color: '#92400e',
+                                    border: '1px solid #fde68a',
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    gap: '0.25rem',
+                                    cursor: 'default',
+                                  }}
+                                  title={`Feedback Submitted: ${getCoacheeFeedbackInfo(session).rating} Stars`}
+                                >
+                                  <Star size={11} style={{ fill: '#d97706', color: '#d97706' }} />
+                                  <span>Rated {getCoacheeFeedbackInfo(session).rating}★ (Submitted)</span>
+                                </span>
+                              ) : (
+                                <button
+                                  type="button"
+                                  className="apid-btn apid-btn-primary apid-btn-sm"
+                                  onClick={(e) => { e.stopPropagation(); setSelectedForFeedback(session); }}
+                                  style={{
+                                    fontSize: '0.7rem',
+                                    padding: '0.25rem 0.6rem',
+                                    backgroundColor: '#b45309',
+                                    borderColor: '#b45309',
+                                    color: '#ffffff',
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    gap: '0.2rem',
+                                  }}
+                                >
+                                  <Star size={11} />
+                                  <span>Give Feedback</span>
+                                </button>
+                              )}
                             </>
                           )}
-                          {!st.isCompleted && (
+                          {!st.isCompleted && st.isPastUncompleted && (
+                            <span
+                              style={{
+                                fontSize: '0.68rem',
+                                fontWeight: 600,
+                                padding: '0.22rem 0.5rem',
+                                borderRadius: '4px',
+                                backgroundColor: '#fff7ed',
+                                color: '#9a3412',
+                                border: '1px solid #ffedd5',
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '0.25rem',
+                              }}
+                            >
+                              <Clock size={11} />
+                              <span>Ended (Awaiting Coach Minutes)</span>
+                            </span>
+                          )}
+                          {!st.isCompleted && !st.isPastUncompleted && canRescheduleSession(session) && (
                             <button
                               type="button"
                               className="apid-btn apid-btn-outline apid-btn-sm"
@@ -1302,27 +1367,64 @@ export const CoachingSessionsTab: React.FC<CoachingSessionsTabProps> = ({
                                 >
                                   View Minutes
                                 </button>
-                                <button
-                                  type="button"
-                                  className="apid-btn apid-btn-primary apid-btn-sm"
-                                  onClick={() => setSelectedForFeedback(s)}
-                                  style={{
-                                    fontSize: '0.7rem',
-                                    padding: '0.2rem 0.55rem',
-                                    backgroundColor: '#b45309',
-                                    borderColor: '#b45309',
-                                    color: '#ffffff',
-                                    display: 'inline-flex',
-                                    alignItems: 'center',
-                                    gap: '0.2rem',
-                                  }}
-                                >
-                                  <Star size={11} />
-                                  <span>Feedback</span>
-                                </button>
+                                {getCoacheeFeedbackInfo(s).hasSubmitted ? (
+                                  <span
+                                    style={{
+                                      fontSize: '0.68rem',
+                                      fontWeight: 700,
+                                      padding: '0.2rem 0.5rem',
+                                      borderRadius: '6px',
+                                      backgroundColor: '#fef3c7',
+                                      color: '#92400e',
+                                      border: '1px solid #fde68a',
+                                      display: 'inline-flex',
+                                      alignItems: 'center',
+                                      gap: '0.25rem',
+                                      cursor: 'default',
+                                    }}
+                                    title={`Feedback Submitted: ${getCoacheeFeedbackInfo(s).rating} Stars`}
+                                  >
+                                    <Star size={11} style={{ fill: '#d97706', color: '#d97706' }} />
+                                    <span>Rated {getCoacheeFeedbackInfo(s).rating}★</span>
+                                  </span>
+                                ) : (
+                                  <button
+                                    type="button"
+                                    className="apid-btn apid-btn-primary apid-btn-sm"
+                                    onClick={() => setSelectedForFeedback(s)}
+                                    style={{
+                                      fontSize: '0.7rem',
+                                      padding: '0.2rem 0.55rem',
+                                      backgroundColor: '#b45309',
+                                      borderColor: '#b45309',
+                                      color: '#ffffff',
+                                      display: 'inline-flex',
+                                      alignItems: 'center',
+                                      gap: '0.2rem',
+                                    }}
+                                  >
+                                    <Star size={11} />
+                                    <span>Feedback</span>
+                                  </button>
+                                )}
                               </>
                             )}
-                            {!st.isCompleted && (
+                            {!st.isCompleted && st.isPastUncompleted && (
+                              <span
+                                style={{
+                                  fontSize: '0.68rem',
+                                  fontWeight: 600,
+                                  padding: '0.15rem 0.45rem',
+                                  borderRadius: '4px',
+                                  backgroundColor: '#fff7ed',
+                                  color: '#9a3412',
+                                  border: '1px solid #ffedd5',
+                                }}
+                              >
+                                Ended (Awaiting Minutes)
+                              </span>
+                            )}
+                            {!st.isCompleted && !st.isPastUncompleted && canRescheduleSession(s) && (
                               <button
                                 type="button"
                                 className="apid-btn apid-btn-outline apid-btn-sm"
@@ -2300,8 +2402,8 @@ export const CoachingSessionsTab: React.FC<CoachingSessionsTabProps> = ({
 
               {/* Right Side: Primary and Utility Actions */}
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
-                {/* Reschedule Button: Only permitted prior to meeting start time */}
-                {(session.status === 'CONFIRMED' || session.status === 'PROPOSED') && !isMeetingStarted && (
+                {/* Reschedule Button: Only permitted prior to meeting start time and within policy notice */}
+                {(session.status === 'CONFIRMED' || session.status === 'PROPOSED') && canRescheduleSession(session) && (
                   <button
                     type="button"
                     className="apid-btn apid-btn-outline"
@@ -2367,25 +2469,46 @@ export const CoachingSessionsTab: React.FC<CoachingSessionsTabProps> = ({
                   )
                 )}
 
-                {/* Feedback Button (Completed) */}
-                {session.status === 'COMPLETED' && (
-                  <button
-                    type="button"
-                    className="apid-btn apid-btn-outline"
-                    onClick={() => setSelectedForFeedback(session)}
-                    style={{
-                      padding: '0.4rem 0.85rem',
-                      fontSize: '0.82rem',
-                      fontWeight: 600,
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      gap: '0.35rem',
-                      color: 'var(--brand-gold, #ca8a04)',
-                    }}
-                  >
-                    <Star size={14} style={{ fill: '#ca8a04', color: '#ca8a04' }} />
-                    Give Feedback
-                  </button>
+                {/* Feedback Button (Completed - Coachee only) */}
+                {session.status === 'COMPLETED' && !isCoach && (
+                  getCoacheeFeedbackInfo(session).hasSubmitted ? (
+                    <span
+                      style={{
+                        padding: '0.4rem 0.85rem',
+                        fontSize: '0.82rem',
+                        fontWeight: 600,
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '0.35rem',
+                        color: '#92400e',
+                        backgroundColor: '#fef3c7',
+                        borderRadius: '6px',
+                        border: '1px solid #fde68a',
+                      }}
+                      title="Feedback already submitted"
+                    >
+                      <Star size={14} style={{ fill: '#d97706', color: '#d97706' }} />
+                      Feedback Submitted ({getCoacheeFeedbackInfo(session).rating}★)
+                    </span>
+                  ) : (
+                    <button
+                      type="button"
+                      className="apid-btn apid-btn-outline"
+                      onClick={() => setSelectedForFeedback(session)}
+                      style={{
+                        padding: '0.4rem 0.85rem',
+                        fontSize: '0.82rem',
+                        fontWeight: 600,
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '0.35rem',
+                        color: 'var(--brand-gold, #ca8a04)',
+                      }}
+                    >
+                      <Star size={14} style={{ fill: '#ca8a04', color: '#ca8a04' }} />
+                      Give Feedback
+                    </button>
+                  )
                 )}
 
                 {/* Primary Action: Video Call (Window guarded) */}
@@ -3241,8 +3364,8 @@ export const CoachingSessionsTab: React.FC<CoachingSessionsTabProps> = ({
                               </button>
                             )}
 
-                            {/* Only allow reschedule before the session start time */}
-                            {!isPast && (occ.status === 'CONFIRMED' || occ.status === 'PROPOSED') && (
+                            {/* Only allow reschedule if permitted by policy notice and session has not started/ended */}
+                            {!isPast && (occ.status === 'CONFIRMED' || occ.status === 'PROPOSED') && canRescheduleSession(occ) && (
                               <button
                                 type="button"
                                 className="apid-btn apid-btn-outline"

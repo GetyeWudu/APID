@@ -100,11 +100,11 @@ export const SessionFeedbackModal: React.FC<SessionFeedbackModalProps> = ({
                 gap: '0.45rem',
               }}
             >
-              <Star size={18} style={{ color: 'var(--brand-gold, #ca8a04)' }} />
-              Session Experience & Feedback
+              <Star size={18} style={{ color: 'var(--brand-gold, #ca8a04)', fill: 'var(--brand-gold, #ca8a04)' }} />
+              Coach Evaluation &amp; Session Experience
             </h2>
             <p style={{ margin: '0.2rem 0 0', fontSize: '0.82rem', color: 'var(--muted, #64748b)' }}>
-              Session: <strong>{session.title}</strong>
+              Session: <strong>{session.title}</strong> · Coach: <strong style={{ color: '#334155' }}>{session.coachFullName || 'Assigned Coach'}</strong>
             </p>
           </div>
           <button
@@ -132,7 +132,7 @@ export const SessionFeedbackModal: React.FC<SessionFeedbackModalProps> = ({
           {/* Star Rating */}
           <div style={{ textAlign: 'center', padding: '0.5rem 0' }}>
             <label style={{ display: 'block', fontSize: '0.9rem', fontWeight: 600, marginBottom: '0.5rem' }}>
-              How valuable was this coaching session?
+              How would you rate your Coach&apos;s guidance, support, and clarity during this session?
             </label>
             <div style={{ display: 'inline-flex', gap: '0.5rem', justifyContent: 'center' }}>
               {[1, 2, 3, 4, 5].map((star) => {
@@ -162,11 +162,11 @@ export const SessionFeedbackModal: React.FC<SessionFeedbackModalProps> = ({
               })}
             </div>
             <div style={{ marginTop: '0.4rem', fontSize: '0.8rem', color: 'var(--muted, #64748b)', fontWeight: 500 }}>
-              {rating === 5 && 'Outstanding & Highly Impactful'}
-              {rating === 4 && 'Very Helpful'}
+              {rating === 5 && 'Outstanding & Exceptional Mentorship'}
+              {rating === 4 && 'Very Helpful & Actionable Guidance'}
               {rating === 3 && 'Good / Met Expectations'}
-              {rating === 2 && 'Needs Improvement'}
-              {rating === 1 && 'Not Effective'}
+              {rating === 2 && 'Needs More Guidance & Structure'}
+              {rating === 1 && 'Ineffective / Unsatisfactory Support'}
             </div>
           </div>
 
@@ -183,13 +183,13 @@ export const SessionFeedbackModal: React.FC<SessionFeedbackModalProps> = ({
               }}
             >
               <MessageSquare size={15} />
-              Comments or Specific Takeaways
+              Coachee Reflection on Coach&apos;s Mentorship &amp; Takeaways
             </label>
             <textarea
               rows={3}
               value={comment}
               onChange={(e) => setComment(e.target.value)}
-              placeholder="Share what worked best, coaching techniques that helped, or areas to follow up in future sessions..."
+              placeholder="Share how effectively your coach explained concepts, provided feedback on your daily branch tasks, or areas where you need additional coaching guidance..."
               style={{
                 width: '100%',
                 padding: '0.55rem 0.75rem',
@@ -198,6 +198,9 @@ export const SessionFeedbackModal: React.FC<SessionFeedbackModalProps> = ({
                 fontSize: '0.88rem',
               }}
             />
+            <div style={{ marginTop: '0.35rem', fontSize: '0.74rem', color: '#64748b' }}>
+              Confidential evaluation: Your rating and feedback are used to evaluate coaching effectiveness and compute Coach Quality &amp; CSAT metrics across Bank of Abyssinia.
+            </div>
           </div>
 
           {/* Footer Actions */}

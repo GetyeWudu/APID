@@ -685,6 +685,12 @@ public class CoachingSessionService {
             PublicConfigDto publicConfig,
             ZoneId eatZone
     ) {
+        // Cannot reschedule if session has already started or ended
+        if (session.getScheduledStartTime().isBefore(Instant.now())) {
+            throw new BusinessException("SESSION_ALREADY_STARTED_OR_ENDED",
+                    "Cannot reschedule a coaching session that has already started or ended.");
+        }
+
         // Enforce Notice Period
         int minNoticeHours = publicConfig.getCoachingMinRescheduleNoticeHours() != null ? publicConfig.getCoachingMinRescheduleNoticeHours() : 4;
         if (Instant.now().plus(Duration.ofHours(minNoticeHours)).isAfter(session.getScheduledStartTime())) {
@@ -1008,6 +1014,14 @@ public class CoachingSessionService {
 
         SessionParticipant participant = participantRepository.findBySessionIdAndEmployeeId(sessionId, callerEmp.id())
                 .orElseThrow(() -> new AccessDeniedException("You are not a participant in this coaching session."));
+
+        if (participant.getRole() != ParticipantRole.COACHEE && !isAdmin(actor)) {
+            throw new AccessDeniedException("Only the assigned coachee can submit an evaluation and rating for their coach.");
+        }
+
+        if (participant.getFeedbackSubmittedAt() != null) {
+            throw new BusinessException("FEEDBACK_ALREADY_SUBMITTED", "Feedback has already been submitted for this coaching session.");
+        }
 
         participant.setFeedbackRating(request.rating());
         participant.setFeedbackComment(request.comment());

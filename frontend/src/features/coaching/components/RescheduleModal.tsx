@@ -109,6 +109,20 @@ export const RescheduleModal: React.FC<RescheduleModalProps> = ({
       return;
     }
 
+    // Verify session has not already started or ended
+    const originalStartMs = new Date(session.scheduledStartTime).getTime();
+    if (originalStartMs <= Date.now()) {
+      setError('Cannot reschedule a coaching session that has already started or ended.');
+      return;
+    }
+
+    // Enforce Minimum Notice Hours Policy
+    const noticeMs = minNoticeHours * 60 * 60 * 1000;
+    if (Date.now() + noticeMs > originalStartMs) {
+      setError(`Bank policy requires at least ${minNoticeHours} hours advance notice before the scheduled session to propose a reschedule.`);
+      return;
+    }
+
     if (isRescheduleLimitReached) {
       setError(`This session has reached the limit of ${maxReschedules} reschedule requests.`);
       return;
