@@ -103,11 +103,26 @@ public class PmsCoachingReportController {
         return ResponseEntity.ok(reportService.getMidQuarterInactivity(quarterId));
     }
 
-    @PostMapping("/midquarter-inactivity/notify-all")
+    @PostMapping({"/midquarter-inactivity/notify-all", "/notify-stalled"})
     public ResponseEntity<BatchNotificationResultDto> notifyAllStalledCoaches(
             @RequestParam(name = "quarterId", required = false) Long quarterId
     ) {
         return ResponseEntity.ok(reportService.notifyStalledCoaches(quarterId));
+    }
+
+    @PostMapping("/midquarter-inactivity/notify-coach/{coachEmployeeId}")
+    public ResponseEntity<BatchNotificationResultDto> notifyCoachGroup(
+            @PathVariable("coachEmployeeId") Long coachEmployeeId,
+            @RequestParam(name = "quarterId", required = false) Long quarterId
+    ) {
+        return ResponseEntity.ok(reportService.notifyCoachGroup(coachEmployeeId, quarterId));
+    }
+
+    @PostMapping("/midquarter-inactivity/notify-assignment/{assignmentId}")
+    public ResponseEntity<BatchNotificationResultDto> notifySingleAssignment(
+            @PathVariable("assignmentId") Long assignmentId
+    ) {
+        return ResponseEntity.ok(reportService.notifySingleAssignment(assignmentId));
     }
 
     @GetMapping("/export")

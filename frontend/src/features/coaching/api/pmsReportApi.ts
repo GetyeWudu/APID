@@ -340,6 +340,18 @@ export const pmsReportApi = {
     return res.data;
   },
 
+  notifyCoachGroup: async (coachEmployeeId: number, quarterId: number = 2): Promise<BatchNotificationResult> => {
+    const res = await apiClient.post<BatchNotificationResult>(`/coaching/reports/midquarter-inactivity/notify-coach/${coachEmployeeId}`, null, {
+      params: { quarterId },
+    });
+    return res.data;
+  },
+
+  notifySingleAssignment: async (assignmentId: number): Promise<BatchNotificationResult> => {
+    const res = await apiClient.post<BatchNotificationResult>(`/coaching/reports/midquarter-inactivity/notify-assignment/${assignmentId}`);
+    return res.data;
+  },
+
   downloadDossierPdf: async (assignmentId: number, coacheeStaffId?: string): Promise<void> => {
     const res = await apiClient.get('/coaching/pms/export/dossier/pdf', {
       params: { assignmentId },

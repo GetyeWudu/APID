@@ -28,11 +28,12 @@ export const MidQuarterInactivityAlert: React.FC<MidQuarterInactivityAlertProps>
     mutationFn: () => pmsReportApi.notifyAllStalledCoaches(quarterId),
     onSuccess: (data) => {
       pushToast({
-        title: 'Mid-Quarter Nudges Dispatched',
-        message: `Successfully notified ${data.notificationsDispatched} coaches to initiate sessions immediately.`,
+        title: 'Mid-Quarter Reminders Dispatched',
+        message: data.executionStatus || `Successfully notified ${data.notificationsDispatched} coaches and coachees to accelerate sessions.`,
         tone: 'ok',
       });
       queryClient.invalidateQueries({ queryKey: ['midquarter-inactivity'] });
+      queryClient.invalidateQueries({ queryKey: ['core', 'notifications'] });
     },
     onError: (err) => {
       console.error('Failed to dispatch mid-quarter notifications', err);
@@ -158,7 +159,7 @@ export const MidQuarterInactivityAlert: React.FC<MidQuarterInactivityAlertProps>
             ) : (
               <Send size={13} />
             )}
-            <span>{notifyMutation.isPending ? 'Dispatching...' : 'Dispatch Mid-Quarter Nudges'}</span>
+            <span>{notifyMutation.isPending ? 'Dispatching...' : 'Dispatch Mid-Quarter Reminders'}</span>
           </button>
         </div>
       </div>

@@ -186,19 +186,51 @@ export const CoachQualityTab: React.FC = () => {
     });
   };
 
-  const handleSendNudge = async (targetId: number, coachName: string) => {
-    try {
-      setNotifyingCoachId(targetId);
-      await pmsReportApi.notifyAllStalledCoaches(activeQuarterId);
+  const handleNotifyCoachGroup = async (coachId: number | null, coachName: string, coacheesCount: number) => {
+    if (!coachId) {
       pushToast({
-        title: 'Nudge Dispatched',
-        message: `Escalation notification delivered to Coach ${coachName}.`,
+        title: 'Notice',
+        message: 'No coach assigned to notify.',
+        tone: 'info',
+      });
+      return;
+    }
+    try {
+      setNotifyingCoachId(coachId);
+      const res = await pmsReportApi.notifyCoachGroup(coachId, activeQuarterId);
+      pushToast({
+        title: 'Reminders Delivered',
+        message: res.executionStatus || `Pacing notification delivered to Coach ${coachName} and ${coacheesCount} coachees.`,
         tone: 'ok',
       });
+      void queryClient.invalidateQueries({ queryKey: ['midquarter-inactivity'] });
+      void queryClient.invalidateQueries({ queryKey: ['core', 'notifications'] });
     } catch (err) {
       pushToast({
-        title: 'Dispatch Failed',
-        message: 'Could not send notification to coach.',
+        title: 'Delivery Failed',
+        message: 'Could not send pacing reminders to coach and coachees.',
+        tone: 'err',
+      });
+    } finally {
+      setNotifyingCoachId(null);
+    }
+  };
+
+  const handleNotifySingleAssignment = async (assignmentId: number, coachName: string, coacheeName: string) => {
+    try {
+      setNotifyingCoachId(assignmentId);
+      const res = await pmsReportApi.notifySingleAssignment(assignmentId);
+      pushToast({
+        title: 'Reminder Delivered',
+        message: res.executionStatus || `Targeted pacing notice delivered to Coach ${coachName} and Coachee ${coacheeName}.`,
+        tone: 'ok',
+      });
+      void queryClient.invalidateQueries({ queryKey: ['midquarter-inactivity'] });
+      void queryClient.invalidateQueries({ queryKey: ['core', 'notifications'] });
+    } catch (err) {
+      pushToast({
+        title: 'Delivery Failed',
+        message: 'Could not send targeted reminder.',
         tone: 'err',
       });
     } finally {
@@ -688,8 +720,8 @@ export const CoachQualityTab: React.FC = () => {
                           <button
                             type="button"
                             className="apid-btn apid-btn-outline apid-btn-sm"
-                            onClick={() => handleSendNudge(gc.coachees[0].assignmentId, gc.coachName)}
-                            disabled={notifyingCoachId === gc.coachees[0].assignmentId}
+                            onClick={() => handleNotifyCoachGroup(gc.coachId, gc.coachName, gc.totalCoachees)}
+                            disabled={notifyingCoachId === gc.coachId}
                             style={{
                               fontSize: '0.72rem',
                               padding: '0.3rem 0.65rem',
@@ -700,9 +732,9 @@ export const CoachQualityTab: React.FC = () => {
                           >
                             <Bell size={12} />
                             <span>
-                              {notifyingCoachId === gc.coachees[0].assignmentId
+                              {notifyingCoachId === gc.coachId
                                 ? 'Dispatching...'
-                                : `Nudge Coach (${gc.totalCoachees} Coachees)`}
+                                : `Notify Coach (${gc.totalCoachees} Coachees)`}
                             </span>
                           </button>
                         </div>
@@ -927,7 +959,7 @@ export const CoachQualityTab: React.FC = () => {
                           <button
                             type="button"
                             className="apid-btn apid-btn-outline apid-btn-sm"
-                            onClick={() => handleSendNudge(item.assignmentId, item.coachName)}
+                            onClick={() => handleNotifySingleAssignment(item.assignmentId, item.coachName, item.coacheeName)}
                             disabled={notifyingCoachId === item.assignmentId}
                             style={{
                               fontSize: '0.7rem',
@@ -938,7 +970,7 @@ export const CoachQualityTab: React.FC = () => {
                             }}
                           >
                             <Bell size={11} />
-                            <span>{notifyingCoachId === item.assignmentId ? 'Sending...' : 'Nudge Coach'}</span>
+                            <span>{notifyingCoachId === item.assignmentId ? 'Sending...' : 'Notify Coach & Coachee'}</span>
                           </button>
                         </td>
                       </tr>

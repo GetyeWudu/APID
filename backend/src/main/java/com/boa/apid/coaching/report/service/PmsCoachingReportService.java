@@ -1301,28 +1301,62 @@ public class PmsCoachingReportService {
     @Transactional
     public BatchNotificationResultDto notifyStalledCoaches(Long quarterId) {
         List<MidQuarterInactivityDto> stalled = getMidQuarterInactivity(quarterId);
-        int notifiedCount = 0;
+        int coachesNotified = 0;
+        int coacheesNotified = 0;
         int emailsQueued = 0;
 
+        Map<Long, List<MidQuarterInactivityDto>> byCoach = new LinkedHashMap<>();
         for (MidQuarterInactivityDto item : stalled) {
             if (item.coachEmployeeId() != null) {
-                Employee coach = employeeRepository.findById(item.coachEmployeeId()).orElse(null);
-                if (coach != null && coach.getUserId() != null) {
-                    try {
-                        notificationService.notify(
-                                coach.getUserId(),
-                                NotificationModule.COACHING,
-                                "COACHING_STALLED_ESCALATION",
-                                "⚠️ Mandatory Coaching Stalled: Week " + item.elapsedWeeks() + " Mid-Quarter Check",
-                                "You have completed " + item.completedSessions() + " of " + item.targetSessions() +
-                                        " required sessions for coachee " + item.coacheeName() + " (" + item.coacheeStaffId() + "). " +
-                                        item.recommendedAction(),
-                                "/coaching/sessions"
-                        );
-                        notifiedCount++;
-                        emailsQueued++;
-                    } catch (Exception ex) {
-                        log.warn("Could not dispatch mid-quarter notification to coach userId {}: {}", coach.getUserId(), ex.getMessage());
+                byCoach.computeIfAbsent(item.coachEmployeeId(), k -> new ArrayList<>()).add(item);
+            }
+        }
+
+        for (Map.Entry<Long, List<MidQuarterInactivityDto>> entry : byCoach.entrySet()) {
+            Long coachEmpId = entry.getKey();
+            List<MidQuarterInactivityDto> coacheeList = entry.getValue();
+            Employee coach = employeeRepository.findById(coachEmpId).orElse(null);
+
+            int elapsedWeeks = coacheeList.isEmpty() ? 7 : coacheeList.get(0).elapsedWeeks();
+
+            if (coach != null && coach.getUserId() != null) {
+                try {
+                    String coachMsg = buildConsolidatedCoachMessage(coach, coacheeList, elapsedWeeks);
+                    notificationService.notify(
+                            coach.getUserId(),
+                            NotificationModule.COACHING,
+                            "COACHING_STALLED_ESCALATION",
+                            "Coaching Pacing Alert: Mid-Quarter Check",
+                            coachMsg,
+                            "/coaching/sessions"
+                    );
+                    coachesNotified++;
+                    emailsQueued++;
+                } catch (Exception ex) {
+                    log.warn("Could not dispatch mid-quarter notification to coach userId {}: {}", coach.getUserId(), ex.getMessage());
+                }
+            }
+
+            for (MidQuarterInactivityDto item : coacheeList) {
+                CoachingAssignment a = assignmentRepository.findById(item.assignmentId()).orElse(null);
+                if (a != null && a.getCoacheeEmployeeId() != null) {
+                    Employee coachee = employeeRepository.findById(a.getCoacheeEmployeeId()).orElse(null);
+                    if (coachee != null && coachee.getUserId() != null) {
+                        try {
+                            String coacheeMsg = buildCoacheeMessage(coachee, coach, item);
+                            notificationService.notify(
+                                    coachee.getUserId(),
+                                    NotificationModule.COACHING,
+                                    "COACHING_PACING_NOTICE",
+                                    "Mandatory PMS Coaching Pacing Notice",
+                                    coacheeMsg,
+                                    "/coaching/sessions"
+                            );
+                            coacheesNotified++;
+                            emailsQueued++;
+                        } catch (Exception ex) {
+                            log.warn("Could not dispatch mid-quarter notification to coachee userId {}: {}", coachee.getUserId(), ex.getMessage());
+                        }
                     }
                 }
             }
@@ -1330,10 +1364,194 @@ public class PmsCoachingReportService {
 
         return new BatchNotificationResultDto(
                 stalled.size(),
-                notifiedCount,
+                coachesNotified + coacheesNotified,
                 emailsQueued,
-                "Successfully dispatched " + notifiedCount + " mid-quarter escalation notifications to stalled coaches."
+                "Successfully dispatched " + (coachesNotified + coacheesNotified) + " mid-quarter pacing notifications (" + coachesNotified + " coaches, " + coacheesNotified + " coachees)."
         );
+    }
+
+    @Transactional
+    public BatchNotificationResultDto notifyCoachGroup(Long coachEmployeeId, Long quarterId) {
+        List<MidQuarterInactivityDto> stalled = getMidQuarterInactivity(quarterId);
+        List<MidQuarterInactivityDto> coachItems = stalled.stream()
+                .filter(i -> coachEmployeeId.equals(i.coachEmployeeId()))
+                .collect(Collectors.toList());
+
+        if (coachItems.isEmpty()) {
+            return new BatchNotificationResultDto(0, 0, 0, "No stalled coachees found for this coach.");
+        }
+
+        Employee coach = employeeRepository.findById(coachEmployeeId).orElse(null);
+        if (coach == null) {
+            throw new ResourceNotFoundException("Coach employee not found with id: " + coachEmployeeId);
+        }
+
+        int coachesNotified = 0;
+        int coacheesNotified = 0;
+        int emailsQueued = 0;
+        int elapsedWeeks = coachItems.get(0).elapsedWeeks();
+
+        if (coach.getUserId() != null) {
+            try {
+                String coachMsg = buildConsolidatedCoachMessage(coach, coachItems, elapsedWeeks);
+                notificationService.notify(
+                        coach.getUserId(),
+                        NotificationModule.COACHING,
+                        "COACHING_STALLED_ESCALATION",
+                        "Coaching Pacing Alert: Mid-Quarter Check",
+                        coachMsg,
+                        "/coaching/sessions"
+                );
+                coachesNotified++;
+                emailsQueued++;
+            } catch (Exception ex) {
+                log.warn("Could not dispatch notification to coach userId {}: {}", coach.getUserId(), ex.getMessage());
+            }
+        }
+
+        for (MidQuarterInactivityDto item : coachItems) {
+            CoachingAssignment a = assignmentRepository.findById(item.assignmentId()).orElse(null);
+            if (a != null && a.getCoacheeEmployeeId() != null) {
+                Employee coachee = employeeRepository.findById(a.getCoacheeEmployeeId()).orElse(null);
+                if (coachee != null && coachee.getUserId() != null) {
+                    try {
+                        String coacheeMsg = buildCoacheeMessage(coachee, coach, item);
+                        notificationService.notify(
+                                coachee.getUserId(),
+                                NotificationModule.COACHING,
+                                "COACHING_PACING_NOTICE",
+                                "Mandatory PMS Coaching Pacing Notice",
+                                coacheeMsg,
+                                "/coaching/sessions"
+                        );
+                        coacheesNotified++;
+                        emailsQueued++;
+                    } catch (Exception ex) {
+                        log.warn("Could not dispatch notification to coachee userId {}: {}", coachee.getUserId(), ex.getMessage());
+                    }
+                }
+            }
+        }
+
+        return new BatchNotificationResultDto(
+                coachItems.size(),
+                coachesNotified + coacheesNotified,
+                emailsQueued,
+                "Delivered executive pacing reminder to Coach " + coach.getFullName() + " and " + coacheesNotified + " coachees."
+        );
+    }
+
+    @Transactional
+    public BatchNotificationResultDto notifySingleAssignment(Long assignmentId) {
+        CoachingAssignment a = assignmentRepository.findById(assignmentId)
+                .orElseThrow(() -> new ResourceNotFoundException("Coaching assignment not found with id: " + assignmentId));
+
+        Employee coach = a.getCoachEmployeeId() != null
+                ? employeeRepository.findById(a.getCoachEmployeeId()).orElse(null)
+                : null;
+        Employee coachee = employeeRepository.findById(a.getCoacheeEmployeeId())
+                .orElseThrow(() -> new ResourceNotFoundException("Coachee employee not found"));
+
+        FiscalQuarter quarter = resolveQuarter(a.getCoachingFiscalQuarterId());
+        LocalDate today = LocalDate.now();
+        long elapsedDays = ChronoUnit.DAYS.between(quarter.getStartDate(), today);
+        int elapsedWeeks = Math.max(1, (int) (elapsedDays / 7));
+
+        List<CoachingSession> sessions = sessionRepository.findAllByAssignmentId(a.getId());
+        int completedSessions = (int) sessions.stream().filter(s -> s.getStatus() == SessionStatus.COMPLETED).count();
+
+        int coachesNotified = 0;
+        int coacheesNotified = 0;
+        int emailsQueued = 0;
+
+        if (coach != null && coach.getUserId() != null) {
+            try {
+                String coachMsg = "Hello " + coach.getFullName() + ", coachee " + coachee.getFullName() + " (" + coachee.getEmployeeNumber() + ") "
+                        + "currently has " + completedSessions + " of 10 required sessions completed past the Week " + elapsedWeeks + " checkpoint. "
+                        + "In accordance with Bank of Abyssinia governance policy, please accelerate session scheduling.";
+                notificationService.notify(
+                        coach.getUserId(),
+                        NotificationModule.COACHING,
+                        "COACHING_STALLED_ESCALATION",
+                        "Coaching Pacing Reminder: " + coachee.getFullName(),
+                        coachMsg,
+                        "/coaching/sessions"
+                );
+                coachesNotified++;
+                emailsQueued++;
+            } catch (Exception ex) {
+                log.warn("Could not dispatch notification to coach userId {}: {}", coach.getUserId(), ex.getMessage());
+            }
+        }
+
+        if (coachee.getUserId() != null) {
+            try {
+                String coacheeMsg = "Hello " + coachee.getFullName() + ", your mandatory PMS performance coaching program with Coach "
+                        + (coach != null ? coach.getFullName() : "your assigned supervisor")
+                        + " has " + completedSessions + " of 10 required sessions logged past the Week " + elapsedWeeks + " checkpoint. "
+                        + "Please coordinate with your coach to schedule your upcoming session.";
+                notificationService.notify(
+                        coachee.getUserId(),
+                        NotificationModule.COACHING,
+                        "COACHING_PACING_NOTICE",
+                        "PMS Performance Coaching: Session Reminder",
+                        coacheeMsg,
+                        "/coaching/sessions"
+                );
+                coacheesNotified++;
+                emailsQueued++;
+            } catch (Exception ex) {
+                log.warn("Could not dispatch notification to coachee userId {}: {}", coachee.getUserId(), ex.getMessage());
+            }
+        }
+
+        return new BatchNotificationResultDto(
+                1,
+                coachesNotified + coacheesNotified,
+                emailsQueued,
+                "Delivered targeted pacing reminder to Coach " + (coach != null ? coach.getFullName() : "Coach") + " and Coachee " + coachee.getFullName() + "."
+        );
+    }
+
+    private String buildConsolidatedCoachMessage(Employee coach, List<MidQuarterInactivityDto> coachees, int elapsedWeeks) {
+        long criticalCount = coachees.stream().filter(c -> c.completedSessions() == 0).count();
+        long behindCount = coachees.size() - criticalCount;
+
+        List<String> criticalNames = coachees.stream()
+                .filter(c -> c.completedSessions() == 0)
+                .map(c -> c.coacheeName() + " (" + c.coacheeStaffId() + ")")
+                .limit(4)
+                .toList();
+
+        List<String> behindNames = coachees.stream()
+                .filter(c -> c.completedSessions() > 0)
+                .map(c -> c.coacheeName() + " (" + c.completedSessions() + "/" + c.targetSessions() + ")")
+                .limit(4)
+                .toList();
+
+        StringBuilder sb = new StringBuilder();
+        sb.append("Hello ").append(coach.getFullName()).append(", you have ").append(coachees.size())
+                .append(" assigned coachee(s) requiring remediation pacing attention past Week ").append(elapsedWeeks).append(" Checkpoint: ");
+
+        if (criticalCount > 0 && behindCount > 0) {
+            sb.append(criticalCount).append(" critical stall(s) (").append(String.join(", ", criticalNames)).append(" at 0/10) and ")
+                    .append(behindCount).append(" behind pacing (").append(String.join(", ", behindNames)).append("). ");
+        } else if (criticalCount > 0) {
+            sb.append(criticalCount).append(" critical stall(s) with 0 sessions logged (").append(String.join(", ", criticalNames)).append("). ");
+        } else {
+            sb.append(behindCount).append(" coachee(s) behind target pacing (").append(String.join(", ", behindNames)).append("). ");
+        }
+
+        sb.append("Standard Bank of Abyssinia governance policy mandates accelerating session frequency immediately.");
+        return sb.toString();
+    }
+
+    private String buildCoacheeMessage(Employee coachee, Employee coach, MidQuarterInactivityDto item) {
+        return "Hello " + coachee.getFullName() + ", your mandatory PMS performance coaching program with Coach "
+                + (coach != null ? coach.getFullName() : "your assigned supervisor")
+                + " has " + item.completedSessions() + " of " + item.targetSessions()
+                + " required sessions logged past the Week " + item.elapsedWeeks() + " checkpoint. "
+                + "Please coordinate with your coach or check your coaching schedule to remain compliant with Bank of Abyssinia remediation policy.";
     }
 
     private static class MutableDirectorateSummary {
