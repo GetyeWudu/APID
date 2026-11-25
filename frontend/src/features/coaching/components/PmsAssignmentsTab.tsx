@@ -160,7 +160,7 @@ export function PmsAssignmentsTab() {
               {analytics?.fiscalQuarterName || 'FY 2026/27 · Q2'}
             </span>
           </div>
-          <h2 className="text-xl font-bold text-slate-900 dark:text-white">
+          <h2 className="text-xl font-bold text-slate-900" style={{ color: '#0f172a' }}>
             Quarterly Coaching Administration &amp; Operational Roster
           </h2>
           <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
@@ -228,18 +228,19 @@ export function PmsAssignmentsTab() {
         {/* Total Monitored */}
         <div
           onClick={resetAllFilters}
-          className="apid-card p-3.5 cursor-pointer hover:border-slate-400 dark:hover:border-slate-600 transition flex flex-col justify-between"
+          className="apid-card p-3.5 cursor-pointer hover:border-slate-400 transition flex flex-col justify-between"
+          style={{ userSelect: 'none' }}
         >
-          <div className="flex items-center justify-between text-xs text-slate-500 dark:text-slate-400">
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', color: '#64748b', fontSize: '0.75rem' }}>
             <span>Total Monitored</span>
-            <Users size={14} className="text-slate-400" />
+            <Users size={14} style={{ color: '#94a3b8' }} />
           </div>
-          <div className="text-2xl font-extrabold text-slate-900 dark:text-white mt-1">
-            {analytics?.totalEmployeesMonitored || 151}
+          <div style={{ fontSize: '1.5rem', fontWeight: 800, color: '#0f172a', marginTop: '0.25rem' }}>
+            {analytics?.totalEmployeesMonitored || 150}
           </div>
-          <div className="text-[10px] text-slate-400 mt-1 flex items-center justify-between">
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '0.68rem', color: '#94a3b8', marginTop: '0.25rem' }}>
             <span>Bank-wide staff</span>
-            <span className="text-amber-600 dark:text-amber-400 font-medium">Reset Filters &rarr;</span>
+            <span style={{ color: '#d97706', fontWeight: 600 }}>Reset Filters &rarr;</span>
           </div>
         </div>
 
@@ -249,22 +250,22 @@ export function PmsAssignmentsTab() {
             resetAllFilters();
             setKpiFilter('REQUIRING_COACHING');
           }}
-          className={`apid-card p-3.5 cursor-pointer transition flex flex-col justify-between ${
-            kpiFilter === 'REQUIRING_COACHING'
-              ? 'ring-2 ring-amber-500 border-amber-500'
-              : 'hover:border-amber-400 dark:hover:border-amber-600'
-          }`}
+          className="apid-card p-3.5 cursor-pointer transition flex flex-col justify-between"
+          style={{
+            userSelect: 'none',
+            border: kpiFilter === 'REQUIRING_COACHING' ? '2px solid #f59e0b' : undefined,
+          }}
         >
-          <div className="flex items-center justify-between text-xs text-amber-600 dark:text-amber-400 font-medium">
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', color: '#d97706', fontSize: '0.75rem', fontWeight: 600 }}>
             <span>In Remediation</span>
             <Layers size={14} />
           </div>
-          <div className="text-2xl font-extrabold text-amber-600 dark:text-amber-400 mt-1">
+          <div style={{ fontSize: '1.5rem', fontWeight: 800, color: '#b45309', marginTop: '0.25rem' }}>
             {analytics?.totalCoachingAssignments || 49}
           </div>
-          <div className="text-[10px] text-slate-400 mt-1 flex items-center justify-between">
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '0.68rem', color: '#94a3b8', marginTop: '0.25rem' }}>
             <span>Score &lt; 3.0 trigger</span>
-            <span className="text-amber-600 dark:text-amber-400 font-medium">Filter Roster &rarr;</span>
+            <span style={{ color: '#d97706', fontWeight: 600 }}>Filter Roster &rarr;</span>
           </div>
         </div>
 
@@ -274,38 +275,39 @@ export function PmsAssignmentsTab() {
             setFilterValues((prev) => ({ ...prev, performanceBand: 'CRITICAL' }));
             setKpiFilter('CRITICAL');
           }}
-          className={`apid-card p-3.5 cursor-pointer transition flex flex-col justify-between ${
-            kpiFilter === 'CRITICAL' || filterValues.performanceBand === 'CRITICAL'
-              ? 'ring-2 ring-red-500 border-red-500'
-              : 'hover:border-red-400 dark:hover:border-red-600'
-          }`}
+          className="apid-card p-3.5 cursor-pointer transition flex flex-col justify-between"
+          style={{
+            userSelect: 'none',
+            borderLeft: '3px solid #ef4444',
+            border: kpiFilter === 'CRITICAL' || filterValues.performanceBand === 'CRITICAL' ? '2px solid #ef4444' : undefined,
+          }}
         >
-          <div className="flex items-center justify-between text-xs text-red-600 dark:text-red-400 font-medium">
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', color: '#dc2626', fontSize: '0.75rem', fontWeight: 600 }}>
             <span>Critical Tier (&lt; 2.0)</span>
             <ShieldAlert size={14} />
           </div>
-          <div className="text-2xl font-extrabold text-red-600 dark:text-red-400 mt-1">
+          <div style={{ fontSize: '1.5rem', fontWeight: 800, color: '#dc2626', marginTop: '0.25rem' }}>
             {analytics?.criticalCount || 17}
           </div>
-          <div className="text-[10px] text-slate-400 mt-1 flex items-center justify-between">
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '0.68rem', color: '#94a3b8', marginTop: '0.25rem' }}>
             <span>10 Mandatory Sess.</span>
-            <span className="text-red-600 dark:text-red-400 font-medium">Inspect Cohort &rarr;</span>
+            <span style={{ color: '#dc2626', fontWeight: 600 }}>Inspect Cohort &rarr;</span>
           </div>
         </div>
 
         {/* Target Sessions Delivery */}
-        <div className="apid-card p-3.5 flex flex-col justify-between">
-          <div className="flex items-center justify-between text-xs text-slate-500 dark:text-slate-400">
+        <div className="apid-card p-3.5 flex flex-col justify-between" style={{ userSelect: 'none' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', color: '#64748b', fontSize: '0.75rem' }}>
             <span>Session Delivery</span>
-            <Calendar size={14} className="text-slate-400" />
+            <Calendar size={14} style={{ color: '#94a3b8' }} />
           </div>
-          <div className="text-2xl font-extrabold text-slate-900 dark:text-white mt-1">
+          <div style={{ fontSize: '1.5rem', fontWeight: 800, color: '#0f172a', marginTop: '0.25rem' }}>
             {analytics?.totalCompletedSessions || 0}{' '}
-            <span className="text-xs font-normal text-slate-400">
+            <span style={{ fontSize: '0.75rem', fontWeight: 500, color: '#94a3b8' }}>
               / {analytics?.totalTargetSessions || 362}
             </span>
           </div>
-          <div className="text-[10px] text-emerald-600 dark:text-emerald-400 mt-1 font-semibold">
+          <div style={{ fontSize: '0.68rem', color: '#16a34a', fontWeight: 700, marginTop: '0.25rem' }}>
             {analytics?.overallCompletionRate || 0.0}% Target Met
           </div>
         </div>
@@ -315,22 +317,22 @@ export function PmsAssignmentsTab() {
           onClick={() => {
             setKpiFilter('OVERDUE');
           }}
-          className={`apid-card p-3.5 cursor-pointer transition flex flex-col justify-between ${
-            kpiFilter === 'OVERDUE'
-              ? 'ring-2 ring-amber-500 border-amber-500'
-              : 'hover:border-amber-400 dark:hover:border-amber-600'
-          }`}
+          className="apid-card p-3.5 cursor-pointer transition flex flex-col justify-between"
+          style={{
+            userSelect: 'none',
+            border: kpiFilter === 'OVERDUE' ? '2px solid #f59e0b' : undefined,
+          }}
         >
-          <div className="flex items-center justify-between text-xs text-amber-600 dark:text-amber-400 font-medium">
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', color: '#d97706', fontSize: '0.75rem', fontWeight: 600 }}>
             <span>Attention Required</span>
             <AlertTriangle size={14} />
           </div>
-          <div className="text-2xl font-extrabold text-amber-600 dark:text-amber-400 mt-1">
+          <div style={{ fontSize: '1.5rem', fontWeight: 800, color: '#b45309', marginTop: '0.25rem' }}>
             {analytics?.attentionRequiredCount || 17}
           </div>
-          <div className="text-[10px] text-slate-400 mt-1 flex items-center justify-between">
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '0.68rem', color: '#94a3b8', marginTop: '0.25rem' }}>
             <span>Stalled &gt; 14 days</span>
-            <span className="text-amber-600 dark:text-amber-400 font-medium">Review &rarr;</span>
+            <span style={{ color: '#d97706', fontWeight: 600 }}>Review &rarr;</span>
           </div>
         </div>
       </div>
@@ -403,7 +405,7 @@ export function PmsAssignmentsTab() {
       <div className="apid-card">
         <div className="p-4 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between flex-wrap gap-2">
           <div>
-            <h3 className="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
+            <h3 className="text-base font-bold text-slate-900 flex items-center gap-2" style={{ color: '#0f172a' }}>
               Coaching Assignments Roster
               <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300">
                 {talents.length} Coachees

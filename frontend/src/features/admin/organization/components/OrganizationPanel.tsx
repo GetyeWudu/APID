@@ -33,6 +33,20 @@ export function OrganizationPanel() {
   const [syncing, setSyncing] = useState(false);
   const [loading, setLoading] = useState(false);
   const [banner, setBanner] = useState<{ type: 'ok' | 'err'; text: string } | null>(null);
+  const [syncCadenceLabel, setSyncCadenceLabel] = useState<string>('7 days');
+
+  useEffect(() => {
+    usersApi
+      .getLdapStatus()
+      .then((status: any) => {
+        if (status?.syncInterval) {
+          setSyncCadenceLabel(status.syncInterval);
+        }
+      })
+      .catch(() => {
+        setSyncCadenceLabel('7 days');
+      });
+  }, []);
 
   const handleManualSync = async () => {
     setSyncing(true);
@@ -242,9 +256,9 @@ export function OrganizationPanel() {
           </button>
           <span
             className="boa-pill boa-pill-info"
-            title="All organizational structures and user profiles are synchronized directly from Active Directory Domain Services (every 30 mins)"
+            title={`All organizational structures and user profiles are synchronized directly from Active Directory Domain Services (${syncCadenceLabel} sync cadence)`}
           >
-            AD SSoT (30m sync)
+            AD SSoT ({syncCadenceLabel} sync)
           </span>
         </div>
       </div>

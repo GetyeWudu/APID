@@ -136,6 +136,10 @@ public class ActiveDirectorySyncService {
                     continue;
                 }
                 String normalizedUsername = samAccount.trim().toLowerCase(Locale.ROOT);
+                if (isTechnicalServiceAccount(adUser, normalizedUsername)) {
+                    log.info("Skipping technical/service account '{}' from employee sync", normalizedUsername);
+                    continue;
+                }
                 String empNumber = (adUser.employeeId() != null && !adUser.employeeId().isBlank())
                         ? adUser.employeeId().trim()
                         : normalizedUsername;
@@ -458,6 +462,27 @@ public class ActiveDirectorySyncService {
             return sn;
         }
         return fallback;
+    }
+
+    private boolean isTechnicalServiceAccount(AdSyncUserRecord adUser, String normalizedUsername) {
+        if (normalizedUsername == null) return false;
+        if (normalizedUsername.startsWith("svc_")
+                || normalizedUsername.startsWith("svc-")
+                || normalizedUsername.equals("svc_apid_ldap")
+                || normalizedUsername.equalsIgnoreCase("krbtgt")) {
+            return true;
+        }
+        if (adUser.distinguishedName() != null) {
+            String lowerDn = adUser.distinguishedName().toLowerCase(Locale.ROOT);
+            if (lowerDn.contains("ou=service accounts") || lowerDn.contains("ou=system accounts")) {
+                return true;
+            }
+        }
+        if (ldapProperties.getBindDn() != null && adUser.distinguishedName() != null
+                && adUser.distinguishedName().equalsIgnoreCase(ldapProperties.getBindDn())) {
+            return true;
+        }
+        return false;
     }
 
     public record AdSyncUserRecord(

@@ -41,10 +41,10 @@ export function UsersPanel() {
 
   const hasActiveFilters = Boolean(
     search ||
-      scope !== 'ALL' ||
-      roleFilter !== '' ||
-      providerFilter ||
-      statusFilter !== ''
+    scope !== 'ALL' ||
+    roleFilter !== '' ||
+    providerFilter ||
+    statusFilter !== ''
   );
 
   const loadData = useCallback(async () => {
