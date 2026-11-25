@@ -84,9 +84,9 @@ apid:
     enabled: ${AI_ENABLED:true}
     provider: ${AI_PROVIDER:ollama}
     ollama:
-      base-url: ${OLLAMA_BASE_URL:http://host.docker.internal:11434}
+      base-url: ${OLLAMA_BASE_URL:http://10.9.36.155:11434}
       model: ${OLLAMA_MODEL:qwen3:8b}
-      timeout-seconds: ${OLLAMA_TIMEOUT_SECONDS:120}
+      timeout-seconds: ${OLLAMA_TIMEOUT_SECONDS:45}
     concurrency:
       max-concurrent-inferences: ${APID_AI_MAX_CONCURRENT_INFERENCES:4}
       queue-timeout-ms: ${APID_AI_QUEUE_TIMEOUT_MS:5000}
