@@ -20,6 +20,10 @@ import { DataSourceBadge, EmptyState, StatusPill, useToast } from '../../../shar
 import { extractApiErrorMessage } from '../../../shared/api/apiClient';
 import type { MentorApplication } from '../api/mentorApplicationApi';
 import { mentorApplicationApi } from '../api/mentorApplicationApi';
+import {
+  filterByOrganizationLocation,
+  OrganizationLocationFilter,
+} from './OrganizationLocationFilter';
 import './TrainerApplicationsTab.css';
 
 type ApplicationNoteRecord = Record<string, unknown>;
@@ -338,12 +342,16 @@ export function TrainerApplicationsTab({
   const [detailTarget, setDetailTarget] = useState<MentorApplication | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<ApplicationStatusFilter>('ALL');
+  const [locationFilter, setLocationFilter] = useState('');
   const [reason, setReason] = useState('');
   const [reasonError, setReasonError] = useState('');
   const [busyId, setBusyId] = useState<number | null>(null);
   const [downloadingId, setDownloadingId] = useState<number | null>(null);
   const [viewingId, setViewingId] = useState<number | null>(null);
   const [summarizingId, setSummarizingId] = useState<number | null>(null);
+  const [summarizingProfileId, setSummarizingProfileId] = useState<number | null>(null);
+  const [profileSummaryDraft, setProfileSummaryDraft] = useState('');
+  const [profileSummaryError, setProfileSummaryError] = useState<string | null>(null);
   const [documentSummary, setDocumentSummary] = useState<{
     applicationId: number;
     fileId: number;
@@ -430,10 +438,44 @@ export function TrainerApplicationsTab({
     }
   };
 
+  const handleSummarizeProfile = async (application: MentorApplication) => {
+    setSummarizingProfileId(application.id);
+    setProfileSummaryError(null);
+    try {
+      const result = await mentorApplicationApi.summarizeProfile(application.id);
+      setProfileSummaryDraft(result.summary);
+      setDetailTarget((current) => {
+        if (!current || current.id !== application.id) return current;
+        return {
+          ...current,
+          profileSummary: result.persisted ? result.summary : current.profileSummary,
+        };
+      });
+      if (result.persisted) {
+        await Promise.all([
+          queryClient.invalidateQueries({ queryKey: ['mentoring', 'applications'] }),
+          queryClient.invalidateQueries({ queryKey: ['mentoring', 'directory'] }),
+          queryClient.invalidateQueries({ queryKey: ['mentoring', 'trainer-profile'] }),
+        ]);
+      }
+    } catch (error) {
+      setProfileSummaryError(extractApiErrorMessage(error, 'Unable to summarize this mentor profile.'));
+    } finally {
+      setSummarizingProfileId(null);
+    }
+  };
+
   const handleApprove = async (application: MentorApplication) => {
     setBusyId(application.id);
     try {
-      await mentorApplicationApi.review(application.id, { decision: 'APPROVED' });
+      const reviewedApplication = await mentorApplicationApi.review(application.id, {
+        decision: 'APPROVED',
+        ...(application.applicationType !== 'SKILL_ADDITION' && profileSummaryDraft.trim()
+          ? { profileSummary: profileSummaryDraft.trim() }
+          : {}),
+      });
+      setDetailTarget(reviewedApplication);
+      setProfileSummaryDraft(reviewedApplication.profileSummary ?? '');
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ['mentoring', 'applications'] }),
         queryClient.invalidateQueries({ queryKey: ['mentoring', 'trainers'] }),
@@ -652,8 +694,9 @@ export function TrainerApplicationsTab({
   const visibleApplications = isProfileUpdateQueue
     ? applications.filter((application) => application.applicationType === 'PROFILE_UPDATE')
     : applications;
+  const locationFilteredApplications = filterByOrganizationLocation(visibleApplications, locationFilter);
   const normalizedSearch = searchQuery.trim().toLowerCase();
-  const filteredApplications = visibleApplications.filter((application) => {
+  const filteredApplications = locationFilteredApplications.filter((application) => {
     if (statusFilter !== 'ALL' && application.status !== statusFilter) return false;
     if (!normalizedSearch) return true;
     const searchableText = [
@@ -717,6 +760,12 @@ export function TrainerApplicationsTab({
                 onChange={(event) => setSearchQuery(event.target.value)}
               />
             </label>
+            <OrganizationLocationFilter
+              paths={visibleApplications.map((application) => application.organizationPath ?? [])}
+              value={locationFilter}
+              onChange={setLocationFilter}
+              label="Filter applications by district, branch, or department"
+            />
             <div className="mentor-application-filters" aria-label="Filter applications by status">
               {(['ALL', 'PENDING', 'APPROVED', 'DECLINED'] as const).map((filter) => (
                 <button
@@ -736,7 +785,7 @@ export function TrainerApplicationsTab({
           {filteredApplications.length === 0 ? (
             <EmptyState
               title="No matching applications"
-              description="Try a different search or status filter."
+              description="Try another search, status, or organizational location."
             />
           ) : (
             <div className="apid-table-wrap mentor-application-table-wrap">
@@ -760,6 +809,11 @@ export function TrainerApplicationsTab({
                       <tr key={app.id}>
                         <td>
                           <strong className="mentor-application-applicant">{app.applicantUsername}</strong>
+                          {app.organizationPath?.length ? (
+                            <span className="mentor-application-id">
+                              {app.organizationPath.map((location) => location.name).join(' / ')}
+                            </span>
+                          ) : null}
                           <span className="mentor-application-id">Application #{app.id}</span>
                         </td>
                         <td>
@@ -807,6 +861,8 @@ export function TrainerApplicationsTab({
                             onClick={() => {
                               setDocumentSummary(null);
                               setSummaryError(null);
+                                setProfileSummaryDraft(app.profileSummary ?? '');
+                                setProfileSummaryError(null);
                               setDetailTarget(app);
                             }}
                           >
@@ -1098,6 +1154,46 @@ export function TrainerApplicationsTab({
                   )}
                 </dl>
               </ApplicationDetailSection>
+              {detailTarget.applicationType !== 'SKILL_ADDITION' && (
+                <ApplicationDetailSection
+                  icon={<Sparkles size={17} />}
+                  title="AI-powered profile summary"
+                >
+                  <p className="mentor-profile-summary-help">
+                    Generate a summary of the mentor profile and uploaded evidence. For pending applications,
+                    it is saved when you approve; if you skip generation, it is created automatically during approval.
+                  </p>
+                  {profileSummaryDraft ? (
+                    <div className="mentor-profile-summary-preview" aria-live="polite">
+                      <p>{profileSummaryDraft}</p>
+                      {detailTarget.status === 'PENDING' && (
+                        <span>This preview will be saved with approval.</span>
+                      )}
+                    </div>
+                  ) : (
+                    <p className="boa-muted">No profile summary has been generated yet.</p>
+                  )}
+                  {profileSummaryError && (
+                    <p className="mentor-document-summary-error" role="alert">
+                      Summary failed: {profileSummaryError}
+                    </p>
+                  )}
+                  {detailTarget.status !== 'DECLINED' && (
+                    <button
+                      type="button"
+                      className="apid-btn apid-btn-outline apid-btn-sm"
+                      disabled={summarizingProfileId !== null || busyId !== null}
+                      onClick={() => void handleSummarizeProfile(detailTarget)}
+                    >
+                      {summarizingProfileId === detailTarget.id
+                        ? <><LoaderCircle className="mentor-document-summary-spinner" size={13} /> Summarizing…</>
+                        : <><Sparkles size={13} /> {detailTarget.status === 'APPROVED'
+                          ? 'Generate / refresh saved summary'
+                          : 'Generate AI-powered profile summary'}</>}
+                    </button>
+                  )}
+                </ApplicationDetailSection>
+              )}
             </div>
             <footer className="mentor-application-detail-footer">
               {detailTarget.status === 'PENDING' && (
@@ -1105,7 +1201,7 @@ export function TrainerApplicationsTab({
                   <button
                     type="button"
                     className="apid-btn apid-btn-primary"
-                    disabled={busyId !== null}
+                    disabled={busyId !== null || summarizingProfileId === detailTarget.id}
                     onClick={() => void handleApprove(detailTarget)}
                   >
                     <Check size={14} /> {detailTarget.applicationType === 'PROFILE_UPDATE' ? 'Approve update' : 'Approve application'}

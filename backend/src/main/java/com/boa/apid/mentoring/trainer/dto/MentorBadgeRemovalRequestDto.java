@@ -1,5 +1,6 @@
 package com.boa.apid.mentoring.trainer.dto;
 
+import com.boa.apid.core.organization.dto.OrganizationLocationDto;
 import com.boa.apid.mentoring.trainer.entity.MentorBadgeRemovalDisposition;
 import com.boa.apid.mentoring.trainer.entity.MentorBadgeRemovalRequestStatus;
 
@@ -18,6 +19,7 @@ public record MentorBadgeRemovalRequestDto(
         Instant requestedAt,
         Instant reviewedAt,
         MentorBadgeRemovalDisposition disposition,
-        String decisionReason
+        String decisionReason,
+        List<OrganizationLocationDto> organizationPath
 ) {
 }

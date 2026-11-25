@@ -9,14 +9,14 @@ const skills = Array.from({ length: 10 }, (_, index) => ({
 }));
 
 describe('SkillSupplyDemandCard', () => {
-  it('limits the initial chart and lets users expand or search skills', () => {
+  it('renders all skills in the scrollable chart and filters by search', () => {
     render(<SkillSupplyDemandCard liveSkillNames={skills.map((skill) => skill.skillName)} skillSupplyDemand={skills} />);
 
     const chart = screen.getByRole('region', { name: 'Mentoring Demand vs Trainer Slots' });
-    expect(within(chart).queryByText('Skill 9')).not.toBeInTheDocument();
-
-    fireEvent.click(screen.getByRole('button', { name: 'Show all 10 skills' }));
     expect(within(chart).getByText('Skill 9')).toBeInTheDocument();
+    expect(screen.getByRole('region', { name: 'Scrollable skill demand and trainer supply chart' }))
+      .toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /show all/i })).not.toBeInTheDocument();
 
     fireEvent.change(screen.getByPlaceholderText('Search skills'), { target: { value: 'Skill 9' } });
     expect(within(chart).getByText('Skill 9')).toBeInTheDocument();

@@ -6,6 +6,10 @@ import {
   type MentorBadgeRemovalDisposition,
   type MentorBadgeRemovalRequest,
 } from '../api/mentoringTrainerApi';
+import {
+  filterByOrganizationLocation,
+  OrganizationLocationFilter,
+} from './OrganizationLocationFilter';
 
 export function TrainerBadgeRemovalRequestsTab({
   requests,
@@ -16,6 +20,7 @@ export function TrainerBadgeRemovalRequestsTab({
   const { pushToast } = useToast();
   const [dispositions, setDispositions] = useState<Record<number, MentorBadgeRemovalDisposition>>({});
   const [decisionReasons, setDecisionReasons] = useState<Record<number, string>>({});
+  const [locationFilter, setLocationFilter] = useState('');
   const decisionMutation = useMutation({
     mutationFn: mentoringTrainerApi.decideBadgeRemovalRequest,
     onSuccess: async (request) => {
@@ -50,6 +55,7 @@ export function TrainerBadgeRemovalRequestsTab({
       decisionReason: decisionReasons[request.id]?.trim() || undefined,
     });
   };
+  const filteredRequests = filterByOrganizationLocation(requests, locationFilter);
 
   return (
     <div className="boa-stack">
@@ -57,6 +63,14 @@ export function TrainerBadgeRemovalRequestsTab({
         <h2 className="boa-card-title">Badge removal requests</h2>
         <p className="boa-card-subtitle">Review mentor requests to remove their mentor authorization.</p>
       </div>
+      {requests.length > 0 && (
+        <OrganizationLocationFilter
+          paths={requests.map((request) => request.organizationPath ?? [])}
+          value={locationFilter}
+          onChange={setLocationFilter}
+          label="Filter requests by district, branch, or department"
+        />
+      )}
       {requests.length === 0 ? (
         <div className="apid-card">
           <EmptyState
@@ -64,14 +78,21 @@ export function TrainerBadgeRemovalRequestsTab({
             description="Mentor-submitted requests awaiting HR review will appear here."
           />
         </div>
-      ) : requests.map((request) => (
+      ) : filteredRequests.length === 0 ? (
+        <div className="apid-card">
+          <EmptyState title="No requests in this location" description="Choose another district, branch, or department." />
+        </div>
+      ) : filteredRequests.map((request) => (
         <article className="apid-card boa-stack" key={request.id}>
           <div className="boa-card-header">
             <div>
               <h2 className="boa-card-title">{request.mentorName}</h2>
               <p className="boa-card-subtitle">
                 {request.employeeNumber}
-                {request.departmentName ? ` · ${request.departmentName}` : ''}
+                {' · '}
+                {request.organizationPath?.map((location) => location.name).join(' / ')
+                  || request.departmentName
+                  || 'Unassigned department'}
                 {' · Submitted '}
                 {new Date(request.requestedAt).toLocaleString()}
               </p>

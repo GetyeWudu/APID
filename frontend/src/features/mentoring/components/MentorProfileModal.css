@@ -1,0 +1,258 @@
+.ai-mentor-modal-backdrop {
+  --m-ink: #1a1c1e;
+  --m-ink-2: #2c3036;
+  --m-muted: #5c626a;
+  --m-accent: #c59b27;
+  --m-line: #e5e7eb;
+  --m-line-2: #f0f2f5;
+  --m-surface: #fff;
+  --m-surface-2: #f8fbfa;
+  position: fixed;
+  z-index: 1200;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 1rem;
+  background: rgba(17, 24, 39, 0.58);
+  backdrop-filter: blur(4px);
+}
+
+.ai-mentor-profile-modal {
+  width: min(100%, 720px);
+  max-height: min(88vh, 900px);
+  overflow: hidden;
+  border: 1px solid var(--m-line);
+  border-radius: 16px;
+  background: var(--m-surface);
+  box-shadow: 0 24px 70px rgba(13, 43, 43, 0.24);
+  animation: ai-profile-dialog-enter 160ms ease both;
+}
+
+.ai-mentor-profile-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 1.1rem 1.25rem;
+  border-bottom: 1px solid var(--m-line);
+  background: color-mix(in srgb, var(--m-accent) 5%, var(--m-surface));
+}
+
+.ai-mentor-profile-header > div > span {
+  color: var(--m-accent);
+  font-size: 0.66rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.ai-mentor-profile-header h2 {
+  margin: 0.2rem 0;
+  color: var(--m-ink);
+  font-size: 1.15rem;
+  letter-spacing: -0.02em;
+}
+
+.ai-mentor-profile-header p {
+  margin: 0;
+  color: var(--m-muted);
+  font-size: 0.78rem;
+}
+
+.ai-mentor-modal-close {
+  display: grid;
+  width: 34px;
+  height: 34px;
+  flex: 0 0 auto;
+  place-items: center;
+  border: 1px solid var(--m-line);
+  border-radius: 9px;
+  color: var(--m-muted);
+  background: var(--m-surface);
+  cursor: pointer;
+}
+
+.ai-mentor-modal-close:hover:not(:disabled) {
+  color: var(--m-ink);
+  border-color: var(--m-accent);
+}
+
+.ai-mentor-profile-content {
+  max-height: calc(min(88vh, 900px) - 145px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.ai-mentor-profile-facts {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.5rem;
+  padding: 1rem 1.25rem;
+}
+
+.ai-mentor-profile-facts > div {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  align-items: center;
+  gap: 0.25rem 0.4rem;
+  padding: 0.65rem;
+  border: 1px solid var(--m-line);
+  border-radius: 10px;
+  background: var(--m-surface-2);
+}
+
+.ai-mentor-profile-facts svg {
+  color: var(--m-accent);
+}
+
+.ai-mentor-profile-facts span {
+  color: var(--m-muted);
+  font-size: 0.62rem;
+  font-weight: 700;
+}
+
+.ai-mentor-profile-facts strong {
+  grid-column: 1 / -1;
+  color: var(--m-ink);
+  font-size: 0.78rem;
+}
+
+.ai-mentor-profile-section {
+  display: grid;
+  gap: 0.5rem;
+  padding: 0.85rem 1.25rem;
+  border-top: 1px solid var(--m-line-2);
+}
+
+.ai-mentor-profile-section h3 {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  margin: 0;
+  color: var(--m-ink-2);
+  font-size: 0.75rem;
+  font-weight: 800;
+}
+
+.ai-mentor-profile-section h3 svg {
+  color: var(--m-accent);
+}
+
+.ai-mentor-profile-section > p {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  margin: 0;
+  color: var(--m-muted);
+  font-size: 0.78rem;
+  line-height: 1.55;
+  white-space: pre-wrap;
+}
+
+.ai-mentor-profile-skills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
+.ai-mentor-profile-skills span {
+  padding: 0.28rem 0.55rem;
+  border: 1px solid color-mix(in srgb, var(--m-accent) 24%, var(--m-line));
+  border-radius: 999px;
+  color: var(--m-ink-2);
+  background: color-mix(in srgb, var(--m-accent) 7%, var(--m-surface));
+  font-size: 0.68rem;
+  font-weight: 650;
+}
+
+.ai-mentor-profile-record {
+  display: grid;
+  gap: 0.15rem;
+  padding: 0.55rem 0.65rem;
+  border: 1px solid var(--m-line-2);
+  border-radius: 8px;
+  background: var(--m-surface-2);
+}
+
+.ai-mentor-profile-record strong {
+  color: var(--m-ink-2);
+  font-size: 0.74rem;
+}
+
+.ai-mentor-profile-record span {
+  color: var(--m-muted);
+  font-size: 0.68rem;
+}
+
+.ai-mentor-profile-error {
+  margin: 0.75rem 1.25rem 0;
+  padding: 0.65rem 0.75rem;
+  border: 1px solid rgba(192, 57, 43, 0.3);
+  border-radius: 9px;
+  color: #a93226;
+  background: rgba(192, 57, 43, 0.05);
+  font-size: 0.75rem;
+}
+
+.ai-mentor-profile-footer {
+  display: flex;
+  justify-content: flex-end;
+  padding: 0.75rem 1.25rem;
+  border-top: 1px solid var(--m-line);
+}
+
+.ai-mentor-view {
+  min-height: 36px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  padding: 0.5rem 0.8rem;
+  border: 1px solid var(--m-line);
+  border-radius: 9px;
+  color: var(--m-ink-2);
+  background: var(--m-surface);
+  font-size: 0.74rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 150ms ease, border-color 150ms ease, transform 150ms ease;
+}
+
+.ai-mentor-view:not(:disabled):hover {
+  border-color: color-mix(in srgb, var(--m-accent) 45%, var(--m-line));
+  background: color-mix(in srgb, var(--m-accent) 7%, var(--m-surface));
+  transform: translateY(-1px);
+}
+
+.ai-mentor-view:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+@keyframes ai-profile-dialog-enter {
+  from { opacity: 0; transform: translateY(8px) scale(0.99); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+@media (max-width: 560px) {
+  .ai-mentor-profile-facts {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    padding: 0.8rem;
+  }
+
+  .ai-mentor-profile-section,
+  .ai-mentor-profile-header {
+    padding-right: 0.8rem;
+    padding-left: 0.8rem;
+  }
+
+  .ai-mentor-profile-content {
+    max-height: calc(88vh - 145px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ai-mentor-profile-modal {
+    animation: none;
+  }
+}

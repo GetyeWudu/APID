@@ -2,6 +2,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { mentorDirectoryApi, type MentorRecommendation } from '../features/mentoring/api/mentorDirectoryApi';
 import { mentoringMatchApi } from '../features/mentoring/api/mentoringMatchApi';
 import type { TrainerEmployeeCandidate, TrainerRosterItem } from '../features/mentoring/api/mentoringTrainerApi';
 import { HrDirectMatchingTab } from '../features/mentoring/components/HrDirectMatchingTab';
@@ -95,6 +96,107 @@ describe('HrMatchingTab reassignment', () => {
         overrideCapacity: true,
         overrideReason: 'Temporary coverage approved by HR.',
         skillOverrideReason: 'Temporary coverage approved by HR.',
+      });
+
+      it('only shows exact-skill suggestions and renders stars from the mentor rating', async () => {
+        vi.spyOn(mentoringMatchApi, 'listReassignmentQueue').mockResolvedValue([]);
+        const requestId = 21;
+        const skillId = 7;
+        const exactMentor: MentorRecommendation = {
+          rank: 1,
+          reason: 'Exact Cybersecurity skill match.',
+          skillId,
+          skillName: 'Cybersecurity',
+          profileSummary: null,
+          careerExperience: [],
+          mentorshipExperience: [],
+          mentor: {
+            userId: 30,
+            username: 'exact.mentor',
+            employeeNumber: 'EMP-30',
+            fullName: 'Exact Mentor',
+            departmentName: 'Security',
+            bio: null,
+            activeTrainees: 0,
+            remainingCapacity: 2,
+            averageRating: 4.3,
+            skills: [{ id: skillId, name: 'Cybersecurity', category: 'Security' }],
+          },
+        };
+        const relatedMentor: MentorRecommendation = {
+          ...exactMentor,
+          rank: 2,
+          skillId: 8,
+          skillName: 'Network Engineering',
+          reason: 'A related skill.',
+          mentor: {
+            ...exactMentor.mentor,
+            userId: 31,
+            username: 'related.mentor',
+            employeeNumber: 'EMP-31',
+            fullName: 'Related Mentor',
+            skills: [{ id: 8, name: 'Network Engineering', category: 'Security' }],
+          },
+        };
+        const recommend = vi.spyOn(mentorDirectoryApi, 'recommendExactSkillMentorsForHr').mockResolvedValue({
+          overallReason: null,
+          recommendations: [exactMentor, relatedMentor],
+        });
+        const trainer: TrainerRosterItem = {
+          id: 4,
+          employeeId: 5,
+          userId: 30,
+          employeeNumber: 'EMP-30',
+          fullName: 'Exact Mentor',
+          departmentName: 'Security',
+          employmentStatus: 'ACTIVE',
+          sourceType: 'APPLICATION',
+          status: 'ACTIVE',
+          activeTrainees: 0,
+          pendingTrainees: 0,
+          maxConcurrentTrainees: 2,
+          bio: null,
+          skills: [{ id: skillId, name: 'Cybersecurity', category: 'Security', status: 'ACTIVE' }],
+          effectiveFrom: '2026-11-01T08:00:00Z',
+          updatedAt: '2026-11-01T08:00:00Z',
+        };
+        const queryClient = new QueryClient({
+          defaultOptions: { queries: { retry: false } },
+        });
+
+        render(
+          <QueryClientProvider client={queryClient}>
+            <ToastProvider>
+              <MemoryRouter>
+                <HrMatchingTab
+                  requests={[{
+                    id: requestId,
+                    traineeUserId: 40,
+                    traineeName: 'Trainee',
+                    traineeEmployeeNumber: 'EMP-40',
+                    departmentName: 'Security',
+                    skillId,
+                    skillName: 'Cybersecurity',
+                    message: null,
+                    status: 'OPEN',
+                    matchedTrainerUserId: null,
+                    matchedTrainerName: null,
+                    mentoringRelationshipId: null,
+                    createdAt: '2026-11-01T08:00:00Z',
+                  }]}
+                  trainers={[trainer]}
+                />
+              </MemoryRouter>
+            </ToastProvider>
+          </QueryClientProvider>
+        );
+
+        fireEvent.click(screen.getByRole('button', { name: /AI Suggest/ }));
+
+        expect(await screen.findByText('Exact Mentor')).toBeInTheDocument();
+        expect(screen.queryByText('Related Mentor')).not.toBeInTheDocument();
+        expect(screen.getByRole('img', { name: 'Average mentor rating 4.3 out of 5' })).toBeInTheDocument();
+        expect(recommend).toHaveBeenCalledWith('Cybersecurity', skillId);
       });
     });
   });

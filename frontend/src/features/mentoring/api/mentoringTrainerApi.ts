@@ -1,4 +1,5 @@
 import { apiClient, type ApiResponse } from '../../../shared/api/apiClient';
+import type { OrganizationLocation } from './organizationLocation';
 
 export type TrainerAuthorizationStatus = 'ACTIVE' | 'SUSPENDED' | 'REVOKED';
 export type TrainerAuthorizationSource = 'APPLICATION' | 'DIRECT_APPOINTMENT';
@@ -23,6 +24,7 @@ export interface TrainerRosterItem {
   employeeNumber: string;
   fullName: string;
   departmentName: string | null;
+  organizationPath?: OrganizationLocation[];
   employmentStatus: string;
   sourceType: TrainerAuthorizationSource;
   status: TrainerAuthorizationStatus;
@@ -53,6 +55,7 @@ export interface TrainerDirectoryItem {
   employeeNumber: string;
   fullName: string;
   departmentName: string | null;
+  organizationPath?: OrganizationLocation[];
   bio: string | null;
   experienceYears?: number | null;
   mentoringApproach?: string | null;
@@ -78,6 +81,7 @@ export interface TrainerEmployeeCandidate {
   employeeNumber: string;
   fullName: string;
   departmentName: string | null;
+  organizationPath?: OrganizationLocation[];
 }
 
 export interface MentoringSkillDemand {
@@ -99,9 +103,37 @@ export interface MentoringHrOverview {
   completedRelationships: number;
   totalSessions: number;
   completedSessions: number;
-  averageFeedbackRating: number;
+  averageFeedbackRating: number | null;
   completionRatePct: number;
   skillSupplyDemand: MentoringSkillDemand[];
+  requestBacklog: {
+    openRequests: number;
+    averageWaitDays: number;
+    oldestWaitDays: number;
+    waitingUnderTwoDays: number;
+    waitingTwoToSevenDays: number;
+    waitingSevenOrMoreDays: number;
+  };
+  feedbackReport: {
+    responseCount: number;
+    averageRating: number | null;
+    ratingDistribution: Array<{
+      rating: number;
+      responseCount: number;
+    }>;
+    monthlyTrend: Array<{
+      month: string;
+      responseCount: number;
+      averageRating: number | null;
+    }>;
+  };
+}
+
+export interface MentoringProgramInsights {
+  summary: string;
+  strengths: string[];
+  attentionAreas: string[];
+  recommendedActions: string[];
 }
 
 export interface MentoringPairingReportSummary {
@@ -156,6 +188,7 @@ export interface MentorBadgeRemovalRequest {
   reviewedAt: string | null;
   disposition: MentorBadgeRemovalDisposition | null;
   decisionReason: string | null;
+  organizationPath?: OrganizationLocation[];
 }
 
 export const mentoringTrainerApi = {
@@ -186,6 +219,13 @@ export const mentoringTrainerApi = {
   async getPairingReportOverview(): Promise<MentoringPairingReportOverview> {
     const response = await apiClient.get<ApiResponse<MentoringPairingReportOverview>>(
       '/mentoring/hr/reports/pairings'
+    );
+    return response.data.data;
+  },
+
+  async generateProgramInsights(): Promise<MentoringProgramInsights> {
+    const response = await apiClient.post<ApiResponse<MentoringProgramInsights>>(
+      '/mentoring/hr/reports/ai-insights'
     );
     return response.data.data;
   },

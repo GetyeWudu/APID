@@ -1,5 +1,6 @@
 package com.boa.apid.mentoring.trainer.dto;
 
+import com.boa.apid.core.organization.dto.OrganizationLocationDto;
 import com.boa.apid.mentoring.trainer.entity.TrainerAuthorizationSource;
 import com.boa.apid.mentoring.trainer.entity.TrainerAuthorizationStatus;
 
@@ -30,7 +31,8 @@ public record TrainerRosterDto(
         Long profilePictureFileId,
         String profilePictureFileName,
         String profileApplicationDetails,
-        List<ProfileEvidence> profileApplicationEvidence
+        List<ProfileEvidence> profileApplicationEvidence,
+        List<OrganizationLocationDto> organizationPath
 ) {
     public record ProfileEvidence(Long fileId, String fileName, String context) {
     }

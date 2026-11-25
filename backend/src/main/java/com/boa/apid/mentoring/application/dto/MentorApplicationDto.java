@@ -1,5 +1,7 @@
 package com.boa.apid.mentoring.application.dto;
 
+import com.boa.apid.core.organization.dto.OrganizationLocationDto;
+import com.boa.apid.core.organization.entity.Employee;
 import com.boa.apid.mentoring.application.entity.MentorApplication;
 import com.boa.apid.mentoring.application.entity.MentorApplicationStatus;
 import com.boa.apid.mentoring.application.entity.MentorApplicationType;
@@ -25,6 +27,7 @@ public record MentorApplicationDto(
         List<Evidence> evidenceFiles,
         String note,
         String expertiseSummary,
+        String profileSummary,
         Integer maxConcurrentTrainees,
         Instant submittedAt,
         String reviewedByUsername,
@@ -35,10 +38,15 @@ public record MentorApplicationDto(
         Integer sessionsPerWeek,
         String mentorAgreementVersion,
         String mentorAgreementText,
-        Instant mentorAgreementAcceptedAt
+        Instant mentorAgreementAcceptedAt,
+        List<OrganizationLocationDto> organizationPath
 ) {
 
     public static MentorApplicationDto from(MentorApplication application) {
+        return from(application, null);
+    }
+
+    public static MentorApplicationDto from(MentorApplication application, Employee employee) {
         Map<Long, String> evidenceContexts = parseEvidenceContexts(application.getEvidenceContexts());
         List<String> skillNames = new ArrayList<>(application.getCatalogSkills().stream()
                 .map(skill -> skill.getName())
@@ -94,6 +102,7 @@ public record MentorApplicationDto(
                 evidenceFiles,
                 application.getNote(),
                 application.getExpertiseSummary(),
+                application.getProfileSummary(),
                 application.getMaxConcurrentTrainees(),
                 application.getSubmittedAt(),
                 application.getReviewedBy() == null ? null : application.getReviewedBy().getUsername(),
@@ -104,7 +113,8 @@ public record MentorApplicationDto(
                 application.getSessionsPerWeek(),
                 application.getMentorAgreementVersion(),
                 application.getMentorAgreementText(),
-                application.getMentorAgreementAcceptedAt()
+                application.getMentorAgreementAcceptedAt(),
+                employee == null ? List.of() : OrganizationLocationDto.path(employee)
         );
     }
 

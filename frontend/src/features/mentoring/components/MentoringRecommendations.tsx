@@ -1,11 +1,24 @@
 import { useState, type FormEvent } from 'react';
 import axios from 'axios';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { ArrowRight, LoaderCircle, Send, Sparkles, Star, Users } from 'lucide-react';
+import {
+  Eye,
+  LoaderCircle,
+  Send,
+  Sparkles,
+  Star,
+  Users,
+  X,
+} from 'lucide-react';
 import { extractApiErrorMessage, type ApiErrorPayload } from '../../../shared/api/apiClient';
 import { useToast } from '../../../shared/components/ui';
-import { mentorDirectoryApi, type MentorRecommendation } from '../api/mentorDirectoryApi';
+import {
+  mentorDirectoryApi,
+  type MentorDirectoryItem,
+  type MentorRecommendation,
+} from '../api/mentorDirectoryApi';
 import { mentoringPairingApi, type MentoringPairing } from '../api/mentoringPairingApi';
+import { MentorProfileModal } from './MentorProfileModal';
 import './MentoringRecommendations.css';
 
 const LEARNING_GOAL_EXAMPLES = [
@@ -30,6 +43,9 @@ export function MentoringRecommendations({
   const { pushToast } = useToast();
   const [learningGoal, setLearningGoal] = useState('');
   const [submittedGoal, setSubmittedGoal] = useState('');
+  const [profileRecommendation, setProfileRecommendation] = useState<MentorRecommendation | null>(null);
+  const [requestRecommendation, setRequestRecommendation] = useState<MentorRecommendation | null>(null);
+  const [selectedSkillId, setSelectedSkillId] = useState('');
 
   const recommendationMutation = useMutation({
     mutationFn: mentorDirectoryApi.recommendMentors,
@@ -37,6 +53,8 @@ export function MentoringRecommendations({
   const requestMutation = useMutation({
     mutationFn: mentoringPairingApi.requestMentor,
     onSuccess: async () => {
+      setRequestRecommendation(null);
+      setSelectedSkillId('');
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ['mentoring', 'pairing', 'requests'] }),
         queryClient.invalidateQueries({ queryKey: ['core', 'notifications'] }),
@@ -77,19 +95,44 @@ export function MentoringRecommendations({
         'Unable to get mentor recommendations. Please try again.'
       )
     : null;
-  const recommendations = recommendationMutation.data ?? [];
+  const recommendationResult = recommendationMutation.data;
+  const recommendations = recommendationResult?.recommendations ?? [];
   const noMentorsFound = noMentorsFoundError
     || (recommendationMutation.isSuccess && recommendations.length === 0);
   const clearRecommendations = () => {
     setSubmittedGoal('');
+    setProfileRecommendation(null);
+    setRequestRecommendation(null);
+    setSelectedSkillId('');
     recommendationMutation.reset();
   };
-  const requestMentor = (recommendation: MentorRecommendation) => {
+
+  const sendMentorRequest = (recommendation: MentorRecommendation, skillId: number) => {
     requestMutation.mutate({
       mentorUserId: recommendation.mentor.userId,
-      skillId: recommendation.skillId ?? undefined,
+      skillId,
       message: submittedGoal,
     });
+  };
+
+  const beginRequest = (
+    recommendation: MentorRecommendation,
+    requestableSkills: MentorDirectoryItem['skills']
+  ) => {
+    if (requestableSkills.length === 1) {
+      sendMentorRequest(recommendation, requestableSkills[0].id);
+      return;
+    }
+    if (requestableSkills.length > 1) {
+      setRequestRecommendation(recommendation);
+      setSelectedSkillId('');
+    }
+  };
+
+  const submitSelectedSkillRequest = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!requestRecommendation || !selectedSkillId) return;
+    sendMentorRequest(requestRecommendation, Number(selectedSkillId));
   };
 
   return (
@@ -124,7 +167,7 @@ export function MentoringRecommendations({
           <button type="submit" disabled={!learningGoal.trim() || recommendationMutation.isPending}>
             {recommendationMutation.isPending
               ? <><LoaderCircle className="ai-mentor-spinner" size={16} /> Finding mentors</>
-              : <>Find mentors <ArrowRight size={16} /></>}
+              : <>Find mentors <Sparkles size={16} /></>}
           </button>
         </div>
       </form>
@@ -147,21 +190,19 @@ export function MentoringRecommendations({
 
       <div className="ai-mentor-results" aria-live="polite">
         {recommendationMutation.isPending ? (
-          <div>
-            <div className="ai-mentor-results-placeholder">
-              <LoaderCircle className="ai-mentor-spinner" size={20} />
-              <div>
-                <strong>Finding mentors for your goal</strong>
-                <p>Reviewing available mentors and their approved professional profiles.</p>
-              </div>
+          <div className="ai-mentor-results-placeholder">
+            <LoaderCircle className="ai-mentor-spinner" size={20} />
+            <div>
+              <strong>Finding mentors for your goal</strong>
+              <p>Reviewing available mentors and their approved professional profiles.</p>
             </div>
           </div>
         ) : noMentorsFound ? (
           <div className="ai-mentor-results-placeholder">
             <Sparkles size={20} />
             <div>
-              <strong>No mentor was found for you</strong>
-              <p>No available mentor has a strong match for that goal. Try describing a different or more specific learning goal.</p>
+              <strong>No mentor available for this skill</strong>
+              <p>No approved mentor is currently available for this learning goal. Try a different skill or learning goal.</p>
             </div>
           </div>
         ) : errorMessage ? (
@@ -178,15 +219,30 @@ export function MentoringRecommendations({
               </div>
               <span>{recommendations.length} match{recommendations.length === 1 ? '' : 'es'}</span>
             </div>
+            {recommendationResult?.overallReason && (
+              <aside className="ai-mentor-overall-reason" aria-label="Overall AI recommendation reason">
+                <div className="ai-mentor-overall-icon"><Sparkles size={18} /></div>
+                <div>
+                  <span>Why these mentors</span>
+                  <p>{recommendationResult.overallReason}</p>
+                </div>
+              </aside>
+            )}
             <div className="ai-mentor-cards">
               {recommendations.map((recommendation) => {
                 const mentor = recommendation.mentor;
-                const existingRequest = requests.find((request) =>
+                const mentorRequests = requests.filter((request) =>
                   request.mentorUserId === mentor.userId
                   && request.traineeUserId === currentUserId
-                  && request.skillId === recommendation.skillId
                   && (request.status === 'PENDING' || request.status === 'ACCEPTED')
                 );
+                const requestableSkills = mentor.skills.filter((skill) =>
+                  !mentorRequests.some((request) => request.skillId === skill.id)
+                );
+                const allSkillsRequested = mentor.skills.length > 0 && requestableSkills.length === 0;
+                const requestState = mentorRequests.some((request) => request.status === 'PENDING')
+                  ? 'Request pending'
+                  : 'Already matched';
                 return (
                   <article className="ai-mentor-card" key={mentor.userId}>
                     <div className="ai-mentor-card-top">
@@ -197,7 +253,10 @@ export function MentoringRecommendations({
                     </div>
                     <h3>{mentor.fullName}</h3>
                     {mentor.departmentName && <p className="ai-mentor-department">{mentor.departmentName}</p>}
-                    <p className="ai-mentor-reason">{recommendation.reason}</p>
+                    <div className="ai-mentor-reason">
+                      <span><Sparkles size={13} /> Why this match</span>
+                      <p>{recommendation.reason}</p>
+                    </div>
                     <div className="ai-mentor-skills">
                       {mentor.skills.slice(0, 5).map((skill) => (
                         <span key={skill.id}>{skill.name}</span>
@@ -208,18 +267,35 @@ export function MentoringRecommendations({
                       {mentor.sessionsPerWeek != null && <span>{mentor.sessionsPerWeek} sessions/week</span>}
                       <span><Users size={14} /> {mentor.remainingCapacity} open slot{mentor.remainingCapacity === 1 ? '' : 's'}</span>
                     </div>
-                    <button
-                      type="button"
-                      className="ai-mentor-request"
-                      disabled={Boolean(existingRequest) || requestMutation.isPending || !currentUserId}
-                      onClick={() => requestMentor(recommendation)}
-                    >
-                      {existingRequest?.status === 'ACCEPTED'
-                        ? 'Already matched'
-                        : existingRequest?.status === 'PENDING'
-                          ? 'Request pending'
-                          : <><Send size={14} /> Request mentorship</>}
-                    </button>
+                    <div className="ai-mentor-card-actions">
+                      <button
+                        type="button"
+                        className="ai-mentor-view"
+                        onClick={() => setProfileRecommendation(recommendation)}
+                      >
+                        <Eye size={15} /> View profile
+                      </button>
+                      <button
+                        type="button"
+                        className="ai-mentor-request"
+                        disabled={
+                          Boolean(allSkillsRequested)
+                          || !requestableSkills.length
+                          || mentor.remainingCapacity <= 0
+                          || requestMutation.isPending
+                          || !currentUserId
+                        }
+                        onClick={() => beginRequest(recommendation, requestableSkills)}
+                      >
+                        {allSkillsRequested
+                          ? requestState
+                          : mentor.remainingCapacity <= 0
+                            ? 'At capacity'
+                            : mentor.skills.length === 0
+                              ? 'No skills available'
+                              : <><Send size={14} /> Request mentorship</>}
+                      </button>
+                    </div>
                   </article>
                 );
               })}
@@ -235,6 +311,101 @@ export function MentoringRecommendations({
           </div>
         )}
       </div>
+
+      {profileRecommendation && (
+        <MentorProfileModal
+          mentor={profileRecommendation.mentor}
+          profileSummary={profileRecommendation.profileSummary}
+          careerExperience={profileRecommendation.careerExperience}
+          mentorshipExperience={profileRecommendation.mentorshipExperience}
+          onClose={() => setProfileRecommendation(null)}
+        />
+      )}
+
+      {requestRecommendation && (
+        <div
+          className="ai-mentor-modal-backdrop"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget && !requestMutation.isPending) {
+              setRequestRecommendation(null);
+            }
+          }}
+        >
+          <section
+            className="ai-mentor-request-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="ai-mentor-request-title"
+          >
+            <header>
+              <span><Send size={16} /> Start a mentorship request</span>
+              <button
+                type="button"
+                className="ai-mentor-modal-close"
+                aria-label="Close skill selection"
+                disabled={requestMutation.isPending}
+                onClick={() => setRequestRecommendation(null)}
+              >
+                <X size={18} />
+              </button>
+            </header>
+            <h2 id="ai-mentor-request-title">Choose a skill</h2>
+            <p>Select the area you’d like {requestRecommendation.mentor.fullName} to mentor you in.</p>
+            <form onSubmit={submitSelectedSkillRequest}>
+              <fieldset className="ai-mentor-skill-options">
+                <legend>Available mentor skills</legend>
+                {requestRecommendation.mentor.skills.map((skill) => {
+                  const existing = requests.find((request) =>
+                    request.mentorUserId === requestRecommendation.mentor.userId
+                    && request.traineeUserId === currentUserId
+                    && request.skillId === skill.id
+                    && (request.status === 'PENDING' || request.status === 'ACCEPTED')
+                  );
+                  return (
+                    <label
+                      className={`ai-mentor-skill-option${existing ? ' is-unavailable' : ''}`}
+                      key={skill.id}
+                    >
+                      <input
+                        type="radio"
+                        name="mentor-request-skill"
+                        value={skill.id}
+                        checked={selectedSkillId === String(skill.id)}
+                        disabled={Boolean(existing) || requestMutation.isPending}
+                        onChange={(event) => setSelectedSkillId(event.target.value)}
+                      />
+                      <span>
+                        <strong>{skill.name}</strong>
+                        {skill.category && <small>{skill.category}</small>}
+                      </span>
+                      {existing && (
+                        <small>{existing.status === 'ACCEPTED' ? 'Mentorship active' : 'Request pending'}</small>
+                      )}
+                    </label>
+                  );
+                })}
+              </fieldset>
+              <div className="ai-mentor-request-modal-actions">
+                <button
+                  type="button"
+                  className="ai-mentor-view"
+                  disabled={requestMutation.isPending}
+                  onClick={() => setRequestRecommendation(null)}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="ai-mentor-request"
+                  disabled={!selectedSkillId || requestMutation.isPending}
+                >
+                  {requestMutation.isPending ? 'Sending...' : <><Send size={14} /> Send request</>}
+                </button>
+              </div>
+            </form>
+          </section>
+        </div>
+      )}
     </section>
   );
 }

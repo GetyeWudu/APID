@@ -5,6 +5,7 @@ import com.boa.apid.common.exception.ResourceNotFoundException;
 import com.boa.apid.common.storage.FilePurpose;
 import com.boa.apid.common.storage.FileStorageService;
 import com.boa.apid.common.storage.StoredFile;
+import com.boa.apid.core.organization.dto.OrganizationLocationDto;
 import com.boa.apid.common.storage.StoredFileDto;
 import com.boa.apid.common.storage.StoredFileRepository;
 import com.boa.apid.core.audit.service.AuditService;
@@ -29,6 +30,7 @@ import com.boa.apid.mentoring.application.entity.MentorApplication;
 import com.boa.apid.mentoring.application.entity.MentorApplicationType;
 import com.boa.apid.mentoring.application.entity.MentorApplicationStatus;
 import com.boa.apid.mentoring.application.repository.MentorApplicationRepository;
+import com.boa.apid.mentoring.collaboration.dto.MentoringFeedbackRatingEntry;
 import com.boa.apid.mentoring.collaboration.repository.MentoringRelationshipFeedbackRepository;
 import com.boa.apid.mentoring.matching.entity.MentoringMatchRequestStatus;
 import com.boa.apid.mentoring.matching.repository.MentoringMatchRequestRepository;
@@ -47,7 +49,9 @@ import com.boa.apid.mentoring.pairing.entity.MentoringSessionStatus;
 import com.boa.apid.mentoring.trainer.dto.MentorBadgeRemovalDecisionRequest;
 import com.boa.apid.mentoring.trainer.dto.MentorBadgeRemovalRequestBody;
 import com.boa.apid.mentoring.trainer.dto.MentorBadgeRemovalRequestDto;
+import com.boa.apid.mentoring.trainer.dto.MentoringFeedbackReportDto;
 import com.boa.apid.mentoring.trainer.dto.MentoringHrOverviewDto;
+import com.boa.apid.mentoring.trainer.dto.MentoringRequestBacklogDto;
 import com.boa.apid.mentoring.trainer.dto.MentoringSkillDemandDto;
 import com.boa.apid.mentoring.trainer.dto.TrainerAppointmentRequest;
 import com.boa.apid.mentoring.trainer.dto.TrainerDirectoryDto;
@@ -75,13 +79,18 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
+import java.time.Duration;
 import java.time.Instant;
+import java.time.YearMonth;
+import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
+import java.util.Optional;
 import java.util.Set;
 
 @Service
@@ -219,6 +228,26 @@ public class TrainerAuthorizationService {
     }
 
     @Transactional(readOnly = true)
+    public List<OrganizationLocationDto> getOrganizationPath(Long userId) {
+        Employee employee = employeeRepository.findDetailedByUserId(userId)
+                .orElseThrow(() -> new ResourceNotFoundException("Employee profile not found"));
+        return OrganizationLocationDto.path(employee);
+    }
+
+    @Transactional(readOnly = true)
+    public TrainerDirectoryDto getDirectoryMentor(Long userId) {
+        userRepository.findById(userId)
+                .filter(user -> user.getStatus() == UserStatus.ACTIVE)
+                .orElseThrow(() -> new ResourceNotFoundException("Mentor not found"));
+        return authorizationRepository.findByUserIdAndStatus(userId, TrainerAuthorizationStatus.ACTIVE).stream()
+                .filter(authorization -> authorization.getEmployee().getEmploymentStatus() == EmploymentStatus.ACTIVE)
+                .filter(authorization -> hasActiveSkill(authorization, null))
+                .findFirst()
+                .map(this::toDirectoryDto)
+                .orElseThrow(() -> new ResourceNotFoundException("Mentor not found"));
+    }
+
+    @Transactional(readOnly = true)
     public List<TrainerEmployeeCandidateDto> listAppointmentCandidates() {
         List<Employee> employees = employeeRepository.findAllWithDetails().stream()
                 .filter(employee -> employee.getEmploymentStatus() == EmploymentStatus.ACTIVE)
@@ -240,7 +269,8 @@ public class TrainerAuthorizationService {
                         employee.getUserId(),
                         employee.getEmployeeNumber(),
                         employee.getFullName(),
-                        employee.getDepartmentName()
+                        employee.getDepartmentName(),
+                        OrganizationLocationDto.path(employee)
                 ))
                 .sorted(Comparator.comparing(TrainerEmployeeCandidateDto::fullName, String.CASE_INSENSITIVE_ORDER))
                 .toList();
@@ -266,7 +296,8 @@ public class TrainerAuthorizationService {
                         employee.getUserId(),
                         employee.getEmployeeNumber(),
                         employee.getFullName(),
-                        employee.getDepartmentName()
+                        employee.getDepartmentName(),
+                        OrganizationLocationDto.path(employee)
                 ))
                 .sorted(Comparator.comparing(TrainerEmployeeCandidateDto::fullName, String.CASE_INSENSITIVE_ORDER))
                 .toList();
@@ -434,7 +465,7 @@ public class TrainerAuthorizationService {
     }
 
     @Transactional
-    public TrainerRosterDto approveProfileUpdate(MentorApplication application) {
+    public TrainerRosterDto approveProfileUpdate(MentorApplication application, String profileSummary) {
         Long mentorUserId = application.getApplicant().getId();
         TrainerAuthorization authorization = authorizationRepository.findByUserIdAndStatus(
                         mentorUserId, TrainerAuthorizationStatus.ACTIVE)
@@ -453,6 +484,7 @@ public class TrainerAuthorizationService {
                     HttpStatus.CONFLICT
             );
         }
+        MentorApplication existingProfileApplication = authorization.getSourceApplication();
         int requestedCapacity = application.getMaxConcurrentTrainees() == null
                 ? authorization.getMaxConcurrentTrainees()
                 : application.getMaxConcurrentTrainees();
@@ -462,12 +494,13 @@ public class TrainerAuthorizationService {
         authorization.setExperienceYears(application.getExperienceYears());
         authorization.setSessionsPerWeek(application.getSessionsPerWeek());
         authorization.setMaxConcurrentTrainees(requestedCapacity);
-        MentorApplication profileApplication = authorization.getSourceApplication();
+        MentorApplication profileApplication = existingProfileApplication;
         if (profileApplication == null) {
             profileApplication = application;
             authorization.setSourceApplication(profileApplication);
         }
         profileApplication.setNote(application.getNote());
+        profileApplication.setProfileSummary(profileSummary);
         profileApplication.setExperienceYears(application.getExperienceYears());
         profileApplication.setMentoringApproach(application.getMentoringApproach());
         profileApplication.setSessionsPerWeek(application.getSessionsPerWeek());
@@ -480,6 +513,17 @@ public class TrainerAuthorizationService {
         profileApplication.setEvidenceContexts(encodeEvidenceContexts(mergedContexts));
         applicationRepository.save(profileApplication);
         return toRosterDto(authorizationRepository.save(authorization));
+    }
+
+    @Transactional(readOnly = true)
+    public Optional<MentorApplication> findActiveProfileApplication(Long mentorUserId) {
+        return authorizationRepository.findByUserIdAndStatus(
+                        mentorUserId, TrainerAuthorizationStatus.ACTIVE)
+                .stream()
+                .map(TrainerAuthorization::getSourceApplication)
+                .filter(Objects::nonNull)
+                .filter(application -> application.getApplicationType() == MentorApplicationType.INITIAL)
+                .findFirst();
     }
 
     @Transactional(readOnly = true)
@@ -783,6 +827,13 @@ public class TrainerAuthorizationService {
 
     @Transactional(readOnly = true)
     public MentoringHrOverviewDto getOverview() {
+        MentoringRequestBacklogDto requestBacklog = summarizeRequestBacklog(
+                matchRequestRepository.findByStatusOrderByCreatedAtAsc(MentoringMatchRequestStatus.OPEN)
+                        .stream()
+                        .map(request -> request.getCreatedAt())
+                        .toList(),
+                Instant.now()
+        );
         List<TrainerAuthorization> authorizations = authorizationRepository.findAllByOrderByUpdatedAtDescIdDesc();
         Map<Long, TrainerAuthorization> latestByEmployee = new LinkedHashMap<>();
         authorizations.forEach(authorization ->
@@ -818,7 +869,10 @@ public class TrainerAuthorizationService {
         long completedSessions = sessionRepository.countByStatus(MentoringSessionStatus.COMPLETED);
         long completedRelationships = relationshipRepository.countByStatus(MentoringRelationshipStatus.COMPLETED);
         long totalRelationships = relationshipRepository.count();
-        Double averageFeedback = feedbackRepository.averageRating();
+        MentoringFeedbackReportDto feedbackReport = summarizeFeedbackRatings(
+                feedbackRepository.findAllRatingEntries(),
+                YearMonth.now(ZoneOffset.UTC)
+        );
         return new MentoringHrOverviewDto(
                 applicationRepository.countByStatus(MentorApplicationStatus.PENDING),
                 applicationRepository.countByStatus(MentorApplicationStatus.APPROVED),
@@ -833,11 +887,110 @@ public class TrainerAuthorizationService {
                 completedRelationships,
                 sessionCount,
                 completedSessions,
-                averageFeedback == null ? 0 : averageFeedback,
+                feedbackReport.averageRating(),
                 totalRelationships == 0 ? 0
                         : Math.round(completedRelationships * 1000.0 / totalRelationships) / 10.0,
-                supply
+                supply,
+                requestBacklog,
+                feedbackReport
         );
+    }
+
+    static MentoringFeedbackReportDto summarizeFeedbackRatings(
+            List<MentoringFeedbackRatingEntry> entries,
+            YearMonth currentMonth
+    ) {
+        long[] ratingCounts = new long[5];
+        long ratingTotal = 0;
+        long ratingSum = 0;
+        YearMonth firstTrendMonth = currentMonth.minusMonths(5);
+        Map<YearMonth, Long> monthlyCounts = new LinkedHashMap<>();
+        Map<YearMonth, Long> monthlySums = new LinkedHashMap<>();
+
+        for (int monthOffset = 0; monthOffset < 6; monthOffset++) {
+            YearMonth month = firstTrendMonth.plusMonths(monthOffset);
+            monthlyCounts.put(month, 0L);
+            monthlySums.put(month, 0L);
+        }
+
+        for (MentoringFeedbackRatingEntry entry : entries) {
+            if (entry.rating() < 1 || entry.rating() > 5) {
+                throw new IllegalStateException("Mentoring feedback rating must be between 1 and 5.");
+            }
+            ratingCounts[entry.rating() - 1]++;
+            ratingTotal++;
+            ratingSum += entry.rating();
+
+            YearMonth ratedMonth = YearMonth.from(entry.ratedAt().atZone(ZoneOffset.UTC));
+            if (monthlyCounts.containsKey(ratedMonth)) {
+                monthlyCounts.compute(ratedMonth, (ignored, count) -> count + 1);
+                monthlySums.compute(ratedMonth, (ignored, sum) -> sum + entry.rating());
+            }
+        }
+
+        List<MentoringFeedbackReportDto.RatingDistribution> distribution = new ArrayList<>();
+        for (int rating = 1; rating <= 5; rating++) {
+            distribution.add(new MentoringFeedbackReportDto.RatingDistribution(
+                    rating,
+                    ratingCounts[rating - 1]
+            ));
+        }
+        List<MentoringFeedbackReportDto.MonthlyRating> monthlyTrend = monthlyCounts.keySet().stream()
+                .map(month -> {
+                    long count = monthlyCounts.get(month);
+                    Double average = count == 0
+                            ? null
+                            : monthlySums.get(month) / (double) count;
+                    return new MentoringFeedbackReportDto.MonthlyRating(month.toString(), count, average);
+                })
+                .toList();
+        Double averageRating = ratingTotal == 0
+                ? null
+                : ratingSum / (double) ratingTotal;
+        return new MentoringFeedbackReportDto(
+                ratingTotal,
+                averageRating,
+                distribution,
+                monthlyTrend
+        );
+    }
+
+    static MentoringRequestBacklogDto summarizeRequestBacklog(List<Instant> createdAtValues, Instant now) {
+        long totalAgeSeconds = 0;
+        long oldestAgeSeconds = 0;
+        long underTwoDays = 0;
+        long twoToSevenDays = 0;
+        long sevenOrMoreDays = 0;
+
+        for (Instant createdAt : createdAtValues) {
+            long ageSeconds = Math.max(0, Duration.between(createdAt, now).getSeconds());
+            totalAgeSeconds += ageSeconds;
+            oldestAgeSeconds = Math.max(oldestAgeSeconds, ageSeconds);
+            if (ageSeconds < Duration.ofDays(2).getSeconds()) {
+                underTwoDays++;
+            } else if (ageSeconds < Duration.ofDays(7).getSeconds()) {
+                twoToSevenDays++;
+            } else {
+                sevenOrMoreDays++;
+            }
+        }
+
+        if (createdAtValues.isEmpty()) {
+            return new MentoringRequestBacklogDto(0, 0, 0, 0, 0, 0);
+        }
+        double averageWaitDays = totalAgeSeconds / (double) createdAtValues.size() / Duration.ofDays(1).getSeconds();
+        return new MentoringRequestBacklogDto(
+                createdAtValues.size(),
+                roundToOneDecimal(averageWaitDays),
+                roundToOneDecimal(oldestAgeSeconds / (double) Duration.ofDays(1).getSeconds()),
+                underTwoDays,
+                twoToSevenDays,
+                sevenOrMoreDays
+        );
+    }
+
+    private static double roundToOneDecimal(double value) {
+        return Math.round(value * 10.0) / 10.0;
     }
 
     private void validateStatusTransition(TrainerAuthorizationStatus previous, TrainerAuthorizationStatus next) {
@@ -1090,7 +1243,8 @@ public class TrainerAuthorizationService {
                 authorization.getProfilePicture() == null
                         ? null : authorization.getProfilePicture().getOriginalFilename(),
                 profileApplication == null ? null : profileApplication.getNote(),
-                profileApplicationEvidence(profileApplication)
+                profileApplicationEvidence(profileApplication),
+                OrganizationLocationDto.path(employee)
         );
     }
 
@@ -1168,7 +1322,8 @@ public class TrainerAuthorizationService {
                 request.getCreatedAt(),
                 request.getReviewedAt(),
                 request.getDisposition(),
-                request.getDecisionReason()
+                request.getDecisionReason(),
+                OrganizationLocationDto.path(employee)
         );
     }
 
@@ -1209,7 +1364,8 @@ public class TrainerAuthorizationService {
                 authorization.getMentoringApproach(),
                 authorization.getSessionsPerWeek(),
                 profileDetails.education(),
-                profileDetails.professionalCertificates()
+                profileDetails.professionalCertificates(),
+                OrganizationLocationDto.path(employee)
         );
     }
 

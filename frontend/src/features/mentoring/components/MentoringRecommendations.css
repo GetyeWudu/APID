@@ -426,13 +426,31 @@
 
 /* AI match reason — italic */
 .ai-mentor-reason {
+  display: grid;
+  gap: 0.35rem;
+  margin: 0;
+  padding: 0.65rem 0.75rem;
+  border: 1px solid color-mix(in srgb, var(--m-accent) 20%, var(--m-line));
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--m-accent) 5%, var(--m-surface-2));
+}
+
+.ai-mentor-reason > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  color: var(--m-accent);
+  font-size: 0.65rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.ai-mentor-reason p {
   margin: 0;
   color: var(--m-muted, var(--text));
   font-size: 0.75rem;
-  font-style: italic;
   line-height: 1.55;
-  border-left: 2.5px solid color-mix(in srgb, var(--m-accent) 30%, var(--m-line));
-  padding-left: 0.6rem;
 }
 
 /* Skill pills */
@@ -510,6 +528,363 @@
   transform: none;
 }
 
+.ai-mentor-card-actions {
+  display: flex;
+  gap: 0.5rem;
+  margin-top: auto;
+}
+
+.ai-mentor-card-actions > button {
+  flex: 1;
+  margin-top: 0;
+}
+
+.ai-mentor-view {
+  min-height: 36px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  padding: 0.5rem 0.8rem;
+  border: 1px solid var(--m-line);
+  border-radius: 9px;
+  color: var(--m-ink-2);
+  background: var(--m-surface);
+  font-size: 0.74rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 150ms ease, border-color 150ms ease, transform 150ms ease;
+}
+
+.ai-mentor-view:not(:disabled):hover {
+  border-color: color-mix(in srgb, var(--m-accent) 45%, var(--m-line));
+  background: color-mix(in srgb, var(--m-accent) 7%, var(--m-surface));
+  transform: translateY(-1px);
+}
+
+.ai-mentor-view:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.ai-mentor-overall-reason {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.7rem;
+  padding: 0.9rem 1rem;
+  border: 1px solid color-mix(in srgb, var(--m-accent) 30%, var(--m-line));
+  border-radius: 12px;
+  background:
+    linear-gradient(110deg, color-mix(in srgb, var(--m-accent) 9%, var(--m-surface)), var(--m-surface));
+  box-shadow: var(--m-shadow-card);
+}
+
+.ai-mentor-overall-icon {
+  display: grid;
+  width: 34px;
+  height: 34px;
+  flex: 0 0 auto;
+  place-items: center;
+  border-radius: 10px;
+  color: var(--m-accent);
+  background: color-mix(in srgb, var(--m-accent) 13%, var(--m-surface));
+}
+
+.ai-mentor-overall-reason > div:last-child > span {
+  display: block;
+  margin-bottom: 0.2rem;
+  color: var(--m-accent);
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.ai-mentor-overall-reason p {
+  margin: 0;
+  color: var(--m-ink-2);
+  font-size: 0.78rem;
+  line-height: 1.55;
+}
+
+.ai-mentor-modal-backdrop {
+  position: fixed;
+  z-index: 1200;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 1rem;
+  background: rgba(17, 24, 39, 0.58);
+  backdrop-filter: blur(4px);
+}
+
+.ai-mentor-profile-modal,
+.ai-mentor-request-modal {
+  width: min(100%, 720px);
+  max-height: min(88vh, 900px);
+  overflow: hidden;
+  border: 1px solid var(--m-line);
+  border-radius: 16px;
+  background: var(--m-surface);
+  box-shadow: 0 24px 70px rgba(13, 43, 43, 0.24);
+  animation: ai-dialog-enter 160ms ease both;
+}
+
+.ai-mentor-profile-header,
+.ai-mentor-request-modal > header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 1.1rem 1.25rem;
+  border-bottom: 1px solid var(--m-line);
+  background: color-mix(in srgb, var(--m-accent) 5%, var(--m-surface));
+}
+
+.ai-mentor-profile-header > div > span,
+.ai-mentor-request-modal > header > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  color: var(--m-accent);
+  font-size: 0.66rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.ai-mentor-profile-header h2,
+.ai-mentor-request-modal h2 {
+  margin: 0.2rem 0;
+  color: var(--m-ink);
+  font-size: 1.15rem;
+  letter-spacing: -0.02em;
+}
+
+.ai-mentor-profile-header p,
+.ai-mentor-request-modal > p {
+  margin: 0;
+  color: var(--m-muted);
+  font-size: 0.78rem;
+}
+
+.ai-mentor-modal-close {
+  display: grid;
+  width: 34px;
+  height: 34px;
+  flex: 0 0 auto;
+  place-items: center;
+  border: 1px solid var(--m-line);
+  border-radius: 9px;
+  color: var(--m-muted);
+  background: var(--m-surface);
+  cursor: pointer;
+}
+
+.ai-mentor-modal-close:hover:not(:disabled) {
+  color: var(--m-ink);
+  border-color: var(--m-accent);
+}
+
+.ai-mentor-profile-content {
+  max-height: calc(min(88vh, 900px) - 145px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.ai-mentor-profile-facts {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.5rem;
+  padding: 1rem 1.25rem;
+}
+
+.ai-mentor-profile-facts > div {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  align-items: center;
+  gap: 0.25rem 0.4rem;
+  padding: 0.65rem;
+  border: 1px solid var(--m-line);
+  border-radius: 10px;
+  background: var(--m-surface-2);
+}
+
+.ai-mentor-profile-facts svg {
+  color: var(--m-accent);
+}
+
+.ai-mentor-profile-facts span {
+  color: var(--m-muted);
+  font-size: 0.62rem;
+  font-weight: 700;
+}
+
+.ai-mentor-profile-facts strong {
+  grid-column: 1 / -1;
+  color: var(--m-ink);
+  font-size: 0.78rem;
+}
+
+.ai-mentor-profile-section {
+  display: grid;
+  gap: 0.5rem;
+  padding: 0.85rem 1.25rem;
+  border-top: 1px solid var(--m-line-2);
+}
+
+.ai-mentor-profile-section h3 {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  margin: 0;
+  color: var(--m-ink-2);
+  font-size: 0.75rem;
+  font-weight: 800;
+}
+
+.ai-mentor-profile-section h3 svg {
+  color: var(--m-accent);
+}
+
+.ai-mentor-profile-section > p {
+  margin: 0;
+  color: var(--m-muted);
+  font-size: 0.78rem;
+  line-height: 1.55;
+  white-space: pre-wrap;
+}
+
+.ai-mentor-profile-skills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
+.ai-mentor-profile-skills span {
+  padding: 0.28rem 0.55rem;
+  border: 1px solid color-mix(in srgb, var(--m-accent) 24%, var(--m-line));
+  border-radius: 999px;
+  color: var(--m-ink-2);
+  background: color-mix(in srgb, var(--m-accent) 7%, var(--m-surface));
+  font-size: 0.68rem;
+  font-weight: 650;
+}
+
+.ai-mentor-profile-record {
+  display: grid;
+  gap: 0.15rem;
+  padding: 0.55rem 0.65rem;
+  border: 1px solid var(--m-line-2);
+  border-radius: 8px;
+  background: var(--m-surface-2);
+}
+
+.ai-mentor-profile-record strong {
+  color: var(--m-ink-2);
+  font-size: 0.74rem;
+}
+
+.ai-mentor-profile-record span {
+  color: var(--m-muted);
+  font-size: 0.68rem;
+}
+
+.ai-mentor-profile-footer {
+  display: flex;
+  justify-content: flex-end;
+  padding: 0.75rem 1.25rem;
+  border-top: 1px solid var(--m-line);
+}
+
+.ai-mentor-request-modal {
+  width: min(100%, 500px);
+  padding-bottom: 1rem;
+}
+
+.ai-mentor-request-modal h2,
+.ai-mentor-request-modal > p {
+  margin-right: 1.25rem;
+  margin-left: 1.25rem;
+}
+
+.ai-mentor-request-modal h2 {
+  margin-top: 1rem;
+}
+
+.ai-mentor-skill-options {
+  display: grid;
+  gap: 0.45rem;
+  margin: 1rem 1.25rem;
+  padding: 0;
+  border: 0;
+}
+
+.ai-mentor-skill-options legend {
+  margin-bottom: 0.4rem;
+  color: var(--m-muted);
+  font-size: 0.67rem;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.ai-mentor-skill-option {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  padding: 0.65rem 0.75rem;
+  border: 1px solid var(--m-line);
+  border-radius: 10px;
+  cursor: pointer;
+}
+
+.ai-mentor-skill-option:has(input:checked) {
+  border-color: var(--m-accent);
+  background: color-mix(in srgb, var(--m-accent) 7%, var(--m-surface));
+}
+
+.ai-mentor-skill-option > input {
+  accent-color: var(--m-accent);
+}
+
+.ai-mentor-skill-option > span {
+  display: grid;
+  flex: 1;
+  gap: 0.15rem;
+}
+
+.ai-mentor-skill-option strong {
+  color: var(--m-ink-2);
+  font-size: 0.75rem;
+}
+
+.ai-mentor-skill-option small {
+  color: var(--m-muted);
+  font-size: 0.64rem;
+}
+
+.ai-mentor-skill-option.is-unavailable {
+  opacity: 0.58;
+  cursor: not-allowed;
+}
+
+.ai-mentor-request-modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  padding: 0 1.25rem;
+}
+
+.ai-mentor-request-modal-actions .ai-mentor-request {
+  margin-top: 0;
+}
+
+@keyframes ai-dialog-enter {
+  from { opacity: 0; transform: translateY(8px) scale(0.99); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
 /* ============================================================
    Spinner
    ============================================================ */
@@ -583,5 +958,32 @@
 
   .ai-mentor-cards {
     grid-template-columns: 1fr;
+  }
+
+  .ai-mentor-profile-facts {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    padding: 0.8rem;
+  }
+
+  .ai-mentor-profile-section {
+    padding-right: 0.8rem;
+    padding-left: 0.8rem;
+  }
+
+  .ai-mentor-profile-header {
+    padding-right: 0.8rem;
+    padding-left: 0.8rem;
+  }
+
+  .ai-mentor-profile-content {
+    max-height: calc(88vh - 145px);
+  }
+
+  .ai-mentor-card-actions {
+    flex-direction: column;
+  }
+
+  .ai-mentor-card-actions > button {
+    width: 100%;
   }
 }

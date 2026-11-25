@@ -8,6 +8,7 @@ import com.boa.apid.mentoring.application.dto.MentorApplicationDto;
 import com.boa.apid.mentoring.application.dto.MentorApplicationReviewRequest;
 import com.boa.apid.mentoring.application.dto.MentorApplicationSubmittedDto;
 import com.boa.apid.mentoring.application.dto.MentorAgreementTermsDto;
+import com.boa.apid.mentoring.application.dto.MentorProfileSummaryDto;
 import com.boa.apid.mentoring.application.dto.MentorProfileUpdateRequest;
 import com.boa.apid.mentoring.application.service.MentorApplicationService;
 import com.boa.apid.mentoring.application.service.MentorApplicationDocumentService;
@@ -184,6 +185,15 @@ public class MentorApplicationController {
     @PreAuthorize("hasAuthority('TRAINER_APPLICATION_SUPER_REVIEW')")
     public ApiResponse<List<MentorApplicationDto>> listSuperAdminApplications() {
         return ApiResponse.ok(mentorApplicationService.listSuperAdminApplications());
+    }
+
+    @PostMapping("/{applicationId}/profile-summary")
+    @PreAuthorize("hasAnyAuthority('TRAINER_APPLICATION_REVIEW', 'TRAINER_APPLICATION_SUPER_REVIEW')")
+    public ApiResponse<MentorProfileSummaryDto> summarizeProfile(
+            @PathVariable Long applicationId,
+            @AuthenticationPrincipal ApidUserPrincipal actor
+    ) {
+        return ApiResponse.ok(mentorApplicationService.summarizeProfile(applicationId, actor));
     }
 
     @GetMapping("/{applicationId}/evidence/{fileId}/download")

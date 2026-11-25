@@ -21,6 +21,8 @@ public interface MentoringMatchRequestRepository extends JpaRepository<Mentoring
     @EntityGraph(attributePaths = {"traineeEmployee", "skill", "matchedTrainer", "matchedBy"})
     List<MentoringMatchRequest> findAllByOrderByCreatedAtDesc();
 
+    List<MentoringMatchRequest> findByStatusOrderByCreatedAtAsc(MentoringMatchRequestStatus status);
+
     @EntityGraph(attributePaths = {"traineeEmployee", "skill", "matchedTrainer", "matchedBy"})
     List<MentoringMatchRequest> findByTraineeEmployee_UserIdOrderByCreatedAtDesc(Long userId);
 

@@ -17,12 +17,16 @@ import com.boa.apid.core.authorization.repository.RoleRepository;
 import com.boa.apid.core.authorization.repository.UserRepository;
 import com.boa.apid.core.authorization.repository.UserRoleRepository;
 import com.boa.apid.core.authorization.service.PermissionCacheInvalidationEvent;
+import com.boa.apid.core.organization.entity.Employee;
+import com.boa.apid.core.organization.repository.EmployeeRepository;
 import com.boa.apid.core.notifications.entity.NotificationModule;
 import com.boa.apid.core.notifications.service.NotificationService;
 import com.boa.apid.core.skills.entity.Skill;
 import com.boa.apid.core.skills.repository.SkillRepository;
 import com.boa.apid.core.skills.service.SkillCacheInvalidationEvent;
+import com.boa.apid.mentoring.ai.document.service.MentorProfileSummaryService;
 import com.boa.apid.mentoring.application.dto.MentorApplicationDto;
+import com.boa.apid.mentoring.application.dto.MentorProfileSummaryDto;
 import com.boa.apid.mentoring.application.dto.MentorApplicationReviewRequest;
 import com.boa.apid.mentoring.application.dto.MentorApplicationSubmittedDto;
 import com.boa.apid.mentoring.application.dto.MentorAgreementTermsDto;
@@ -55,6 +59,7 @@ import java.util.Set;
 public class MentorApplicationService {
 
     private final MentorApplicationRepository applicationRepository;
+    private final EmployeeRepository employeeRepository;
     private final UserRepository userRepository;
     private final SkillRepository skillRepository;
     private final StoredFileRepository storedFileRepository;
@@ -65,9 +70,11 @@ public class MentorApplicationService {
     private final NotificationService notificationService;
     private final ApplicationEventPublisher eventPublisher;
     private final TrainerAuthorizationService trainerAuthorizationService;
+    private final MentorProfileSummaryService profileSummaryService;
 
     public MentorApplicationService(
             MentorApplicationRepository applicationRepository,
+            EmployeeRepository employeeRepository,
             UserRepository userRepository,
             SkillRepository skillRepository,
             StoredFileRepository storedFileRepository,
@@ -77,9 +84,11 @@ public class MentorApplicationService {
             AuditService auditService,
             NotificationService notificationService,
             ApplicationEventPublisher eventPublisher,
-            TrainerAuthorizationService trainerAuthorizationService
+            TrainerAuthorizationService trainerAuthorizationService,
+            MentorProfileSummaryService profileSummaryService
     ) {
         this.applicationRepository = applicationRepository;
+        this.employeeRepository = employeeRepository;
         this.userRepository = userRepository;
         this.skillRepository = skillRepository;
         this.storedFileRepository = storedFileRepository;
@@ -90,6 +99,7 @@ public class MentorApplicationService {
         this.notificationService = notificationService;
         this.eventPublisher = eventPublisher;
         this.trainerAuthorizationService = trainerAuthorizationService;
+        this.profileSummaryService = profileSummaryService;
     }
 
     @Transactional(readOnly = true)
@@ -607,17 +617,33 @@ public class MentorApplicationService {
 
     @Transactional(readOnly = true)
     public List<MentorApplicationDto> listApplications() {
-        return applicationRepository
-                .findAllByReviewScopeOrderBySubmittedAtDesc(MentorApplicationReviewScope.HR).stream()
-                .map(MentorApplicationDto::from)
-                .toList();
+        return withApplicantLocations(
+                applicationRepository.findAllByReviewScopeOrderBySubmittedAtDesc(MentorApplicationReviewScope.HR)
+        );
     }
 
     @Transactional(readOnly = true)
     public List<MentorApplicationDto> listSuperAdminApplications() {
-        return applicationRepository
-                .findAllByReviewScopeOrderBySubmittedAtDesc(MentorApplicationReviewScope.SUPER_ADMIN).stream()
-                .map(MentorApplicationDto::from)
+        return withApplicantLocations(
+                applicationRepository.findAllByReviewScopeOrderBySubmittedAtDesc(
+                        MentorApplicationReviewScope.SUPER_ADMIN
+                )
+        );
+    }
+
+    private List<MentorApplicationDto> withApplicantLocations(List<MentorApplication> applications) {
+        if (applications.isEmpty()) {
+            return List.of();
+        }
+        Map<Long, Employee> employeesByUserId = employeeRepository.findDetailedByUserIdIn(
+                        applications.stream().map(application -> application.getApplicant().getId()).distinct().toList()
+                ).stream()
+                .collect(java.util.stream.Collectors.toMap(Employee::getUserId, employee -> employee));
+        return applications.stream()
+                .map(application -> MentorApplicationDto.from(
+                        application,
+                        employeesByUserId.get(application.getApplicant().getId())
+                ))
                 .toList();
     }
 
@@ -626,6 +652,52 @@ public class MentorApplicationService {
         return applicationRepository.findAllByApplicant_IdOrderBySubmittedAtDesc(actor.getUserId()).stream()
                 .map(MentorApplicationDto::from)
                 .toList();
+    }
+
+    @Transactional
+    public MentorProfileSummaryDto summarizeProfile(Long applicationId, ApidUserPrincipal actor) {
+        MentorApplication application = applicationRepository.findById(applicationId)
+                .orElseThrow(() -> new ResourceNotFoundException("Mentor application not found"));
+        ensureReviewerCanReview(application, actor);
+        if (application.getApplicationType() == MentorApplicationType.SKILL_ADDITION) {
+            throw new BusinessException(
+                    "MENTOR_PROFILE_SUMMARY_NOT_APPLICABLE",
+                    "A profile summary is not available for a skill-only request.",
+                    HttpStatus.CONFLICT
+            );
+        }
+        if (application.getStatus() == MentorApplicationStatus.DECLINED) {
+            throw new BusinessException(
+                    "MENTOR_PROFILE_SUMMARY_NOT_APPLICABLE",
+                    "A profile summary is not available for a declined application.",
+                    HttpStatus.CONFLICT
+            );
+        }
+
+        boolean alreadyApproved = application.getStatus() == MentorApplicationStatus.APPROVED;
+        MentorApplication profile = application;
+        List<MentorApplication> relatedEvidence = List.of();
+        if (application.getApplicationType() == MentorApplicationType.PROFILE_UPDATE) {
+            MentorApplication existingProfile = trainerAuthorizationService
+                    .findActiveProfileApplication(application.getApplicant().getId())
+                    .orElse(null);
+            if (alreadyApproved && existingProfile != null) {
+                profile = existingProfile;
+            } else if (existingProfile != null) {
+                relatedEvidence = List.of(existingProfile);
+            }
+        }
+
+        String summary = profileSummaryService.summarize(profile, relatedEvidence);
+        if (alreadyApproved) {
+            profile.setProfileSummary(summary);
+            applicationRepository.save(profile);
+            if (profile != application) {
+                application.setProfileSummary(summary);
+                applicationRepository.save(application);
+            }
+        }
+        return new MentorProfileSummaryDto(applicationId, summary, alreadyApproved);
     }
 
     @Transactional(readOnly = true)
@@ -668,13 +740,36 @@ public class MentorApplicationService {
             );
         }
 
+        String profileSummary = normalizeOptional(request.profileSummary());
+        if (request.decision() == MentorApplicationStatus.APPROVED
+                && application.getApplicationType() != MentorApplicationType.SKILL_ADDITION) {
+            if (profileSummary == null) {
+                List<MentorApplication> relatedEvidence = application.getApplicationType()
+                        == MentorApplicationType.PROFILE_UPDATE
+                        ? trainerAuthorizationService.findActiveProfileApplication(
+                                application.getApplicant().getId()
+                        ).map(List::of).orElseGet(List::of)
+                        : List.of();
+                profileSummary = profileSummaryService.summarize(application, relatedEvidence);
+            }
+            if (profileSummary == null || profileSummary.isBlank()
+                    || profileSummary.length() > MentorProfileSummaryService.MAX_SUMMARY_CHARS) {
+                throw new BusinessException(
+                        "MENTOR_PROFILE_SUMMARY_INVALID",
+                        "A valid AI profile summary is required to approve this mentor.",
+                        HttpStatus.BAD_GATEWAY
+                );
+            }
+            application.setProfileSummary(profileSummary);
+        }
+
         User applicant = userRepository.findByIdForUpdate(application.getApplicant().getId())
                 .orElseThrow(() -> new ResourceNotFoundException("Applicant account not found"));
         User reviewer = userRepository.findById(actor.getUserId())
                 .orElseThrow(() -> new ResourceNotFoundException("Reviewer account not found"));
         if (request.decision() == MentorApplicationStatus.APPROVED) {
             if (application.getApplicationType() == MentorApplicationType.PROFILE_UPDATE) {
-                trainerAuthorizationService.approveProfileUpdate(application);
+                trainerAuthorizationService.approveProfileUpdate(application, profileSummary);
                 if (!application.getCatalogSkills().isEmpty()
                         || normalizeOptional(application.getCustomSkill()) != null) {
                     trainerAuthorizationService.authorizeApplication(application, reviewer);

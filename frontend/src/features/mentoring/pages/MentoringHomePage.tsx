@@ -18,6 +18,7 @@ import { MentoringRequestsPanel } from '../components/MentoringRequestsPanel';
 import { MentoringMatchRequestForm } from '../components/MentoringMatchRequestForm';
 import { MentoringRecommendations } from '../components/MentoringRecommendations';
 import { MentorProfileForm } from '../components/MentorProfileForm';
+import { MentoringConnectionsPanel } from '../components/MentoringConnectionsPanel';
 import { MentoringSessionsPage } from './MentoringSessionsPage';
 import './MentoringDashboard.css';
 
@@ -25,6 +26,7 @@ type MentoringViewKey =
   | 'overview'
   | 'directory'
   | 'trainee'
+  | 'requests'
   | 'trainee-sessions'
   | 'trainer'
   | 'trainer-profile'
@@ -49,6 +51,7 @@ export function MentoringHomePage() {
   const activeView: MentoringViewKey =
     requestedView === 'directory' ||
     requestedView === 'trainee' ||
+    requestedView === 'requests' ||
     requestedView === 'trainee-sessions' ||
     requestedView === 'trainer' ||
     requestedView === 'trainer-profile' ||
@@ -68,15 +71,20 @@ export function MentoringHomePage() {
     queryFn: () => mentorDirectoryApi.listMentors(),
     enabled: activeView === 'directory' && hasAnyPermission(EMPLOYEE_WORKSPACE_PERMISSIONS),
   });
+  const directoryLocationQuery = useQuery({
+    queryKey: ['mentoring', 'directory-location', user?.id],
+    queryFn: mentorDirectoryApi.getMyOrganizationPath,
+    enabled: activeView === 'directory'
+      && hasAnyPermission(EMPLOYEE_WORKSPACE_PERMISSIONS)
+      && Boolean(identityQuery.data?.linkedEmployee),
+  });
 
   const pairingRequestsQuery = useQuery({
     queryKey: ['mentoring', 'pairing', 'requests', user?.id],
     queryFn: mentoringPairingApi.listMyRequests,
     enabled:
       hasAnyPermission(EMPLOYEE_WORKSPACE_PERMISSIONS) &&
-      activeView !== 'trainer-profile' &&
-      activeView !== 'trainer-sessions' &&
-      activeView !== 'trainee-sessions',
+      (activeView === 'overview' || activeView === 'directory' || activeView === 'requests'),
   });
 
   if (!hasAnyPermission(EMPLOYEE_WORKSPACE_PERMISSIONS)) {
@@ -130,17 +138,18 @@ export function MentoringHomePage() {
   }
 
   if (activeView === 'directory') {
-    if (mentorsQuery.isLoading || pairingRequestsQuery.isLoading) {
+    if (mentorsQuery.isLoading || pairingRequestsQuery.isLoading || directoryLocationQuery.isLoading) {
       return <LoadingSkeleton rows={6} height={28} />;
     }
 
-    if (mentorsQuery.isError || pairingRequestsQuery.isError) {
+    if (mentorsQuery.isError || pairingRequestsQuery.isError || directoryLocationQuery.isError) {
       return (
         <ErrorState
           message="Unable to load mentors or your mentoring requests."
           onRetry={() => {
             void mentorsQuery.refetch();
             void pairingRequestsQuery.refetch();
+            void directoryLocationQuery.refetch();
           }}
         />
       );
@@ -161,6 +170,7 @@ export function MentoringHomePage() {
         <MentorDirectory
           mentors={mentorsQuery.data ?? []}
           currentUserId={user?.id}
+          currentUserOrganizationPath={directoryLocationQuery.data ?? []}
           requests={pairingRequestsQuery.data ?? []}
         />
       </div>
@@ -194,7 +204,7 @@ export function MentoringHomePage() {
     );
   }
 
-  if (activeView === 'overview' || activeView === 'trainee' || activeView === 'trainer') {
+  if (activeView === 'requests') {
     if (pairingRequestsQuery.isLoading) {
       return <LoadingSkeleton rows={6} height={28} />;
     }
@@ -206,48 +216,100 @@ export function MentoringHomePage() {
         />
       );
     }
+
+    return (
+      <div className="boa-stack mentoring-dashboard">
+        <PageHeader
+          title="My Requests"
+          subtitle="Review mentorship requests you sent and requests mentees sent to you."
+          source="live"
+        />
+        <MentoringRequestsPanel
+          requests={pairingRequestsQuery.data ?? []}
+          currentUserId={user?.id ?? 0}
+          view="all"
+        />
+      </div>
+    );
+  }
+
+  if (activeView === 'trainee' || activeView === 'trainer') {
+    if (relationshipsQuery.isLoading) {
+      return <LoadingSkeleton rows={6} height={28} />;
+    }
+    if (relationshipsQuery.isError) {
+      return (
+        <ErrorState
+          message="Unable to load your mentoring pairings."
+          onRetry={() => void relationshipsQuery.refetch()}
+        />
+      );
+    }
     if (activeView === 'trainer' && !isMentor) {
       return (
         <div className="boa-stack mentoring-dashboard">
-          <PageHeader title="My Trainees" subtitle="Review mentoring requests from mentees." source="live" />
+          <PageHeader title="My Trainees" subtitle="View your approved mentoring relationships." source="live" />
           <div className="apid-card">
             <EmptyState
               title="Mentor Access Required"
-              description="Only approved mentors can review and respond to mentoring requests from trainees."
+              description="Only approved mentors can view their trainee pairings."
             />
           </div>
         </div>
       );
     }
 
-    const view = activeView === 'trainer' ? 'mentor' : activeView === 'trainee' ? 'trainee' : 'all';
-    const title =
-      activeView === 'trainer'
-        ? 'My Trainees'
-        : activeView === 'trainee'
-          ? 'My Mentors'
-          : 'Mentoring';
-    const subtitle =
-      activeView === 'trainer'
-        ? 'Review trainee requests, manage active pairings, and respond to mentee requests.'
-        : activeView === 'trainee'
-          ? 'Request a mentor, track your requests, and manage active mentoring.'
-          : 'Request a mentor or manage your active mentoring relationships.';
+    return (
+      <div className="boa-stack mentoring-dashboard">
+        <PageHeader
+          title={activeView === 'trainer' ? 'My Trainees' : 'My Mentors'}
+          subtitle={
+            activeView === 'trainer'
+              ? 'Choose a trainee to see each of your mentorship pairings.'
+              : 'Choose a mentor to see each of your mentorship pairings.'
+          }
+          source="live"
+        />
+        <MentoringConnectionsPanel
+          role={activeView === 'trainer' ? 'MENTOR' : 'TRAINEE'}
+          relationships={relationshipsQuery.data ?? []}
+        />
+      </div>
+    );
+  }
+
+  if (activeView === 'overview') {
+    if (pairingRequestsQuery.isLoading) {
+      return <LoadingSkeleton rows={6} height={28} />;
+    }
+    if (pairingRequestsQuery.isError) {
+      return (
+        <ErrorState
+          message="Unable to load your mentoring requests."
+          onRetry={() => void pairingRequestsQuery.refetch()}
+        />
+      );
+    }
 
     return (
       <div className="boa-stack mentoring-dashboard">
-        <PageHeader title={title} subtitle={subtitle} source="live" />
-        {activeView === 'overview' && (
-          <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
-            <Link to="/mentoring?view=directory" className="apid-btn apid-btn-outline apid-btn-sm">
-              Find a Mentor
-            </Link>
-          </div>
-        )}
+        <PageHeader
+          title="Mentoring"
+          subtitle="Request a mentor or review your mentoring requests and relationships."
+          source="live"
+        />
+        <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+          <Link to="/mentoring?view=directory" className="apid-btn apid-btn-outline apid-btn-sm">
+            Find a Mentor
+          </Link>
+          <Link to="/mentoring?view=requests" className="apid-btn apid-btn-outline apid-btn-sm">
+            My Requests
+          </Link>
+        </div>
         <MentoringRequestsPanel
           requests={pairingRequestsQuery.data ?? []}
           currentUserId={user?.id ?? 0}
-          view={view}
+          view="all"
         />
       </div>
     );

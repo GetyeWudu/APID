@@ -158,6 +158,44 @@ describe('mentor application workflow', () => {
     expect(screen.queryByLabelText('Submitted application details')).not.toBeInTheDocument();
   });
 
+  it('removes approval actions immediately after approving a mentor application', async () => {
+    const application = {
+      id: 24,
+      applicantUsername: 'mentor.one',
+      applicationType: 'INITIAL' as const,
+      status: 'PENDING' as const,
+      skillName: 'Backend Development',
+      skillNames: ['Backend Development'],
+      catalogSkillIds: [4],
+      customSkill: null,
+      proofFileId: null,
+      proofFileName: null,
+      evidenceFiles: [],
+      note: null,
+      expertiseSummary: null,
+      maxConcurrentTrainees: null,
+      submittedAt: '2026-01-01T00:00:00Z',
+      reviewedByUsername: null,
+      reviewedAt: null,
+      reviewReason: null,
+    };
+    vi.spyOn(mentorApplicationApi, 'review').mockResolvedValue({
+      ...application,
+      status: 'APPROVED',
+      reviewedByUsername: 'hr.admin',
+      reviewedAt: '2026-01-02T00:00:00Z',
+    });
+
+    renderWithProviders(<TrainerApplicationsTab applications={[application]} />);
+    fireEvent.click(screen.getByRole('button', { name: /^view$/i }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Approve application' }));
+
+    await waitFor(() => {
+      expect(screen.queryByRole('button', { name: 'Approve application' })).not.toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: 'Reject application' })).not.toBeInTheDocument();
+    });
+  });
+
   it('allows a new application after the previous initial application was declined', async () => {
     vi.spyOn(mentorApplicationApi, 'listMine').mockResolvedValue([
       {
@@ -284,6 +322,57 @@ describe('mentor application workflow', () => {
 
     expect(await screen.findByText('OCR extracted the applicant’s qualification details.')).toBeInTheDocument();
     expect(summarizeDocument).toHaveBeenCalledWith(23, 62);
+  });
+
+  it('sends an AI profile-summary preview when approving an application', async () => {
+    const application = {
+      id: 25,
+      applicantUsername: 'mentor.one',
+      applicationType: 'INITIAL' as const,
+      status: 'PENDING' as const,
+      skillName: 'Backend Development',
+      skillNames: ['Backend Development'],
+      catalogSkillIds: [4],
+      customSkill: null,
+      proofFileId: null,
+      proofFileName: null,
+      evidenceFiles: [],
+      note: null,
+      expertiseSummary: null,
+      maxConcurrentTrainees: null,
+      submittedAt: '2026-01-01T00:00:00Z',
+      reviewedByUsername: null,
+      reviewedAt: null,
+      reviewReason: null,
+    };
+    const summary = 'Experienced mentor with a strong backend engineering background.';
+    const summarizeProfile = vi.spyOn(mentorApplicationApi, 'summarizeProfile').mockResolvedValue({
+      applicationId: application.id,
+      summary,
+      persisted: false,
+    });
+    const review = vi.spyOn(mentorApplicationApi, 'review').mockResolvedValue({
+      ...application,
+      status: 'APPROVED',
+      profileSummary: summary,
+      reviewedByUsername: 'hr.admin',
+      reviewedAt: '2026-01-02T00:00:00Z',
+    });
+
+    renderWithProviders(<TrainerApplicationsTab applications={[application]} />);
+    fireEvent.click(screen.getByRole('button', { name: /^view$/i }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Generate AI-powered profile summary' }));
+
+    expect(await screen.findByText(summary)).toBeInTheDocument();
+    expect(summarizeProfile).toHaveBeenCalledWith(application.id);
+    fireEvent.click(screen.getByRole('button', { name: 'Approve application' }));
+
+    await waitFor(() => {
+      expect(review).toHaveBeenCalledWith(application.id, {
+        decision: 'APPROVED',
+        profileSummary: summary,
+      });
+    });
   });
 
   it('shows requested mentor profile changes in HR review details', async () => {

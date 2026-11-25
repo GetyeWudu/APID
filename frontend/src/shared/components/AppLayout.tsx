@@ -17,6 +17,7 @@ import {
   GitPullRequest,
   HeartHandshake,
   Home,
+  Inbox,
   KeyRound,
   LayoutDashboard,
   LogOut,
@@ -69,30 +70,12 @@ interface NavGroup {
 
 const EMPLOYEE_NAV_GROUP: NavGroup = {
   id: 'employee',
-  label: 'Employee',
+  label: '',
   items: [
     {
       to: '/workspace',
       label: 'Dashboard',
       icon: <LayoutDashboard size={17} />,
-      requiredAnyPermissions: EMPLOYEE_WORKSPACE_PERMISSIONS,
-    },
-    {
-      to: '/mentoring/pairing',
-      label: 'My Pairing',
-      icon: <HeartHandshake size={17} />,
-      requiredAnyPermissions: EMPLOYEE_WORKSPACE_PERMISSIONS,
-    },
-    {
-      to: '/mentoring/chat',
-      label: 'Chat',
-      icon: <MessageSquare size={17} />,
-      requiredAnyPermissions: EMPLOYEE_WORKSPACE_PERMISSIONS,
-    },
-    {
-      to: '/mentoring/resources',
-      label: 'Resources',
-      icon: <BookOpen size={17} />,
       requiredAnyPermissions: EMPLOYEE_WORKSPACE_PERMISSIONS,
     },
   ],
@@ -322,8 +305,8 @@ export function AppLayout({ children }: { children: ReactNode }) {
       ],
       mentoring: [
         {
-          id: 'mentoring-trainee',
-          label: 'As a Trainee',
+          id: 'mentoring-personal',
+          label: '',
           items: [
             {
               to: '/mentoring?view=trainee',
@@ -332,12 +315,36 @@ export function AppLayout({ children }: { children: ReactNode }) {
               requiredAnyPermissions: EMPLOYEE_WORKSPACE_PERMISSIONS,
               matchSearch: '?view=trainee',
             },
+            ...(isMentor
+              ? [
+                  {
+                    to: '/mentoring?view=trainer',
+                    label: 'My Trainees',
+                    icon: <Users size={17} />,
+                    requiredAnyPermissions: EMPLOYEE_WORKSPACE_PERMISSIONS,
+                    matchSearch: '?view=trainer',
+                  },
+                ]
+              : []),
+            {
+              to: '/mentoring?view=requests',
+              label: 'My Requests',
+              icon: <Inbox size={17} />,
+              requiredAnyPermissions: EMPLOYEE_WORKSPACE_PERMISSIONS,
+              matchSearch: '?view=requests',
+            },
             {
               to: '/mentoring?view=directory',
               label: 'Find a Mentor',
               icon: <BookOpen size={17} />,
               requiredAnyPermissions: EMPLOYEE_WORKSPACE_PERMISSIONS,
               matchSearch: '?view=directory',
+            },
+            {
+              to: '/mentoring/pairing',
+              label: 'My Pairing',
+              icon: <HeartHandshake size={17} />,
+              requiredAnyPermissions: EMPLOYEE_WORKSPACE_PERMISSIONS,
             },
             {
               to: '/mentoring?view=trainee-sessions',
@@ -353,20 +360,14 @@ export function AppLayout({ children }: { children: ReactNode }) {
               requiredAnyPermissions: EMPLOYEE_WORKSPACE_PERMISSIONS,
               matchSearch: '?view=apply',
             },
-          ],
-        },
-        ...(isMentor
-          ? [
-              {
-                id: 'mentoring-mentor',
-                label: 'As a Mentor',
-                items: [
+            ...(isMentor
+              ? [
                   {
-                    to: '/mentoring?view=trainer',
-                    label: 'My Trainees',
-                    icon: <Users size={17} />,
+                    to: '/mentoring?view=trainer-sessions',
+                    label: 'Mentor Sessions',
+                    icon: <Clock size={17} />,
                     requiredAnyPermissions: EMPLOYEE_WORKSPACE_PERMISSIONS,
-                    matchSearch: '?view=trainer',
+                    matchSearch: '?view=trainer-sessions',
                   },
                   {
                     to: '/mentoring?view=trainer-profile',
@@ -375,17 +376,22 @@ export function AppLayout({ children }: { children: ReactNode }) {
                     requiredAnyPermissions: EMPLOYEE_WORKSPACE_PERMISSIONS,
                     matchSearch: '?view=trainer-profile',
                   },
-                  {
-                    to: '/mentoring?view=trainer-sessions',
-                    label: 'Mentor Sessions',
-                    icon: <Clock size={17} />,
-                    requiredAnyPermissions: EMPLOYEE_WORKSPACE_PERMISSIONS,
-                    matchSearch: '?view=trainer-sessions',
-                  },
-                ],
-              },
-            ]
-          : []),
+                ]
+              : []),
+            {
+              to: '/mentoring/chat',
+              label: 'Chat',
+              icon: <MessageSquare size={17} />,
+              requiredAnyPermissions: EMPLOYEE_WORKSPACE_PERMISSIONS,
+            },
+            {
+              to: '/mentoring/resources',
+              label: 'Resources',
+              icon: <BookOpen size={17} />,
+              requiredAnyPermissions: EMPLOYEE_WORKSPACE_PERMISSIONS,
+            },
+          ],
+        },
         {
           id: 'mentoring-hr',
           label: 'HR Administration',
@@ -651,7 +657,9 @@ export function AppLayout({ children }: { children: ReactNode }) {
 
             {visibleGroups.map((group) => (
               <div key={group.id}>
-                {!collapsed && <div className="boa-nav-group-label">{group.label}</div>}
+                {!collapsed && group.label && (
+                  <div className="boa-nav-group-label">{group.label}</div>
+                )}
                 <div className="boa-nav-items">
                   {group.items.map((item) => (
                     <NavLink

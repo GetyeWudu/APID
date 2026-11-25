@@ -3,6 +3,7 @@ import axios from 'axios';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ArrowLeft, CalendarDays, Check, MessageCircle, X } from 'lucide-react';
 import { Link, useParams, useSearchParams } from 'react-router-dom';
+import { useAuth } from '../../../app/AuthContext';
 import type { ApiErrorPayload } from '../../../shared/api/apiClient';
 import {
   EmptyState,
@@ -27,6 +28,7 @@ import {
   MentoringRelationshipClosure,
 } from '../components/MentoringCollaborationTools';
 import { getMentoringDeliveryModeLabel } from '../utils/mentoringSessionUtils';
+import type { MessageDto } from '../../coaching/api/coachingCommunicationApi';
 import './MentoringDashboard.css';
 
 type DetailTab = 'overview' | 'sessions' | 'progress';
@@ -53,6 +55,7 @@ function sessionStatusTone(status: MentoringSession['status'] | 'IN PROGRESS') {
 }
 
 export function MentoringPairingDetailPage() {
+  const { user } = useAuth();
   const { relationshipId: rawRelationshipId } = useParams();
   const relationshipId = Number(rawRelationshipId);
   const isValidRelationshipId = Number.isSafeInteger(relationshipId) && relationshipId > 0;
@@ -83,10 +86,16 @@ export function MentoringPairingDetailPage() {
     queryFn: () => mentoringPairingApi.listSessions(relationshipId),
     enabled: isValidRelationshipId && (activeTab === 'sessions' || activeTab === 'overview'),
   });
-  const chatQuery = useQuery({
-    queryKey: ['mentoring', 'pairing', 'messages-preview', relationshipId],
-    queryFn: () => mentoringPairingApi.listMessages(relationshipId, 0, 20),
-    enabled: isValidRelationshipId && activeTab === 'overview',
+  const chatConversationQuery = useQuery({
+    queryKey: ['mentoring', 'relationship', 'conversation', relationshipId],
+    queryFn: () => mentoringPairingApi.getRelationshipConversation(relationshipId),
+    enabled: isValidRelationshipId && activeTab === 'overview' && Boolean(detailQuery.data),
+  });
+  const conversationId = chatConversationQuery.data?.id;
+  const chatMessagesQuery = useQuery({
+    queryKey: ['mentoring', 'conversation', conversationId, 'messages-preview'],
+    queryFn: () => mentoringPairingApi.getConversationMessages(conversationId!, undefined, undefined, 5),
+    enabled: Boolean(conversationId) && activeTab === 'overview',
   });
   const invalidateSessionData = () => {
     void Promise.all([
@@ -161,7 +170,7 @@ export function MentoringPairingDetailPage() {
   }
 
   const detail = detailQuery.data;
-  const messages = chatQuery.data?.messages ?? [];
+  const messages = chatMessagesQuery.data ?? [];
   const sessions = sessionsQuery.data ?? [];
   const sessionPriority = (session: MentoringSession) =>
     session.status === 'SCHEDULED' || session.status === 'RESCHEDULE_PROPOSED'
@@ -315,21 +324,25 @@ export function MentoringPairingDetailPage() {
       );
     });
 
-  const renderMessageCards = (items: typeof messages) =>
+  const renderMessageCards = (items: MessageDto[]) =>
     items.map((message) => (
       <article
         key={message.id}
         className="apid-card"
         style={{
           border: '1px solid var(--border)',
-          alignSelf: message.mine ? 'flex-end' : 'flex-start',
+          alignSelf: message.senderUserId === user?.id ? 'flex-end' : 'flex-start',
           maxWidth: 'min(90%, 680px)',
         }}
       >
         <div className="boa-muted" style={{ fontSize: '0.8rem', marginBottom: '0.35rem' }}>
-          {message.mine ? 'You' : message.senderName} | {formatDateTime(message.createdAt)}
+          {message.senderUserId === user?.id ? 'You' : message.senderName} | {formatDateTime(message.createdAt)}
         </div>
-        <p style={{ margin: 0, whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>{message.body}</p>
+        <p style={{ margin: 0, whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>
+          {message.deleted
+            ? 'This message was deleted.'
+            : message.content || (message.attachments.length > 0 ? 'Attachment' : 'Message has no text.')}
+        </p>
       </article>
     ));
 
@@ -488,12 +501,17 @@ export function MentoringPairingDetailPage() {
               </div>
               {renderMessageAction}
             </div>
-            {chatQuery.isLoading ? (
+            {chatConversationQuery.isLoading || chatMessagesQuery.isLoading ? (
               <LoadingSkeleton rows={3} height={26} />
-            ) : chatQuery.isError ? (
+            ) : chatConversationQuery.isError ? (
               <ErrorState
-                message={getErrorMessage(chatQuery.error, 'Unable to load chat history.')}
-                onRetry={() => void chatQuery.refetch()}
+                message={getErrorMessage(chatConversationQuery.error, 'Unable to load the pairing conversation.')}
+                onRetry={() => void chatConversationQuery.refetch()}
+              />
+            ) : chatMessagesQuery.isError ? (
+              <ErrorState
+                message={getErrorMessage(chatMessagesQuery.error, 'Unable to load chat history.')}
+                onRetry={() => void chatMessagesQuery.refetch()}
               />
             ) : messages.length === 0 ? (
               <EmptyState title="No messages yet" description="Start a conversation with this pairing." />

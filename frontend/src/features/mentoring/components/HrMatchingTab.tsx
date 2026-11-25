@@ -8,6 +8,10 @@ import type { MentoringMatchRequest } from '../api/mentoringMatchApi';
 import { mentoringMatchApi } from '../api/mentoringMatchApi';
 import type { TrainerRosterItem } from '../api/mentoringTrainerApi';
 import { mentorDirectoryApi, type MentorRecommendation } from '../api/mentorDirectoryApi';
+import {
+  filterByOrganizationLocation,
+  OrganizationLocationFilter,
+} from './OrganizationLocationFilter';
 import './HrMatchingTab.css';
 
 export function HrMatchingTab({
@@ -28,6 +32,7 @@ export function HrMatchingTab({
   const [aiError, setAiError] = useState<Record<number, string>>({});
 
   const [selectedReassignmentTrainers, setSelectedReassignmentTrainers] = useState<Record<number, string>>({});
+  const [locationFilter, setLocationFilter] = useState('');
   const [reassignmentReasons, setReassignmentReasons] = useState<Record<number, string>>({});
   const [reassignmentCapacityOverrides, setReassignmentCapacityOverrides] = useState<Record<number, boolean>>({});
   const [reassignmentOverrideReasons, setReassignmentOverrideReasons] = useState<Record<number, string>>({});
@@ -35,13 +40,17 @@ export function HrMatchingTab({
   const queryClient = useQueryClient();
   const { pushToast } = useToast();
 
-  const fetchAiRecs = async (requestId: number, skillName: string | null) => {
+  const fetchAiRecs = async (requestId: number, skillName: string | null, skillId: number) => {
     const learningGoal = skillName ?? 'mentoring';
     setAiLoading(requestId);
     setAiError((prev) => { const n = { ...prev }; delete n[requestId]; return n; });
     try {
-      const recs = await mentorDirectoryApi.recommendMentors(learningGoal);
-      setAiRecs((prev) => ({ ...prev, [requestId]: recs }));
+      const result = await mentorDirectoryApi.recommendExactSkillMentorsForHr(learningGoal, skillId);
+      const exactSkillRecommendations = result.recommendations.filter((recommendation) =>
+        recommendation.skillId === skillId
+        && recommendation.mentor.skills.some((skill) => skill.id === skillId)
+      );
+      setAiRecs((prev) => ({ ...prev, [requestId]: exactSkillRecommendations }));
       setAiOpen((prev) => ({ ...prev, [requestId]: true }));
     } catch (err) {
       const msg = axios.isAxiosError<ApiErrorPayload>(err)
@@ -116,7 +125,8 @@ export function HrMatchingTab({
     },
   });
 
-  const openRequests = requests.filter((request) => request.status === 'OPEN');
+  const allOpenRequests = requests.filter((request) => request.status === 'OPEN');
+  const openRequests = filterByOrganizationLocation(allOpenRequests, locationFilter);
 
   return (
     <div className="boa-stack">
@@ -129,8 +139,21 @@ export function HrMatchingTab({
             </p>
           </div>
         </div>
+        {allOpenRequests.length > 0 && (
+          <OrganizationLocationFilter
+            paths={allOpenRequests.map((request) => request.organizationPath ?? [])}
+            value={locationFilter}
+            onChange={setLocationFilter}
+            label="Filter match requests by trainee district, branch, or department"
+          />
+        )}
         {openRequests.length === 0 ? (
-          <EmptyState title="No open HR matching requests" description="New trainee requests will appear here." />
+          <EmptyState
+            title={allOpenRequests.length === 0 ? 'No open HR matching requests' : 'No requests in this location'}
+            description={allOpenRequests.length === 0
+              ? 'New trainee requests will appear here.'
+              : 'Choose another district, branch, or department.'}
+          />
         ) : (
           <div className="hr-match-cards">
             {openRequests.map((request) => {
@@ -162,7 +185,11 @@ export function HrMatchingTab({
                     <div className="hr-match-card__trainee">
                       <span className="hr-match-card__name">{request.traineeName}</span>
                       <span className="hr-match-card__meta">
-                        {request.traineeEmployeeNumber} · {request.departmentName ?? 'Unassigned department'}
+                        {request.traineeEmployeeNumber} · {
+                          request.organizationPath?.map((location) => location.name).join(' / ')
+                          || request.departmentName
+                          || 'Unassigned department'
+                        }
                       </span>
                     </div>
                     <div className="hr-match-card__badges">
@@ -212,7 +239,7 @@ export function HrMatchingTab({
                             if (isAiOpen) {
                               setAiOpen((prev) => ({ ...prev, [request.id]: false }));
                             } else {
-                              void fetchAiRecs(request.id, request.skillName);
+                              void fetchAiRecs(request.id, request.skillName, request.skillId);
                             }
                           }}
                           disabled={isAiLoading}
@@ -311,7 +338,7 @@ export function HrMatchingTab({
                         <div className="hr-ai-recs">
                           {recs.map((rec) => {
                             const isSelected = selectedTrainers[request.id] === String(rec.mentor.userId);
-                            const stars = Math.max(1, Math.min(5, 6 - rec.rank));
+                            const rating = rec.mentor.averageRating;
                             return (
                               <div
                                 key={rec.mentor.userId}
@@ -323,18 +350,32 @@ export function HrMatchingTab({
                                 <div className="hr-ai-rec__body">
                                   <div className="hr-ai-rec__top">
                                     <span className="hr-ai-rec__name">{rec.mentor.fullName}</span>
-                                    <span className="hr-ai-rec__stars">
+                                    <span
+                                      className="hr-ai-rec__stars"
+                                      role="img"
+                                      aria-label={rating === null
+                                        ? 'No mentor rating yet'
+                                        : `Average mentor rating ${rating.toFixed(1)} out of 5`}
+                                    >
                                       {Array.from({ length: 5 }, (_, i) => (
-                                        <Star
-                                          key={i}
-                                          size={11}
-                                          fill={i < stars ? 'currentColor' : 'none'}
-                                        />
+                                        <span className="hr-ai-rec__star" key={i}>
+                                          <Star size={11} fill="none" />
+                                          {rating !== null && rating > i && (
+                                            <Star
+                                              className="hr-ai-rec__star-fill"
+                                              size={11}
+                                              fill="currentColor"
+                                              style={{
+                                                clipPath: `inset(0 ${100 - Math.min(1, rating - i) * 100}% 0 0)`,
+                                              }}
+                                            />
+                                          )}
+                                        </span>
                                       ))}
                                     </span>
-                                    {rec.mentor.averageRating !== null && (
-                                      <span className="hr-ai-rec__rating">{rec.mentor.averageRating.toFixed(1)}</span>
-                                    )}
+                                    <span className="hr-ai-rec__rating">
+                                      {rating === null ? 'Not rated' : rating.toFixed(1)}
+                                    </span>
                                   </div>
                                   <p className="hr-ai-rec__reason">{rec.reason}</p>
                                   <div className="hr-ai-rec__meta">

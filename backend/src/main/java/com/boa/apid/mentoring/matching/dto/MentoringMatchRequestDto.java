@@ -1,9 +1,11 @@
 package com.boa.apid.mentoring.matching.dto;
 
+import com.boa.apid.core.organization.dto.OrganizationLocationDto;
 import com.boa.apid.mentoring.matching.entity.MentoringMatchRequest;
 import com.boa.apid.mentoring.matching.entity.MentoringMatchRequestStatus;
 
 import java.time.Instant;
+import java.util.List;
 
 public record MentoringMatchRequestDto(
         Long id,
@@ -18,7 +20,8 @@ public record MentoringMatchRequestDto(
         Long matchedTrainerUserId,
         String matchedTrainerName,
         Long mentoringRelationshipId,
-        Instant createdAt
+        Instant createdAt,
+        List<OrganizationLocationDto> organizationPath
 ) {
     public static MentoringMatchRequestDto from(MentoringMatchRequest request, Long relationshipId) {
         return new MentoringMatchRequestDto(
@@ -34,7 +37,8 @@ public record MentoringMatchRequestDto(
                 request.getMatchedTrainer() == null ? null : request.getMatchedTrainer().getId(),
                 request.getMatchedTrainer() == null ? null : request.getMatchedTrainer().getUsername(),
                 relationshipId,
-                request.getCreatedAt()
+                request.getCreatedAt(),
+                OrganizationLocationDto.path(request.getTraineeEmployee())
         );
     }
 }

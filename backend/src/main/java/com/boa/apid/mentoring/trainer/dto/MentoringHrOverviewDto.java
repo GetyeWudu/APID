@@ -13,8 +13,10 @@ public record MentoringHrOverviewDto(
         long completedRelationships,
         long totalSessions,
         long completedSessions,
-        double averageFeedbackRating,
+        Double averageFeedbackRating,
         double completionRatePct,
-        List<MentoringSkillDemandDto> skillSupplyDemand
+        List<MentoringSkillDemandDto> skillSupplyDemand,
+        MentoringRequestBacklogDto requestBacklog,
+        MentoringFeedbackReportDto feedbackReport
 ) {
 }

@@ -6,7 +6,11 @@ import * as AuthContextModule from '../app/AuthContext';
 import type { UserProfile } from '../features/auth/types/auth.types';
 import { mentorDirectoryApi, type MentorDirectoryItem } from '../features/mentoring/api/mentorDirectoryApi';
 import { mentoringMatchApi } from '../features/mentoring/api/mentoringMatchApi';
-import { mentoringPairingApi } from '../features/mentoring/api/mentoringPairingApi';
+import {
+  mentoringPairingApi,
+  type MentoringPairing,
+  type MentoringRelationshipPair,
+} from '../features/mentoring/api/mentoringPairingApi';
 import { MentoringHomePage } from '../features/mentoring/pages/MentoringHomePage';
 import { workspaceLiveApi } from '../features/workspace/api/workspaceDashboardApi';
 import { ToastProvider } from '../shared/components/ui';
@@ -57,19 +61,45 @@ function buildAuthMock(user: UserProfile) {
   };
 }
 
-function renderFindMentorPage() {
+function renderFindMentorPage(initialEntry = '/mentoring?view=directory') {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   });
   return render(
     <QueryClientProvider client={queryClient}>
       <ToastProvider>
-        <MemoryRouter initialEntries={['/mentoring?view=directory']}>
+        <MemoryRouter initialEntries={[initialEntry]}>
           <MentoringHomePage />
         </MemoryRouter>
       </ToastProvider>
     </QueryClientProvider>
   );
+}
+
+function buildRelationship(
+  overrides: Partial<MentoringRelationshipPair> = {}
+): MentoringRelationshipPair {
+  return {
+    memberId: 1,
+    relationshipId: 101,
+    requestId: 201,
+    requestType: 'INDIVIDUAL',
+    relationshipStatus: 'ACTIVE',
+    memberStatus: 'ACTIVE',
+    currentUserRole: 'MENTOR',
+    mentorUserId: 7,
+    mentorName: 'Trainee Seven',
+    traineeUserId: 30,
+    traineeName: 'Trainee Thirty',
+    skillId: skill.id,
+    skillName: skill.name,
+    message: null,
+    startedAt: '2026-03-01T00:00:00Z',
+    joinedAt: '2026-03-01T00:00:00Z',
+    endedAt: null,
+    memberEndedAt: null,
+    ...overrides,
+  };
 }
 
 describe('MentoringHomePage Find a Mentor', () => {
@@ -110,6 +140,7 @@ describe('MentoringHomePage Find a Mentor', () => {
     });
     vi.spyOn(mentoringPairingApi, 'listMyRelationships').mockResolvedValue([]);
     vi.spyOn(mentoringPairingApi, 'listMyRequests').mockResolvedValue([]);
+    vi.spyOn(mentorDirectoryApi, 'getMyOrganizationPath').mockResolvedValue([]);
     vi.spyOn(mentoringPairingApi, 'requestMentor').mockResolvedValue({
       id: 99,
       requestId: 99,
@@ -218,6 +249,119 @@ describe('MentoringHomePage Find a Mentor', () => {
     expect(screen.getByText('No Mentors Found')).toBeInTheDocument();
   });
 
+  it('defaults the directory to the user branch and lets them browse all locations', async () => {
+    const userBranch = [
+      { id: 'department:1', name: 'North District' },
+      { id: 'department:2', name: 'Central Branch' },
+    ];
+    vi.spyOn(mentorDirectoryApi, 'getMyOrganizationPath').mockResolvedValue(userBranch);
+    vi.spyOn(mentorDirectoryApi, 'listMentors').mockResolvedValue([
+      { ...buildMentor(20, 2), organizationPath: userBranch },
+      {
+        ...buildMentor(30, 2),
+        organizationPath: [
+          { id: 'department:3', name: 'South District' },
+          { id: 'department:4', name: 'Market Branch' },
+        ],
+      },
+    ]);
+
+    renderFindMentorPage();
+
+    expect(await screen.findByText('Mentor 20')).toBeInTheDocument();
+    expect(screen.queryByText('Mentor 30')).not.toBeInTheDocument();
+    const locationFilter = screen.getByLabelText('Filter mentors by district, branch, or department');
+    expect(locationFilter).toHaveValue('department:2');
+    fireEvent.change(locationFilter, { target: { value: '' } });
+    expect(screen.getByText('Mentor 30')).toBeInTheDocument();
+  });
+
+  it('shows a mentor list and all pairings when a trainee is selected', async () => {
+    vi.spyOn(mentoringPairingApi, 'listMyRelationships').mockResolvedValue([
+      buildRelationship({ relationshipId: 101, memberId: 1, skillName: 'Java' }),
+      buildRelationship({ relationshipId: 102, memberId: 2, skillName: 'Excel' }),
+      buildRelationship({
+        relationshipId: 103,
+        memberId: 3,
+        traineeUserId: 31,
+        traineeName: 'Trainee Thirty-One',
+      }),
+    ]);
+
+    renderFindMentorPage('/mentoring?view=trainer');
+
+    const traineeButton = await screen.findByRole('button', { name: /Trainee Thirty 2 pairings/i });
+    fireEvent.click(traineeButton);
+
+    expect(screen.getByRole('heading', { name: 'Java' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Excel' })).toBeInTheDocument();
+    expect(screen.getAllByRole('link', { name: /View pairing/i })).toHaveLength(2);
+    expect(screen.queryByRole('tablist', { name: 'Mentoring request status' })).not.toBeInTheDocument();
+  });
+
+  it('shows mentor pairings in the My Mentors view', async () => {
+    vi.spyOn(mentoringPairingApi, 'listMyRelationships').mockResolvedValue([
+      buildRelationship({
+        currentUserRole: 'TRAINEE',
+        mentorUserId: 30,
+        mentorName: 'Mentor Thirty',
+        traineeUserId: 7,
+        traineeName: 'Trainee Seven',
+      }),
+    ]);
+
+    renderFindMentorPage('/mentoring?view=trainee');
+
+    fireEvent.click(await screen.findByRole('button', { name: /Mentor Thirty 1 pairing/i }));
+
+    expect(screen.getByRole('heading', { name: 'Mentor Thirty' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Java' })).toBeInTheDocument();
+  });
+
+  it('combines requests received as a mentor and sent as a trainee', async () => {
+    const receivedRequest: MentoringPairing = {
+      id: 501,
+      requestId: 501,
+      requestType: 'INDIVIDUAL',
+      status: 'PENDING',
+      incoming: true,
+      initiatedByMentor: false,
+      mentorUserId: 7,
+      mentorName: 'Trainee Seven',
+      traineeUserId: 41,
+      traineeName: 'Trainee Forty-One',
+      recipientUserId: 7,
+      skillId: skill.id,
+      skillName: 'Java',
+      message: 'Help me learn Java.',
+      createdAt: '2026-03-01T00:00:00Z',
+      respondedAt: null,
+    };
+    const sentRequest: MentoringPairing = {
+      ...receivedRequest,
+      id: 502,
+      requestId: 502,
+      incoming: false,
+      mentorUserId: 30,
+      mentorName: 'Mentor Thirty',
+      traineeUserId: 7,
+      traineeName: 'Trainee Seven',
+      recipientUserId: 30,
+      skillId: otherSkill.id,
+      skillName: 'Excel',
+      message: 'Help me learn Excel.',
+    };
+    vi.spyOn(mentoringPairingApi, 'listMyRequests').mockResolvedValue([receivedRequest, sentRequest]);
+
+    renderFindMentorPage('/mentoring?view=requests');
+
+    expect(await screen.findByText(/Trainee Seven → Trainee Forty-One/)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Accept' })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('tab', { name: /Sent/ }));
+    expect(screen.getByText(/Mentor Thirty → Trainee Seven/)).toBeInTheDocument();
+    expect(screen.getByText('Help me learn Excel.')).toBeInTheDocument();
+  });
+
   it('submits the learning goal and allows a recommendation request', async () => {
     const mentor = {
       ...buildMentor(30, 2, otherSkill),
@@ -225,13 +369,18 @@ describe('MentoringHomePage Find a Mentor', () => {
       sessionsPerWeek: 3,
     };
     vi.spyOn(mentorDirectoryApi, 'listMentors').mockResolvedValue([]);
-    vi.spyOn(mentorDirectoryApi, 'recommendMentors').mockResolvedValue([{
-      rank: 1,
-      reason: 'Their Excel experience matches your goal.',
-      skillId: otherSkill.id,
-      skillName: otherSkill.name,
-      mentor,
-    }]);
+    vi.spyOn(mentorDirectoryApi, 'recommendMentors').mockResolvedValue({
+      overallReason: 'Their available skills match your financial modeling goal.',
+      recommendations: [{
+        rank: 1,
+        reason: 'Their Excel experience matches your goal.',
+        skillId: otherSkill.id,
+        skillName: otherSkill.name,
+        careerExperience: [],
+        mentorshipExperience: [],
+        mentor,
+      }],
+    });
 
     renderFindMentorPage();
 

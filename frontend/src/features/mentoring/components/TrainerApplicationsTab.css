@@ -656,6 +656,35 @@
   animation: mentor-document-summary-spin 1s linear infinite;
 }
 
+.mentor-profile-summary-help {
+  margin: 0;
+  color: var(--muted, #5C626A);
+  font-size: 0.78rem;
+  line-height: 1.5;
+}
+
+.mentor-profile-summary-preview {
+  display: grid;
+  gap: 0.45rem;
+  padding: 0.85rem 1rem;
+  border: 1px solid color-mix(in srgb, var(--brand, #C59B27) 25%, transparent);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--brand, #C59B27) 6%, #ffffff);
+}
+
+.mentor-profile-summary-preview p {
+  margin: 0;
+  color: var(--text, #1A1C1E);
+  font-size: 0.82rem;
+  line-height: 1.6;
+  white-space: pre-wrap;
+}
+
+.mentor-profile-summary-preview span {
+  color: var(--muted, #5C626A);
+  font-size: 0.72rem;
+}
+
 @keyframes mentor-document-summary-spin {
   to { transform: rotate(360deg); }
 }

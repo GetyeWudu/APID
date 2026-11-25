@@ -1,8 +1,8 @@
 import { useMemo, useState, type FormEvent } from 'react';
 import axios from 'axios';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { Eye, X } from 'lucide-react';
-import type { ApiErrorPayload } from '../../../shared/api/apiClient';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { Eye } from 'lucide-react';
+import { extractApiErrorMessage, type ApiErrorPayload } from '../../../shared/api/apiClient';
 import {
   DataSourceBadge,
   DataTable,
@@ -13,7 +13,12 @@ import {
   type DataTableColumn,
 } from '../../../shared/components/ui';
 import { mentoringPairingApi, type MentoringPairing } from '../api/mentoringPairingApi';
-import type { MentorDirectoryItem } from '../api/mentorDirectoryApi';
+import { mentorDirectoryApi, type MentorDirectoryItem } from '../api/mentorDirectoryApi';
+import { MentorProfileModal } from './MentorProfileModal';
+import {
+  filterByOrganizationLocation,
+  OrganizationLocationFilter,
+} from './OrganizationLocationFilter';
 import './MentorDirectory.css';
 
 const MENTORS_PER_PAGE = 10;
@@ -25,16 +30,19 @@ function normalizeProfileText(value: string) {
 export function MentorDirectory({
   mentors,
   currentUserId,
+  currentUserOrganizationPath = [],
   requests = [],
 }: {
   mentors: MentorDirectoryItem[];
   currentUserId?: number;
+  currentUserOrganizationPath?: MentorDirectoryItem['organizationPath'];
   requests?: MentoringPairing[];
 }) {
   const queryClient = useQueryClient();
   const { pushToast } = useToast();
   const [skillFilter, setSkillFilter] = useState('ALL');
   const [departmentFilter, setDepartmentFilter] = useState('');
+  const [selectedLocationId, setSelectedLocationId] = useState<string | null>(null);
   const [availableOnly, setAvailableOnly] = useState(true);
   const [page, setPage] = useState(0);
   const [selectedMentor, setSelectedMentor] = useState<MentorDirectoryItem | null>(null);
@@ -45,6 +53,13 @@ export function MentorDirectory({
     () => mentors.filter((mentor) => mentor.userId !== currentUserId),
     [mentors, currentUserId]
   );
+  const locationPaths = [
+    ...otherMentors.map((mentor) => mentor.organizationPath ?? []),
+    currentUserOrganizationPath,
+  ];
+  const defaultLocationId = currentUserOrganizationPath[currentUserOrganizationPath.length - 1]?.id ?? '';
+  const activeLocationId = selectedLocationId ?? defaultLocationId;
+  const locatedMentors = filterByOrganizationLocation(otherMentors, activeLocationId);
   const requestMutation = useMutation({
     mutationFn: mentoringPairingApi.requestMentor,
     onSuccess: async () => {
@@ -87,7 +102,7 @@ export function MentorDirectory({
     return [...byId.values()].sort((a, b) => a.name.localeCompare(b.name));
   }, [otherMentors]);
 
-  const filteredMentors = otherMentors.filter(
+  const filteredMentors = locatedMentors.filter(
     (mentor) =>
       (skillFilter === 'ALL' || mentor.skills.some((skill) => String(skill.id) === skillFilter)) &&
       (!departmentFilter.trim() ||
@@ -120,15 +135,14 @@ export function MentorDirectory({
           (request.status === 'PENDING' || request.status === 'ACCEPTED')
       )
     : undefined;
-  const profileSkillsSummary = profileMentor?.skills.map((skill) => skill.name).join(', ') ?? '';
-  const profileApproach = profileMentor?.mentoringApproach?.trim() || '';
-  const profileBio = profileMentor?.bio?.trim() || '';
-  const showProfileApproach = Boolean(profileApproach)
-    && normalizeProfileText(profileApproach) !== normalizeProfileText(profileSkillsSummary);
-  const showProfileBio = Boolean(profileBio)
-    && ![profileSkillsSummary, profileApproach].some((value) =>
-      value && normalizeProfileText(profileBio) === normalizeProfileText(value)
-    );
+  const profileQuery = useQuery({
+    queryKey: ['mentoring', 'directory-profile', profileMentor?.userId],
+    queryFn: () => {
+      if (!profileMentor) throw new Error('Select a mentor to view their profile.');
+      return mentorDirectoryApi.getMentorProfile(profileMentor.userId);
+    },
+    enabled: profileMentor !== null,
+  });
   const columns: DataTableColumn<MentorDirectoryItem>[] = [
     {
       key: 'mentor',
@@ -137,7 +151,10 @@ export function MentorDirectory({
         <div className="boa-stack" style={{ gap: '0.15rem' }}>
           <strong>{mentor.fullName}</strong>
           <span className="boa-muted" style={{ fontSize: '0.75rem' }}>
-            {[mentor.employeeNumber, mentor.departmentName].filter(Boolean).join(' · ') || mentor.username}
+            {[
+              mentor.employeeNumber,
+              mentor.organizationPath?.map((location) => location.name).join(' / ') || mentor.departmentName,
+            ].filter(Boolean).join(' · ') || mentor.username}
           </span>
         </div>
       ),
@@ -273,6 +290,12 @@ export function MentorDirectory({
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
           <div className="boa-stack" style={{ gap: '0.35rem' }}>
+            <OrganizationLocationFilter
+              paths={locationPaths}
+              value={activeLocationId}
+              onChange={setSelectedLocationId}
+              label="Filter mentors by district, branch, or department"
+            />
             <select
               className="apid-input"
               aria-label="Filter mentors by skill"
@@ -322,14 +345,18 @@ export function MentorDirectory({
               ? 'No Other Mentors Found'
               : otherMentors.length === 0
                 ? 'No Mentors Found'
-                : 'No Mentors for This Skill'
+                : activeLocationId && locatedMentors.length === 0
+                  ? 'No Mentors in This Location'
+                  : 'No Mentors for This Skill'
           }
           description={
             onlyOwnMentorProfile
               ? 'Your own profile is hidden from the mentor directory.'
               : otherMentors.length === 0
               ? 'There are no active mentors available right now.'
-              : 'No mentors have this skill linked yet. Choose another skill or view all mentors.'
+              : activeLocationId && locatedMentors.length === 0
+                ? 'No mentors are assigned to this district, branch, or department. Choose another location or view all locations.'
+                : 'No mentors have this skill linked yet. Choose another skill or view all mentors.'
           }
         />
       ) : (
@@ -351,114 +378,17 @@ export function MentorDirectory({
         </>
       )}
       {profileMentor && (
-        <div
-          className="apid-modal-backdrop"
-          onMouseDown={(event) => {
-            if (event.target === event.currentTarget) setProfileMentor(null);
-          }}
-        >
-          <div
-            className="apid-card apid-modal mentor-directory-profile-modal"
-            role="dialog"
-            aria-modal="true"
-            aria-label={`Mentor profile for ${profileMentor.fullName}`}
-          >
-            <header className="mentor-directory-profile-header">
-              <div>
-                <span>Mentor profile</span>
-                <h3>{profileMentor.fullName}</h3>
-                <p>
-                  {[profileMentor.employeeNumber, profileMentor.departmentName]
-                    .filter(Boolean).join(' · ') || profileMentor.username}
-                </p>
-              </div>
-              <button
-                type="button"
-                className="apid-btn apid-btn-outline apid-btn-sm"
-                aria-label="Close mentor profile"
-                onClick={() => setProfileMentor(null)}
-              >
-                <X size={16} />
-              </button>
-            </header>
-            <div className="mentor-directory-profile-facts">
-              <div><span>Experience</span><strong>
-                {profileMentor.experienceYears == null
-                  ? 'Not provided'
-                  : `${profileMentor.experienceYears} year${profileMentor.experienceYears === 1 ? '' : 's'}`}
-              </strong></div>
-              <div><span>Open capacity</span><strong>
-                {profileMentor.remainingCapacity} open slot{profileMentor.remainingCapacity === 1 ? '' : 's'}
-              </strong></div>
-              <div><span>Sessions per week</span><strong>
-                {profileMentor.sessionsPerWeek ?? 'Not provided'}
-              </strong></div>
-              <div><span>Average rating</span><strong>
-                {profileMentor.averageRating != null && profileMentor.averageRating > 0
-                  ? profileMentor.averageRating.toFixed(1)
-                  : 'Not rated yet'}
-              </strong></div>
-            </div>
-            <section className="mentor-directory-profile-section">
-              <h4>Skills</h4>
-              {profileMentor.skills.length > 0 ? (
-                <div className="mentor-directory-profile-skills">
-                  {profileMentor.skills.map((skill) => (
-                    <StatusPill key={skill.id} label={skill.name} tone="neutral" />
-                  ))}
-                </div>
-              ) : <p className="boa-muted">No skills linked.</p>}
-            </section>
-            <section className="mentor-directory-profile-section">
-              <h4>Education</h4>
-              {profileMentor.education?.length ? (
-                profileMentor.education.map((education, index) => (
-                  <article className="mentor-directory-profile-record" key={`education-${index}`}>
-                    <strong>{education.educationLevel || 'Education'}</strong>
-                    <span>
-                      {[education.fieldOfStudy, education.institution].filter(Boolean).join(' · ')
-                        || 'Additional details not provided'}
-                    </span>
-                  </article>
-                ))
-              ) : <p>No education details provided.</p>}
-            </section>
-            <section className="mentor-directory-profile-section">
-              <h4>Professional certificates</h4>
-              {profileMentor.professionalCertificates?.length ? (
-                profileMentor.professionalCertificates.map((certificate, index) => (
-                  <article className="mentor-directory-profile-record" key={`certificate-${index}`}>
-                    <strong>{certificate.title || 'Certificate'}</strong>
-                    {certificate.skills?.length ? (
-                      <span>Related skills: {certificate.skills.join(', ')}</span>
-                    ) : null}
-                  </article>
-                ))
-              ) : <p>No professional certificates provided.</p>}
-            </section>
-            {showProfileApproach && (
-              <section className="mentor-directory-profile-section">
-                <h4>Mentoring approach</h4>
-                <p>{profileApproach}</p>
-              </section>
-            )}
-            {showProfileBio && (
-              <section className="mentor-directory-profile-section">
-                <h4>About</h4>
-                <p>{profileBio}</p>
-              </section>
-            )}
-            <div className="apid-modal-actions">
-              <button
-                type="button"
-                className="apid-btn apid-btn-outline"
-                onClick={() => setProfileMentor(null)}
-              >
-                Close
-              </button>
-            </div>
-          </div>
-        </div>
+        <MentorProfileModal
+          mentor={profileQuery.data?.mentor ?? profileMentor}
+          profileSummary={profileQuery.data?.profileSummary}
+          careerExperience={profileQuery.data?.careerExperience}
+          mentorshipExperience={profileQuery.data?.mentorshipExperience}
+          loading={profileQuery.isPending}
+          error={profileQuery.error
+            ? extractApiErrorMessage(profileQuery.error, 'Could not load additional profile details.')
+            : null}
+          onClose={() => setProfileMentor(null)}
+        />
       )}
       {selectedMentor && (
         <div className="apid-modal-backdrop">

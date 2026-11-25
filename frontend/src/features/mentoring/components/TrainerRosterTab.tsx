@@ -15,6 +15,10 @@ import type {
   TrainerRosterItem,
 } from '../api/mentoringTrainerApi';
 import { mentoringTrainerApi } from '../api/mentoringTrainerApi';
+import {
+  filterByOrganizationLocation,
+  OrganizationLocationFilter,
+} from './OrganizationLocationFilter';
 import './TrainerRosterTab.css';
 
 interface SkillOption {
@@ -52,6 +56,7 @@ export function TrainerRosterTab({
   const [statusBusy, setStatusBusy] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [availabilityFilter, setAvailabilityFilter] = useState<'ALL' | 'ACTIVE' | 'LIMITED'>('ALL');
+  const [locationFilter, setLocationFilter] = useState('');
 
   const toggleSkill = (id: number) => {
     setAppointSkills((current) =>
@@ -130,7 +135,8 @@ export function TrainerRosterTab({
   const authTone = (status: TrainerAuthorizationStatus) =>
     status === 'ACTIVE' ? 'ok' : status === 'SUSPENDED' ? 'warn' : 'err';
   const normalizedSearch = searchQuery.trim().toLowerCase();
-  const filteredTrainers = trainers.filter((trainer) => {
+  const locationFilteredTrainers = filterByOrganizationLocation(trainers, locationFilter);
+  const filteredTrainers = locationFilteredTrainers.filter((trainer) => {
     const committed = trainer.activeTrainees + trainer.pendingTrainees;
     const atCap = committed >= trainer.maxConcurrentTrainees;
     if (availabilityFilter === 'ACTIVE' &&
@@ -206,6 +212,12 @@ export function TrainerRosterTab({
                 aria-label="Search approved trainers"
               />
             </label>
+            <OrganizationLocationFilter
+              paths={trainers.map((trainer) => trainer.organizationPath ?? [])}
+              value={locationFilter}
+              onChange={setLocationFilter}
+              label="Filter mentors by district, branch, or department"
+            />
             <div className="trainer-roster-filters" aria-label="Filter trainer availability">
               {([
                 ['ALL', 'All trainers'],
@@ -225,7 +237,7 @@ export function TrainerRosterTab({
           </div>
 
           {filteredTrainers.length === 0 ? (
-            <EmptyState title="No trainers match" description="Try another search or availability filter." />
+            <EmptyState title="No trainers match" description="Try another search, availability, or organizational location filter." />
           ) : (
             <div className="trainer-roster-table-wrap">
               <table className="trainer-roster-table">
@@ -263,7 +275,13 @@ export function TrainerRosterTab({
                             <span className="trainer-roster-avatar" aria-hidden="true">{initials}</span>
                             <span>
                               <strong>{trainer.fullName}</strong>
-                              <small>{trainer.employeeNumber} · {trainer.departmentName ?? 'Unassigned department'}</small>
+                              <small>
+                                {trainer.employeeNumber} · {
+                                  trainer.organizationPath?.map((location) => location.name).join(' / ')
+                                  || trainer.departmentName
+                                  || 'Unassigned department'
+                                }
+                              </small>
                             </span>
                           </div>
                         </td>

@@ -1,59 +1,72 @@
 package com.boa.apid.mentoring.ai.recommendation.service;
 
 import com.boa.apid.common.exception.BusinessException;
-import com.boa.apid.common.storage.StoredFile;
 import com.boa.apid.mentoring.application.entity.MentorApplication;
-import com.boa.apid.mentoring.application.entity.MentorApplicationType;
-import com.boa.apid.mentoring.document.service.MentoringDocumentTextExtractor;
 import com.boa.apid.mentoring.trainer.dto.TrainerDirectoryDto;
+import com.boa.apid.mentoring.trainer.dto.MentorDirectoryProfileDto;
 import com.boa.apid.mentoring.trainer.entity.TrainerAuthorization;
 import com.boa.apid.mentoring.trainer.entity.TrainerAuthorizationStatus;
 import com.boa.apid.mentoring.trainer.repository.TrainerAuthorizationRepository;
 import com.boa.apid.mentoring.trainer.service.TrainerAuthorizationService;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.AbstractMap;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
+import java.util.Objects;
 import java.util.regex.Pattern;
 
 @Service
 public class MentorRecommendationContextService {
 
+    private static final Logger log = LoggerFactory.getLogger(MentorRecommendationContextService.class);
     private static final int MAX_CANDIDATES = 40;
-    private static final int MAX_PROFILE_CHARS = 2500;
-    private static final int MAX_EVIDENCE_CHARS = 1800;
-    private static final String PROFILE_TRUNCATION_NOTICE = "[Profile context truncated for request size.]";
+    private static final int MAX_EXPERIENCE_ENTRIES = 2;
+    private static final int MAX_EDUCATION_ENTRIES = 3;
     private static final Pattern EMAIL_PATTERN = Pattern.compile(
             "(?i)\\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\\.[A-Z]{2,}\\b"
     );
     private static final Pattern PHONE_PATTERN = Pattern.compile(
             "(?<!\\d)\\+?\\d[\\d\\s().-]{7,}\\d(?!\\d)"
     );
+
     private final TrainerAuthorizationService authorizationService;
     private final TrainerAuthorizationRepository authorizationRepository;
-    private final MentoringDocumentTextExtractor documentTextExtractor;
+    private final ObjectMapper objectMapper;
 
     public MentorRecommendationContextService(
             TrainerAuthorizationService authorizationService,
             TrainerAuthorizationRepository authorizationRepository,
-            MentoringDocumentTextExtractor documentTextExtractor
+            ObjectMapper objectMapper
     ) {
         this.authorizationService = authorizationService;
         this.authorizationRepository = authorizationRepository;
-        this.documentTextExtractor = documentTextExtractor;
+        this.objectMapper = objectMapper;
     }
 
     @Transactional(readOnly = true)
     public List<MentorCandidateContext> loadCandidates(Long requestingUserId) {
+        return loadCandidates(requestingUserId, null);
+    }
+
+    @Transactional(readOnly = true)
+    public List<MentorCandidateContext> loadCandidatesForSkill(Long requestingUserId, Long skillId) {
+        return loadCandidates(requestingUserId, skillId);
+    }
+
+    private List<MentorCandidateContext> loadCandidates(Long requestingUserId, Long skillId) {
         Map<Long, TrainerDirectoryDto> candidates = new LinkedHashMap<>();
-        for (TrainerDirectoryDto mentor : authorizationService.listDirectory(null, null)) {
-            if (!mentor.userId().equals(requestingUserId)
-                    && mentor.remainingCapacity() > 0) {
+        for (TrainerDirectoryDto mentor : authorizationService.listDirectory(skillId, null)) {
+            if (!mentor.userId().equals(requestingUserId) && mentor.remainingCapacity() > 0) {
                 candidates.putIfAbsent(mentor.userId(), mentor);
             }
         }
@@ -74,116 +87,144 @@ public class MentorRecommendationContextService {
                     .orElseThrow(() -> new IllegalStateException(
                             "An eligible mentor authorization disappeared while building recommendation context."
                     ));
-            result.add(new MentorCandidateContext(mentor, buildProfile(mentor, authorization)));
+            MentorApplication application = sourceApplication(authorization);
+            result.add(new MentorCandidateContext(
+                    mentor,
+                    application == null ? null : compact(application.getProfileSummary(), 2000, mentor),
+                    parseExperiences(application, "General professional experience", "title", mentor),
+                    parseExperiences(application, "Previous mentorship experience", "role", mentor),
+                    mentor.education() == null ? List.of() : mentor.education().stream()
+                            .filter(education -> education != null
+                                    && (hasText(education.educationLevel()) || hasText(education.fieldOfStudy())))
+                            .limit(MAX_EDUCATION_ENTRIES)
+                            .map(education -> new EducationContext(
+                                    compact(education.educationLevel(), 50, mentor),
+                                    compact(education.fieldOfStudy(), 100, mentor)
+                            ))
+                            .toList()
+            ));
         }
         return result;
     }
 
-    private String buildProfile(TrainerDirectoryDto mentor, TrainerAuthorization authorization) {
-        StringBuilder profile = new StringBuilder();
-        append(profile, "Skills", mentor.skills().stream()
-                .map(skill -> skill.name() + " (" + skill.category() + ")")
-                .toList().toString());
-        append(profile, "Department", mentor.departmentName());
-        append(profile, "Bio", redact(mentor.bio(), mentor));
-        append(profile, "Professional experience (years)", mentor.experienceYears());
-        append(profile, "Mentoring approach", redact(mentor.mentoringApproach(), mentor));
-        append(profile, "Sessions per week", mentor.sessionsPerWeek());
-        append(profile, "Average trainee rating", mentor.averageRating());
-        append(profile, "Active trainees", mentor.activeTrainees());
-        append(profile, "Available capacity", mentor.remainingCapacity());
-
-        MentorApplication application = authorization.getSourceApplication();
-        if (application != null && application.getApplicationType() != MentorApplicationType.INITIAL) {
-            application = null;
-        }
-        if (application != null) {
-            append(profile, "Expertise summary", redact(application.getExpertiseSummary(), mentor));
-            append(profile, "Application profile", redact(sanitizeApplicationNote(application.getNote()), mentor));
-            append(profile, "Application experience (years)", application.getExperienceYears());
-            append(profile, "Application mentoring approach",
-                    redact(application.getMentoringApproach(), mentor));
-            append(profile, "Sessions offered per week", application.getSessionsPerWeek());
-            appendEvidence(profile, application, mentor);
-        }
-        if (profile.length() <= MAX_PROFILE_CHARS) return profile.toString();
-        int contentLimit = MAX_PROFILE_CHARS - PROFILE_TRUNCATION_NOTICE.length() - 1;
-        int safeLimit = contentLimit > 0 && Character.isHighSurrogate(profile.charAt(contentLimit - 1))
-                ? contentLimit - 1
-                : contentLimit;
-        return profile.substring(0, safeLimit) + "\n" + PROFILE_TRUNCATION_NOTICE;
+    @Transactional(readOnly = true)
+    public MentorDirectoryProfileDto loadProfile(Long mentorUserId) {
+        TrainerDirectoryDto mentor = authorizationService.getDirectoryMentor(mentorUserId);
+        TrainerAuthorization authorization = authorizationRepository.findByUserIdAndStatus(
+                        mentorUserId, TrainerAuthorizationStatus.ACTIVE)
+                .stream()
+                .findFirst()
+                .orElseThrow(() -> new IllegalStateException(
+                        "An active mentor authorization disappeared while loading profile details."
+                ));
+        MentorApplication application = sourceApplication(authorization);
+        return new MentorDirectoryProfileDto(
+                mentor,
+                application == null ? null : compact(application.getProfileSummary(), 2000, mentor),
+                profileExperiences(parseExperiences(
+                        application, "General professional experience", "title", mentor
+                )),
+                profileExperiences(parseExperiences(
+                        application, "Previous mentorship experience", "role", mentor
+                ))
+        );
     }
 
-    private void appendEvidence(
-            StringBuilder profile,
+    private List<MentorDirectoryProfileDto.Experience> profileExperiences(
+            List<ExperienceContext> experiences
+    ) {
+        return experiences.stream()
+                .map(experience -> new MentorDirectoryProfileDto.Experience(
+                        experience.role(),
+                        experience.organization(),
+                        experience.years()
+                ))
+                .toList();
+    }
+
+    private MentorApplication sourceApplication(TrainerAuthorization authorization) {
+        return authorization.getSourceApplication();
+    }
+
+    private List<ExperienceContext> parseExperiences(
             MentorApplication application,
+            String noteKey,
+            String roleKey,
             TrainerDirectoryDto mentor
     ) {
-        List<StoredFile> files = new ArrayList<>(application.getSupportingEvidence());
-        if (application.getProofDocument() != null
-                && files.stream().noneMatch(file -> file.getId().equals(application.getProofDocument().getId()))) {
-            files.add(application.getProofDocument());
+        String encoded = applicationNoteValue(application, noteKey);
+        if (encoded == null || encoded.isBlank() || encoded.equalsIgnoreCase("No")
+                || encoded.equalsIgnoreCase("Not specified")) {
+            return List.of();
         }
-
-        int remaining = MAX_EVIDENCE_CHARS;
-        boolean unsupportedEvidence = false;
-        boolean truncatedEvidence = false;
-        for (StoredFile file : files) {
-            if (remaining <= 0) {
-                truncatedEvidence = true;
-                break;
-            }
-            if (!documentTextExtractor.supports(file.getOriginalFilename())) {
-                unsupportedEvidence = true;
-                continue;
-            }
-            MentoringDocumentTextExtractor.ExtractedDocumentText extractedDocument =
-                    extractEvidence(file, remaining);
-            String extracted = redact(extractedDocument.text(), mentor);
-            if (extractedDocument.truncated() || extracted.length() > remaining) truncatedEvidence = true;
-            String bounded = extracted.substring(0, Math.min(remaining, extracted.length()));
-            if (!bounded.isBlank()) {
-                append(profile, "Document evidence", bounded);
-                remaining -= bounded.length();
-            }
-        }
-        if (unsupportedEvidence) {
-            append(profile, "Evidence note", "Some image or non-text evidence could not be read by the text model.");
-        }
-        if (truncatedEvidence) {
-            append(profile, "Evidence note", "Document text was truncated to fit the recommendation context.");
-        }
-    }
-
-    private MentoringDocumentTextExtractor.ExtractedDocumentText extractEvidence(StoredFile file, int maxCharacters) {
         try {
-            return documentTextExtractor.extract(file.getId(), file.getOriginalFilename(), maxCharacters);
-        } catch (BusinessException error) {
-            if (!"MENTOR_DOCUMENT_EXTRACTION_FAILED".equals(error.getErrorCode())) throw error;
-            throw new BusinessException(
-                    "MENTOR_EVIDENCE_EXTRACTION_FAILED",
-                    "A mentor evidence document could not be read, so recommendations could not be generated.",
-                    error.getStatus()
-            );
+            JsonNode entries = objectMapper.readTree(encoded);
+            if (entries == null || !entries.isArray()) {
+                log.warn("Ignoring malformed {} for mentor user id={}", noteKey, mentor.userId());
+                return List.of();
+            }
+            List<ExperienceContext> result = new ArrayList<>();
+            for (JsonNode entry : entries) {
+                if (!entry.isObject()) {
+                    continue;
+                }
+                ExperienceContext experience = new ExperienceContext(
+                        compact(text(entry, roleKey), 60, mentor),
+                        compact(text(entry, "organization"), 50, mentor),
+                        compact(text(entry, "years"), 35, mentor)
+                );
+                if (hasText(experience.role()) || hasText(experience.organization())
+                        || hasText(experience.years())) {
+                    result.add(experience);
+                }
+                if (result.size() == MAX_EXPERIENCE_ENTRIES) {
+                    break;
+                }
+            }
+            return List.copyOf(result);
+        } catch (JsonProcessingException error) {
+            log.warn("Ignoring malformed {} for mentor user id={}", noteKey, mentor.userId(), error);
+            return List.of();
         }
     }
 
-    private String sanitizeApplicationNote(String note) {
-        if (note == null || note.isBlank()) return null;
-        return note.lines()
-                .filter(line -> {
-                    String normalized = line.trim().toLowerCase(Locale.ROOT);
-                    return !normalized.startsWith("full name:")
-                            && !normalized.startsWith("profile picture:")
-                            && !normalized.startsWith("cv:")
-                            && !normalized.startsWith("letter of motivation:");
+    private String applicationNoteValue(MentorApplication application, String key) {
+        if (application == null || application.getNote() == null) {
+            return null;
+        }
+        return application.getNote().lines()
+                .map(line -> {
+                    int separator = line.indexOf(':');
+                    return separator < 0 ? null : new AbstractMap.SimpleImmutableEntry<>(
+                            line.substring(0, separator).trim(),
+                            line.substring(separator + 1).trim()
+                    );
                 })
-                .reduce((first, second) -> first + "\n" + second)
+                .filter(Objects::nonNull)
+                .filter(entry -> entry.getKey().equalsIgnoreCase(key))
+                .map(Map.Entry::getValue)
+                .findFirst()
                 .orElse(null);
     }
 
+    private String text(JsonNode object, String field) {
+        JsonNode value = object.get(field);
+        return value == null || value.isNull() ? null : value.asText(null);
+    }
+
+    private String compact(String value, int maxChars, TrainerDirectoryDto mentor) {
+        if (!hasText(value)) {
+            return null;
+        }
+        String redacted = redact(value, mentor).trim();
+        if (redacted.length() <= maxChars) {
+            return redacted;
+        }
+        int end = Character.isHighSurrogate(redacted.charAt(maxChars - 1)) ? maxChars - 1 : maxChars;
+        return redacted.substring(0, end);
+    }
+
     private String redact(String value, TrainerDirectoryDto mentor) {
-        if (value == null || value.isBlank()) return value;
         String redacted = value;
         if (mentor.fullName() != null && !mentor.fullName().isBlank()) {
             redacted = redacted.replaceAll(
@@ -194,11 +235,30 @@ public class MentorRecommendationContextService {
                 .replaceAll("[redacted contact]");
     }
 
-    private void append(StringBuilder target, String label, Object value) {
-        if (value == null || value.toString().isBlank()) return;
-        target.append(label).append(": ").append(value).append('\n');
+    private boolean hasText(String value) {
+        return value != null && !value.isBlank();
     }
 
-    public record MentorCandidateContext(TrainerDirectoryDto mentor, String profile) {
+    public record ExperienceContext(String role, String organization, String years) {
+    }
+
+    public record EducationContext(String educationLevel, String fieldOfStudy) {
+    }
+
+    public record MentorCandidateContext(
+            TrainerDirectoryDto mentor,
+            String profileSummary,
+            List<ExperienceContext> careerExperience,
+            List<ExperienceContext> mentorshipExperience,
+            List<EducationContext> education
+    ) {
+        public MentorCandidateContext(
+                TrainerDirectoryDto mentor,
+                List<ExperienceContext> careerExperience,
+                List<ExperienceContext> mentorshipExperience,
+                List<EducationContext> education
+        ) {
+            this(mentor, null, careerExperience, mentorshipExperience, education);
+        }
     }
 }

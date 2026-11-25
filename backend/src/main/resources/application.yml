@@ -111,7 +111,7 @@ mentoring:
   ai:
     ollama:
       chat-url: ${MENTORING_AI_OLLAMA_CHAT_URL}
-      model: ${MENTORING_AI_OLLAMA_MODEL:olmo2:13b}
+      model: ${MENTORING_AI_OLLAMA_MODEL:qwen2.5:14b}
 daily:
   api-base-url: ${DAILY_API_BASE_URL:https://api.daily.co/v1}
   api-key: ${DAILY_API_KEY:}

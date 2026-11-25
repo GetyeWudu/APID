@@ -60,7 +60,8 @@ public class RedisCacheConfig implements CachingConfigurer {
                         "skills_catalog", baseConfig.entryTtl(Duration.ofMinutes(30)),
                         "org_departments", baseConfig.entryTtl(Duration.ofMinutes(30)),
                         "fiscal_quarters", baseConfig.entryTtl(Duration.ofMinutes(30)),
-                        "system_configs", baseConfig.entryTtl(Duration.ofMinutes(30))
+                        "system_configs", baseConfig.entryTtl(Duration.ofMinutes(30)),
+                        "mentor_application_document_summaries", baseConfig.entryTtl(Duration.ofHours(1))
                 ))
                 .build();
     }

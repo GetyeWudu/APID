@@ -1,5 +1,7 @@
 package com.boa.apid.mentoring.trainer.dto;
 
+import com.boa.apid.core.organization.dto.OrganizationLocationDto;
+
 import java.util.List;
 
 public record TrainerDirectoryDto(
@@ -17,7 +19,8 @@ public record TrainerDirectoryDto(
         String mentoringApproach,
         Integer sessionsPerWeek,
         List<EducationProfile> education,
-        List<ProfessionalCertificate> professionalCertificates
+        List<ProfessionalCertificate> professionalCertificates,
+        List<OrganizationLocationDto> organizationPath
 ) {
     public record EducationProfile(
             String educationLevel,

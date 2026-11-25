@@ -10,12 +10,13 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.verify;
 
 @ExtendWith(MockitoExtension.class)
 class MentorApplicationDocumentSummaryServiceTest {
@@ -32,7 +33,11 @@ class MentorApplicationDocumentSummaryServiceTest {
     void setUp() {
         service = new MentorApplicationDocumentSummaryService(
                 documentService,
-                ollamaClient,
+                new MentorApplicationDocumentSummaryCache(
+                        documentService,
+                        ollamaClient,
+                        new ObjectMapper()
+                ),
                 new ObjectMapper()
         );
     }
@@ -42,7 +47,7 @@ class MentorApplicationDocumentSummaryServiceTest {
         when(documentService.extractText(23L, 61L)).thenReturn(
                 new ApplicationDocumentText(61L, "resume.pdf", "document text", true)
         );
-        when(ollamaClient.summarizeDocument(anyString())).thenReturn(
+        when(ollamaClient.summarizeDocument(anyString(), anyInt())).thenReturn(
                 "{\"summary\":\"A concise summary of the document.\"}"
         );
 
@@ -52,6 +57,7 @@ class MentorApplicationDocumentSummaryServiceTest {
         assertEquals(61L, result.fileId());
         assertEquals("A concise summary of the document.", result.summary());
         assertTrue(result.sourceTruncated());
+        verify(documentService).ensureEvidenceBelongsToApplication(23L, 61L);
     }
 
     @Test
@@ -68,8 +74,9 @@ class MentorApplicationDocumentSummaryServiceTest {
         when(documentService.extractText(23L, 61L)).thenReturn(
                 new ApplicationDocumentText(61L, "resume.pdf", "document text", false)
         );
-        when(ollamaClient.summarizeDocument(anyString())).thenReturn("{\"summary\":\"  \"}");
+        when(ollamaClient.summarizeDocument(anyString(), anyInt())).thenReturn("{\"summary\":\"  \"}");
 
         assertThrows(BusinessException.class, () -> service.summarize(23L, 61L));
     }
+
 }

@@ -81,6 +81,9 @@ public class MentorApplication {
     @Column(name = "expertise_summary", length = 2000)
     private String expertiseSummary;
 
+    @Column(name = "profile_summary", columnDefinition = "TEXT")
+    private String profileSummary;
+
     @Column(name = "experience_years")
     private Integer experienceYears;
 
@@ -167,6 +170,9 @@ public class MentorApplication {
 
     public String getExpertiseSummary() { return expertiseSummary; }
     public void setExpertiseSummary(String expertiseSummary) { this.expertiseSummary = expertiseSummary; }
+
+    public String getProfileSummary() { return profileSummary; }
+    public void setProfileSummary(String profileSummary) { this.profileSummary = profileSummary; }
 
     public Integer getExperienceYears() { return experienceYears; }
     public void setExperienceYears(Integer experienceYears) { this.experienceYears = experienceYears; }

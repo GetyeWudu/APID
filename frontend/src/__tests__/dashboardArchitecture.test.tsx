@@ -1,7 +1,7 @@
 import { StrictMode } from 'react';
 import axios from 'axios';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { AdaptiveHomeRouter } from '../app/App';
@@ -326,7 +326,7 @@ describe('Portal Home module cards & scoped sidebar isolation', () => {
     expect(screen.queryByText('System Administration')).not.toBeInTheDocument();
   });
 
-  it('shows mentoring Chat and Resources alongside pairings without a My Mentor entry', async () => {
+  it('shows mentoring links in the requested order and keeps mentor links role-gated', async () => {
     vi.mocked(mentoringTrainerApi.hasMentorWorkspaceAccess).mockResolvedValue(true);
     vi.spyOn(AuthContextModule, 'useAuth').mockReturnValue(
       buildAuthMock({
@@ -350,7 +350,7 @@ describe('Portal Home module cards & scoped sidebar isolation', () => {
       '/mentoring?view=trainer'
     );
 
-    expect(screen.getByText('Employee')).toBeInTheDocument();
+    expect(screen.queryByText('Employee', { exact: true })).not.toBeInTheDocument();
     expect(screen.getByText('Dashboard')).toBeInTheDocument();
     expect(screen.queryByText('My Coaching')).not.toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Chat' })).toHaveAttribute('href', '/mentoring/chat');
@@ -358,14 +358,39 @@ describe('Portal Home module cards & scoped sidebar isolation', () => {
       'href',
       '/mentoring/resources'
     );
-    expect(screen.getByText('As a Trainee')).toBeInTheDocument();
+    expect(screen.queryByText('As a Trainee')).not.toBeInTheDocument();
+    expect(screen.queryByText('As a Mentor')).not.toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'My Mentors' })).toBeInTheDocument();
     expect(screen.queryByText('My Mentor')).not.toBeInTheDocument();
     expect(screen.getByText('My Sessions')).toBeInTheDocument();
     expect(screen.getByText('Find a Mentor')).toBeInTheDocument();
-    expect(await screen.findByText('As a Mentor')).toBeInTheDocument();
-    expect(screen.getByText('My Trainees')).toBeInTheDocument();
+    expect(await screen.findByRole('link', { name: 'My Trainees' })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'My Requests' })).toHaveAttribute(
+      'href',
+      '/mentoring?view=requests'
+    );
     expect(screen.getByText('Mentor Profile')).toBeInTheDocument();
     expect(screen.getByText('Mentor Sessions')).toBeInTheDocument();
+
+    const navigation = within(screen.getByRole('navigation', { name: 'Module navigation' }));
+    const linkLabels = navigation.getAllByRole('link').map((link) => link.textContent?.trim() ?? '');
+    const expectedOrder = [
+      'Dashboard',
+      'My Mentors',
+      'My Trainees',
+      'My Requests',
+      'Find a Mentor',
+      'My Pairing',
+      'My Sessions',
+      'Apply to Become a Mentor',
+      'Mentor Sessions',
+      'Mentor Profile',
+      'Chat',
+      'Resources',
+    ];
+    const positions = expectedOrder.map((label) => linkLabels.findIndex((link) => link.includes(label)));
+    expect(positions.every((position) => position >= 0)).toBe(true);
+    expect(positions).toEqual([...positions].sort((first, second) => first - second));
   });
 
   it('hides mentor navigation after authorization is revoked even if the user still has the Mentor role', async () => {
@@ -386,9 +411,13 @@ describe('Portal Home module cards & scoped sidebar isolation', () => {
       '/mentoring'
     );
 
-    expect(await screen.findByText('As a Trainee')).toBeInTheDocument();
+    expect(await screen.findByRole('link', { name: 'My Mentors' })).toBeInTheDocument();
+    expect(screen.queryByText('As a Trainee')).not.toBeInTheDocument();
     expect(screen.queryByText('As a Mentor')).not.toBeInTheDocument();
     expect(screen.getByText('Find a Mentor')).toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: 'My Trainees' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: 'Mentor Sessions' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: 'Mentor Profile' })).not.toBeInTheDocument();
   });
 
   it('shows the employee Dashboard, Chat, and Resources in the workspace sidebar', () => {
@@ -417,9 +446,11 @@ describe('Portal Home module cards & scoped sidebar isolation', () => {
       'href',
       '/mentoring/resources'
     );
-    expect(screen.getByText('As a Trainee')).toBeInTheDocument();
+    expect(screen.queryByText('As a Trainee')).not.toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'My Mentors' })).toBeInTheDocument();
     expect(screen.queryByText('My Mentor')).not.toBeInTheDocument();
     expect(screen.getByText('Find a Mentor')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'My Pairing' })).toBeInTheDocument();
   });
 
   it('shows personal + HR Admin features inside Mentoring sidebar for HR Admin and excludes duplicate tabs in Admin', () => {
@@ -445,7 +476,8 @@ describe('Portal Home module cards & scoped sidebar isolation', () => {
       '/mentoring'
     );
 
-    expect(screen.getByText('As a Trainee')).toBeInTheDocument();
+    expect(screen.queryByText('Employee', { exact: true })).not.toBeInTheDocument();
+    expect(screen.queryByText('As a Trainee')).not.toBeInTheDocument();
     expect(screen.queryByText('My Mentor')).not.toBeInTheDocument();
     expect(screen.getByText('Find a Mentor')).toBeInTheDocument();
     expect(screen.getByText('HR Administration')).toBeInTheDocument();

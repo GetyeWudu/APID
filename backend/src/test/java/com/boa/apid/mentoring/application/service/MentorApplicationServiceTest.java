@@ -15,9 +15,11 @@ import com.boa.apid.core.authorization.repository.RoleRepository;
 import com.boa.apid.core.authorization.repository.UserRepository;
 import com.boa.apid.core.authorization.repository.UserRoleRepository;
 import com.boa.apid.core.notifications.service.NotificationService;
+import com.boa.apid.core.organization.repository.EmployeeRepository;
 import com.boa.apid.core.skills.entity.Skill;
 import com.boa.apid.core.skills.repository.SkillRepository;
 import com.boa.apid.core.skills.service.SkillCacheInvalidationEvent;
+import com.boa.apid.mentoring.ai.document.service.MentorProfileSummaryService;
 import com.boa.apid.mentoring.application.dto.MentorApplicationDto;
 import com.boa.apid.mentoring.application.dto.MentorApplicationReviewRequest;
 import com.boa.apid.mentoring.application.dto.MentorProfileUpdateRequest;
@@ -46,9 +48,11 @@ import java.util.Optional;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
@@ -59,6 +63,9 @@ class MentorApplicationServiceTest {
 
     @Mock
     private MentorApplicationRepository applicationRepository;
+
+    @Mock
+    private EmployeeRepository employeeRepository;
 
     @Mock
     private UserRepository userRepository;
@@ -89,6 +96,9 @@ class MentorApplicationServiceTest {
 
     @Mock
     private TrainerAuthorizationService trainerAuthorizationService;
+
+    @Mock
+    private MentorProfileSummaryService profileSummaryService;
 
     @InjectMocks
     private MentorApplicationService service;
@@ -394,6 +404,7 @@ class MentorApplicationServiceTest {
                 null,
                 null,
                 null,
+                List.of(),
                 List.of()
         ));
         when(applicationRepository.findAllByApplicant_IdAndApplicationTypeAndStatus(
@@ -538,6 +549,7 @@ class MentorApplicationServiceTest {
         when(userRepository.getReferenceById(actor.getUserId())).thenReturn(reviewer);
         when(roleRepository.findByNameIgnoreCase("Mentor")).thenReturn(Optional.of(mentorRole));
         when(userRoleRepository.findActiveByUserIdWithRole(11L)).thenReturn(List.of());
+        when(profileSummaryService.summarize(application, List.of())).thenReturn("Approved mentor profile summary.");
         when(applicationRepository.save(any(MentorApplication.class)))
                 .thenAnswer(invocation -> invocation.getArgument(0));
 
@@ -558,6 +570,8 @@ class MentorApplicationServiceTest {
         assertEquals(MentorApplicationStatus.APPROVED, result.status());
         assertEquals("Financial Analysis", result.skillName());
         assertEquals(MentorApplicationStatus.APPROVED, application.getStatus());
+        assertEquals("Approved mentor profile summary.", result.profileSummary());
+        assertEquals("Approved mentor profile summary.", application.getProfileSummary());
         assertEquals(1, applicant.getSkills().size());
         verify(notificationService).notify(
                 11L,
@@ -567,6 +581,39 @@ class MentorApplicationServiceTest {
                 "Your mentor application for Financial Analysis was approved.",
                 "/mentoring?tab=applications"
         );
+    }
+
+    @Test
+    void profileSummaryPreviewDoesNotPersistPendingApplication() {
+        ApidUserPrincipal actor = actor();
+        MentorApplication application = application(user(11L, "applicant"), null);
+        when(applicationRepository.findById(50L)).thenReturn(Optional.of(application));
+        when(profileSummaryService.summarize(application, List.of()))
+                .thenReturn("A clear summary of the mentor's profile.");
+
+        var result = service.summarizeProfile(50L, actor);
+
+        assertEquals(50L, result.applicationId());
+        assertEquals("A clear summary of the mentor's profile.", result.summary());
+        assertFalse(result.persisted());
+        verify(applicationRepository, org.mockito.Mockito.never()).save(any(MentorApplication.class));
+    }
+
+    @Test
+    void generatingSummaryForApprovedApplicationPersistsIt() {
+        ApidUserPrincipal actor = actor();
+        MentorApplication application = application(user(11L, "applicant"), null);
+        application.setStatus(MentorApplicationStatus.APPROVED);
+        when(applicationRepository.findById(50L)).thenReturn(Optional.of(application));
+        when(profileSummaryService.summarize(application, List.of()))
+                .thenReturn("Saved summary for an existing mentor.");
+        when(applicationRepository.save(application)).thenReturn(application);
+
+        var result = service.summarizeProfile(50L, actor);
+
+        assertTrue(result.persisted());
+        assertEquals("Saved summary for an existing mentor.", application.getProfileSummary());
+        verify(applicationRepository).save(application);
     }
 
     @Test
@@ -588,6 +635,7 @@ class MentorApplicationServiceTest {
         when(userRoleRepository.findActiveByUserIdWithRole(11L)).thenReturn(List.of());
         when(skillRepository.findByNameIgnoreCase("Custom Coaching")).thenReturn(Optional.empty());
         when(skillRepository.save(any(Skill.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(profileSummaryService.summarize(application, List.of())).thenReturn("Approved mentor profile summary.");
         when(applicationRepository.save(any(MentorApplication.class)))
                 .thenAnswer(invocation -> invocation.getArgument(0));
 
@@ -663,7 +711,7 @@ class MentorApplicationServiceTest {
                 0, 0, 3, null, List.of(new TrainerSkillDto(
                         4L, "Existing skill", "Finance", TrainerAuthorizationStatus.ACTIVE, null
                 )), Instant.now(), Instant.now(),
-                null, null, null, null, null, null, List.of()
+                null, null, null, null, null, null, List.of(), List.of()
         ));
         when(userRepository.findByIdForUpdate(actor.getUserId())).thenReturn(Optional.of(applicant));
         when(skillRepository.findByIdAndActiveTrue(4L)).thenReturn(Optional.of(skill));
@@ -721,7 +769,7 @@ class MentorApplicationServiceTest {
                 0, 0, 3, null, List.of(new TrainerSkillDto(
                         4L, "Existing skill", "Finance", TrainerAuthorizationStatus.ACTIVE, null
                 )), Instant.now(), Instant.now(),
-                null, null, null, null, null, null, List.of()
+                null, null, null, null, null, null, List.of(), List.of()
         ));
         when(userRepository.findByIdForUpdate(actor.getUserId())).thenReturn(Optional.of(applicant));
         when(userRoleRepository.findActiveByUserIdWithRole(actor.getUserId()))
@@ -768,6 +816,7 @@ class MentorApplicationServiceTest {
         when(applicationRepository.findByIdForUpdate(50L)).thenReturn(Optional.of(application));
         when(userRepository.findByIdForUpdate(11L)).thenReturn(Optional.of(applicant));
         when(userRepository.findById(actor.getUserId())).thenReturn(Optional.of(reviewer));
+        when(profileSummaryService.summarize(application, List.of())).thenReturn("Updated mentor profile summary.");
         when(applicationRepository.save(any(MentorApplication.class)))
                 .thenAnswer(invocation -> invocation.getArgument(0));
 
@@ -778,7 +827,7 @@ class MentorApplicationServiceTest {
         );
 
         assertEquals(MentorApplicationType.PROFILE_UPDATE, result.applicationType());
-        verify(trainerAuthorizationService).approveProfileUpdate(application);
+        verify(trainerAuthorizationService).approveProfileUpdate(application, "Updated mentor profile summary.");
         verify(trainerAuthorizationService, org.mockito.Mockito.never())
                 .authorizeApplication(any(MentorApplication.class), any(User.class));
         verify(userRoleRepository, org.mockito.Mockito.never()).save(any(UserRole.class));

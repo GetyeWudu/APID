@@ -1,4 +1,5 @@
 import { apiClient, type ApiResponse } from '../../../shared/api/apiClient';
+import type { OrganizationLocation } from './organizationLocation';
 
 export interface SubmitMentorApplicationPayload {
   mentorAgreementAccepted: boolean;
@@ -46,6 +47,7 @@ export interface MentorApplication {
   evidenceFiles: Array<{ fileId: number; fileName: string; context?: string }>;
   note: string | null;
   expertiseSummary: string | null;
+  profileSummary?: string | null;
   experienceYears?: number | null;
   mentoringApproach?: string | null;
   sessionsPerWeek?: number | null;
@@ -57,6 +59,7 @@ export interface MentorApplication {
   mentorAgreementVersion?: string | null;
   mentorAgreementText?: string | null;
   mentorAgreementAcceptedAt?: string | null;
+  organizationPath?: OrganizationLocation[];
 }
 
 export interface MentorApplicationDocumentSummary {
@@ -117,6 +120,13 @@ function buildApplicationFormData(payload: Partial<SubmitMentorApplicationPayloa
 export interface ReviewMentorApplicationPayload {
   decision: 'APPROVED' | 'DECLINED';
   reason?: string;
+  profileSummary?: string;
+}
+
+export interface MentorProfileSummary {
+  applicationId: number;
+  summary: string;
+  persisted: boolean;
 }
 
 export const mentorApplicationApi = {
@@ -177,6 +187,13 @@ export const mentorApplicationApi = {
   async summarizeDocument(applicationId: number, fileId: number): Promise<MentorApplicationDocumentSummary> {
     const response = await apiClient.post<ApiResponse<MentorApplicationDocumentSummary>>(
       `/mentoring/applications/${applicationId}/evidence/${fileId}/summary`
+    );
+    return response.data.data;
+  },
+
+  async summarizeProfile(applicationId: number): Promise<MentorProfileSummary> {
+    const response = await apiClient.post<ApiResponse<MentorProfileSummary>>(
+      `/mentoring/applications/${applicationId}/profile-summary`
     );
     return response.data.data;
   },

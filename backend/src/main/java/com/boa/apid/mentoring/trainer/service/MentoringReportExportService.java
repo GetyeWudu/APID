@@ -89,8 +89,17 @@ public class MentoringReportExportService {
                     {"Completed relationships", Long.toString(overview.completedRelationships())},
                     {"Total sessions", Long.toString(overview.totalSessions())},
                     {"Completed sessions", Long.toString(overview.completedSessions())},
-                    {"Average trainee rating", Double.toString(overview.averageFeedbackRating())},
+                    {"Average relationship feedback rating", overview.averageFeedbackRating() == null
+                            ? "No feedback"
+                            : Double.toString(overview.averageFeedbackRating())},
+                    {"Trainee feedback responses", Long.toString(overview.feedbackReport().responseCount())},
                     {"Completion rate (%)", Double.toString(overview.completionRatePct())},
+                    {"Open mentor-match requests", Long.toString(overview.requestBacklog().openRequests())},
+                    {"Average request wait (days)", Double.toString(overview.requestBacklog().averageWaitDays())},
+                    {"Oldest request wait (days)", Double.toString(overview.requestBacklog().oldestWaitDays())},
+                    {"Requests waiting under 2 days", Long.toString(overview.requestBacklog().waitingUnderTwoDays())},
+                    {"Requests waiting 2-7 days", Long.toString(overview.requestBacklog().waitingTwoToSevenDays())},
+                    {"Requests waiting 7+ days", Long.toString(overview.requestBacklog().waitingSevenOrMoreDays())},
                     {"Generated at (UTC)", Instant.now().toString()}
             };
             for (int i = 0; i < metrics.length; i++) {
@@ -136,6 +145,40 @@ public class MentoringReportExportService {
             }
             autoSize(skillsSheet, skillHeaders.length);
 
+            Sheet feedbackSheet = workbook.createSheet("Feedback quality");
+            String[] feedbackHeaders = {"Metric", "Value"};
+            addHeader(feedbackSheet, feedbackHeaders);
+            addFeedbackMetric(feedbackSheet, 1, "Average rating (1-5)",
+                    overview.feedbackReport().averageRating() == null
+                            ? "No feedback"
+                            : Double.toString(overview.feedbackReport().averageRating()));
+            addFeedbackMetric(feedbackSheet, 2, "Feedback responses",
+                    Long.toString(overview.feedbackReport().responseCount()));
+            Row distributionHeader = feedbackSheet.createRow(4);
+            distributionHeader.createCell(0).setCellValue("Rating");
+            distributionHeader.createCell(1).setCellValue("Responses");
+            for (int i = 0; i < overview.feedbackReport().ratingDistribution().size(); i++) {
+                var distribution = overview.feedbackReport().ratingDistribution().get(i);
+                Row row = feedbackSheet.createRow(i + 5);
+                row.createCell(0).setCellValue(distribution.rating());
+                row.createCell(1).setCellValue(distribution.responseCount());
+            }
+            int trendStartRow = overview.feedbackReport().ratingDistribution().size() + 6;
+            Row trendHeader = feedbackSheet.createRow(trendStartRow);
+            trendHeader.createCell(0).setCellValue("Month");
+            trendHeader.createCell(1).setCellValue("Responses");
+            trendHeader.createCell(2).setCellValue("Average rating");
+            for (int i = 0; i < overview.feedbackReport().monthlyTrend().size(); i++) {
+                var trend = overview.feedbackReport().monthlyTrend().get(i);
+                Row row = feedbackSheet.createRow(trendStartRow + i + 1);
+                row.createCell(0).setCellValue(trend.month());
+                row.createCell(1).setCellValue(trend.responseCount());
+                row.createCell(2).setCellValue(
+                        trend.averageRating() == null ? "No feedback" : Double.toString(trend.averageRating())
+                );
+            }
+            autoSize(feedbackSheet, 3);
+
             workbook.write(output);
             return new ExportedReport(output.toByteArray(), XLSX_CONTENT_TYPE, "mentoring-report.xlsx");
         } catch (IOException exception) {
@@ -164,9 +207,43 @@ public class MentoringReportExportService {
             addPdfRow(metrics, "Completed relationships", overview.completedRelationships());
             addPdfRow(metrics, "Total sessions", overview.totalSessions());
             addPdfRow(metrics, "Completed sessions", overview.completedSessions());
-            addPdfRow(metrics, "Average trainee rating", overview.averageFeedbackRating());
+            addPdfRow(metrics, "Average relationship feedback rating", overview.averageFeedbackRating() == null
+                    ? "No feedback"
+                    : overview.averageFeedbackRating());
+            addPdfRow(metrics, "Trainee feedback responses", overview.feedbackReport().responseCount());
             addPdfRow(metrics, "Completion rate (%)", overview.completionRatePct());
+            addPdfRow(metrics, "Open mentor-match requests", overview.requestBacklog().openRequests());
+            addPdfRow(metrics, "Average request wait (days)", overview.requestBacklog().averageWaitDays());
+            addPdfRow(metrics, "Oldest request wait (days)", overview.requestBacklog().oldestWaitDays());
+            addPdfRow(metrics, "Requests waiting under 2 days", overview.requestBacklog().waitingUnderTwoDays());
+            addPdfRow(metrics, "Requests waiting 2-7 days", overview.requestBacklog().waitingTwoToSevenDays());
+            addPdfRow(metrics, "Requests waiting 7+ days", overview.requestBacklog().waitingSevenOrMoreDays());
             document.add(metrics);
+
+            document.add(new Paragraph(" "));
+            document.add(new Paragraph("Feedback quality", FontFactory.getFont(FontFactory.HELVETICA_BOLD, 12)));
+            PdfPTable feedback = new PdfPTable(new float[] { 2, 1 });
+            addPdfRow(feedback, "Average rating (1-5)", overview.feedbackReport().averageRating() == null
+                    ? "No feedback"
+                    : overview.feedbackReport().averageRating());
+            addPdfRow(feedback, "Feedback responses", overview.feedbackReport().responseCount());
+            for (var distribution : overview.feedbackReport().ratingDistribution()) {
+                addPdfRow(feedback, distribution.rating() + " star ratings", distribution.responseCount());
+            }
+            document.add(feedback);
+            document.add(new Paragraph("Monthly feedback trend", FontFactory.getFont(FontFactory.HELVETICA_BOLD, 10)));
+            PdfPTable feedbackTrend = new PdfPTable(new float[] { 2, 1, 1 });
+            for (String header : List.of("Month", "Responses", "Average rating")) {
+                feedbackTrend.addCell(new Phrase(header, FontFactory.getFont(FontFactory.HELVETICA_BOLD, 9)));
+            }
+            for (var trend : overview.feedbackReport().monthlyTrend()) {
+                feedbackTrend.addCell(trend.month());
+                feedbackTrend.addCell(Long.toString(trend.responseCount()));
+                feedbackTrend.addCell(trend.averageRating() == null
+                        ? "No feedback"
+                        : Double.toString(trend.averageRating()));
+            }
+            document.add(feedbackTrend);
 
             document.add(new Paragraph(" "));
             document.add(new Paragraph("Skill supply and demand", FontFactory.getFont(FontFactory.HELVETICA_BOLD, 12)));
@@ -209,6 +286,12 @@ public class MentoringReportExportService {
         for (int i = 0; i < headers.length; i++) {
             header.createCell(i).setCellValue(headers[i]);
         }
+    }
+
+    private void addFeedbackMetric(Sheet sheet, int rowIndex, String label, String value) {
+        Row row = sheet.createRow(rowIndex);
+        row.createCell(0).setCellValue(label);
+        row.createCell(1).setCellValue(value);
     }
 
     private void autoSize(Sheet sheet, int columns) {

@@ -13,7 +13,6 @@ export function SkillSupplyDemandCard({
   }>;
 }) {
   const [search, setSearch] = useState('');
-  const [showAll, setShowAll] = useState(false);
   const filteredSkills = skillSupplyDemand
     .filter((row) => row.skillName.toLowerCase().includes(search.trim().toLowerCase()))
     .sort(
@@ -22,7 +21,6 @@ export function SkillSupplyDemandCard({
         b.availableTrainerSlots - a.availableTrainerSlots ||
         a.skillName.localeCompare(b.skillName)
     );
-  const visibleSkills = showAll ? filteredSkills : filteredSkills.slice(0, 8);
 
   return (
     <section className="mentoring-analytics__chart">
@@ -34,31 +32,28 @@ export function SkillSupplyDemandCard({
           </p>
         </div>
       </div>
-      <div className="mentoring-skill-toolbar">
-        <label className="mentoring-skill-search">
+      <div className="mentoring-analytics-search-toolbar">
+        <label className="mentoring-analytics-search">
           <span className="sr-only">Search skills</span>
           <input
             type="search"
             value={search}
-            onChange={(event) => {
-              setSearch(event.target.value);
-              setShowAll(false);
-            }}
+            onChange={(event) => setSearch(event.target.value)}
             placeholder="Search skills"
           />
         </label>
         <span className="mentoring-dashboard__section-description">
-          Showing {visibleSkills.length} of {filteredSkills.length}
+          Showing {filteredSkills.length} of {skillSupplyDemand.length}
         </span>
       </div>
 
-      {visibleSkills.length === 0 ? (
+      {filteredSkills.length === 0 ? (
         <p className="mentoring-dashboard__section-description" role="status">
           No skills match your search.
         </p>
       ) : (
         <div
-          className="mentoring-skill-chart-scroll"
+          className="mentoring-analytics-chart-scroll"
           role="region"
           aria-label="Scrollable skill demand and trainer supply chart"
           tabIndex={0}
@@ -66,7 +61,7 @@ export function SkillSupplyDemandCard({
           <SvgHorizontalBarChart
             title="Mentoring Demand vs Trainer Slots"
             description="Open trainee requests compared to available trainer capacity per skill"
-            items={visibleSkills.map((row) => ({
+            items={filteredSkills.map((row) => ({
               id: row.skillName,
               label: row.skillName,
               value: row.openRequests,
@@ -75,16 +70,6 @@ export function SkillSupplyDemandCard({
             }))}
           />
         </div>
-      )}
-      {filteredSkills.length > 8 && (
-        <button
-          type="button"
-          className="apid-btn apid-btn-outline apid-btn-sm"
-          style={{ marginTop: '0.75rem' }}
-          onClick={() => setShowAll((current) => !current)}
-        >
-          {showAll ? 'Show top skills' : `Show all ${filteredSkills.length} skills`}
-        </button>
       )}
     </section>
   );

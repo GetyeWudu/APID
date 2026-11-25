@@ -15,12 +15,15 @@ import com.boa.apid.core.skills.entity.Skill;
 import com.boa.apid.core.skills.repository.SkillRepository;
 import com.boa.apid.mentoring.application.entity.MentorApplication;
 import com.boa.apid.mentoring.application.repository.MentorApplicationRepository;
+import com.boa.apid.mentoring.collaboration.dto.MentoringFeedbackRatingEntry;
 import com.boa.apid.mentoring.collaboration.repository.MentoringRelationshipFeedbackRepository;
 import com.boa.apid.mentoring.matching.repository.MentoringMatchRequestRepository;
 import com.boa.apid.mentoring.pairing.repository.MentoringRelationshipMemberRepository;
 import com.boa.apid.mentoring.pairing.repository.MentoringRelationshipRepository;
 import com.boa.apid.mentoring.pairing.repository.MentoringRequestRecipientRepository;
 import com.boa.apid.mentoring.pairing.repository.MentoringSessionRepository;
+import com.boa.apid.mentoring.trainer.dto.MentoringFeedbackReportDto;
+import com.boa.apid.mentoring.trainer.dto.MentoringRequestBacklogDto;
 import com.boa.apid.mentoring.trainer.entity.TrainerAuthorization;
 import com.boa.apid.mentoring.trainer.entity.TrainerAuthorizationSkillStatus;
 import com.boa.apid.mentoring.trainer.entity.TrainerAuthorizationStatus;
@@ -35,6 +38,8 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.context.ApplicationEventPublisher;
 
+import java.time.Instant;
+import java.time.YearMonth;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Optional;
@@ -43,6 +48,7 @@ import java.util.Set;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotSame;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.verify;
@@ -74,6 +80,77 @@ class TrainerAuthorizationServiceApplicationTest {
 
     @InjectMocks
     private TrainerAuthorizationService service;
+
+    @Test
+    void summarizesOpenRequestWaitTimesAndAgeBuckets() {
+        Instant now = Instant.parse("2026-11-25T06:00:00Z");
+
+        MentoringRequestBacklogDto backlog = TrainerAuthorizationService.summarizeRequestBacklog(
+                List.of(
+                        now.minusSeconds(3_600),
+                        now.minusSeconds(3 * 86_400L),
+                        now.minusSeconds(7 * 86_400L)
+                ),
+                now
+        );
+
+        assertEquals(3, backlog.openRequests());
+        assertEquals(3.3, backlog.averageWaitDays(), 0.001);
+        assertEquals(7, backlog.oldestWaitDays(), 0.001);
+        assertEquals(1, backlog.waitingUnderTwoDays());
+        assertEquals(1, backlog.waitingTwoToSevenDays());
+        assertEquals(1, backlog.waitingSevenOrMoreDays());
+    }
+
+    @Test
+    void emptyRequestBacklogHasZeroWaitMetrics() {
+        MentoringRequestBacklogDto backlog =
+                TrainerAuthorizationService.summarizeRequestBacklog(List.of(), Instant.now());
+
+        assertEquals(new MentoringRequestBacklogDto(0, 0, 0, 0, 0, 0), backlog);
+    }
+
+    @Test
+    void summarizesFeedbackDistributionAndSixMonthRatingTrend() {
+        MentoringFeedbackReportDto report = TrainerAuthorizationService.summarizeFeedbackRatings(
+                List.of(
+                        new MentoringFeedbackRatingEntry(5, Instant.parse("2026-11-02T00:00:00Z")),
+                        new MentoringFeedbackRatingEntry(3, Instant.parse("2026-11-04T00:00:00Z")),
+                        new MentoringFeedbackRatingEntry(4, Instant.parse("2026-10-03T00:00:00Z"))
+                ),
+                YearMonth.of(2026, 11)
+        );
+
+        assertEquals(3, report.responseCount());
+        assertEquals(4.0, report.averageRating(), 0.001);
+        assertEquals(List.of(
+                new MentoringFeedbackReportDto.RatingDistribution(1, 0),
+                new MentoringFeedbackReportDto.RatingDistribution(2, 0),
+                new MentoringFeedbackReportDto.RatingDistribution(3, 1),
+                new MentoringFeedbackReportDto.RatingDistribution(4, 1),
+                new MentoringFeedbackReportDto.RatingDistribution(5, 1)
+        ), report.ratingDistribution());
+        assertEquals(6, report.monthlyTrend().size());
+        assertEquals(new MentoringFeedbackReportDto.MonthlyRating("2026-06", 0, null),
+                report.monthlyTrend().get(0));
+        assertEquals(new MentoringFeedbackReportDto.MonthlyRating("2026-10", 1, 4.0),
+                report.monthlyTrend().get(4));
+        assertEquals(new MentoringFeedbackReportDto.MonthlyRating("2026-11", 2, 4.0),
+                report.monthlyTrend().get(5));
+    }
+
+    @Test
+    void representsMissingFeedbackAsNoRatingRatherThanZero() {
+        MentoringFeedbackReportDto report = TrainerAuthorizationService.summarizeFeedbackRatings(
+                List.of(),
+                YearMonth.of(2026, 11)
+        );
+
+        assertEquals(0, report.responseCount());
+        assertNull(report.averageRating());
+        assertTrue(report.ratingDistribution().stream().allMatch(item -> item.responseCount() == 0));
+        assertTrue(report.monthlyTrend().stream().allMatch(item -> item.averageRating() == null));
+    }
 
     @Test
     void copiesApplicationSkillCollectionBeforePersistingAuthorization() {

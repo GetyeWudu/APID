@@ -1,4 +1,5 @@
 import { apiClient, type ApiResponse } from '../../../shared/api/apiClient';
+import type { OrganizationLocation } from './organizationLocation';
 
 export type MentoringMatchRequestStatus = 'OPEN' | 'MATCHED' | 'CANCELLED';
 
@@ -16,6 +17,7 @@ export interface MentoringMatchRequest {
   matchedTrainerName: string | null;
   mentoringRelationshipId: number | null;
   createdAt: string;
+  organizationPath?: OrganizationLocation[];
 }
 
 export interface MentoringReassignmentCandidate {

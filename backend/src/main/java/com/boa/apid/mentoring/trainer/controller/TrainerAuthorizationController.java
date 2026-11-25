@@ -2,9 +2,14 @@ package com.boa.apid.mentoring.trainer.controller;
 
 import com.boa.apid.common.response.ApiResponse;
 import com.boa.apid.core.auth.security.ApidUserPrincipal;
+import com.boa.apid.core.organization.dto.OrganizationLocationDto;
+import com.boa.apid.mentoring.ai.insights.dto.MentoringProgramInsightsDto;
+import com.boa.apid.mentoring.ai.insights.service.MentoringProgramInsightsService;
+import com.boa.apid.mentoring.ai.recommendation.service.MentorRecommendationContextService;
 import com.boa.apid.mentoring.trainer.dto.MentorBadgeRemovalDecisionRequest;
 import com.boa.apid.mentoring.trainer.dto.MentorBadgeRemovalRequestBody;
 import com.boa.apid.mentoring.trainer.dto.MentorBadgeRemovalRequestDto;
+import com.boa.apid.mentoring.trainer.dto.MentorDirectoryProfileDto;
 import com.boa.apid.mentoring.trainer.dto.MentoringHrOverviewDto;
 import com.boa.apid.mentoring.trainer.dto.MentoringPairingReportDetailDto;
 import com.boa.apid.mentoring.trainer.dto.MentoringPairingReportOverviewDto;
@@ -27,6 +32,7 @@ import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -43,15 +49,21 @@ public class TrainerAuthorizationController {
     private final TrainerAuthorizationService authorizationService;
     private final MentoringReportExportService reportExportService;
     private final MentoringPairingReportService pairingReportService;
+    private final MentorRecommendationContextService recommendationContextService;
+    private final MentoringProgramInsightsService programInsightsService;
 
     public TrainerAuthorizationController(
             TrainerAuthorizationService authorizationService,
             MentoringReportExportService reportExportService,
-            MentoringPairingReportService pairingReportService
+            MentoringPairingReportService pairingReportService,
+            MentorRecommendationContextService recommendationContextService,
+            MentoringProgramInsightsService programInsightsService
     ) {
         this.authorizationService = authorizationService;
         this.reportExportService = reportExportService;
         this.pairingReportService = pairingReportService;
+        this.recommendationContextService = recommendationContextService;
+        this.programInsightsService = programInsightsService;
     }
 
     @GetMapping("/directory")
@@ -61,6 +73,22 @@ public class TrainerAuthorizationController {
             @RequestParam(required = false) String department
     ) {
         return ApiResponse.ok(authorizationService.listDirectory(skillId, department));
+    }
+
+    @GetMapping("/directory/location-context")
+    @PreAuthorize("isAuthenticated() and !principal.mustChangePassword and hasAuthority('EMPLOYEE_PORTAL_ACCESS')")
+    public ApiResponse<List<OrganizationLocationDto>> getDirectoryLocationContext(
+            @AuthenticationPrincipal ApidUserPrincipal actor
+    ) {
+        return ApiResponse.ok(authorizationService.getOrganizationPath(actor.getUserId()));
+    }
+
+    @GetMapping("/directory/{mentorUserId}/profile")
+    @PreAuthorize("isAuthenticated() and !principal.mustChangePassword and hasAuthority('EMPLOYEE_PORTAL_ACCESS')")
+    public ApiResponse<MentorDirectoryProfileDto> getDirectoryProfile(
+            @PathVariable Long mentorUserId
+    ) {
+        return ApiResponse.ok(recommendationContextService.loadProfile(mentorUserId));
     }
 
     @GetMapping("/hr/trainers")
@@ -195,6 +223,12 @@ public class TrainerAuthorizationController {
     @PreAuthorize("hasAuthority('MENTORING_REPORT_VIEW_ALL')")
     public ApiResponse<MentoringPairingReportOverviewDto> getPairingReports() {
         return ApiResponse.ok(pairingReportService.getOverview());
+    }
+
+    @PostMapping("/hr/reports/ai-insights")
+    @PreAuthorize("hasAuthority('MENTORING_REPORT_VIEW_ALL')")
+    public ApiResponse<MentoringProgramInsightsDto> generateProgramInsights() {
+        return ApiResponse.ok(programInsightsService.generate());
     }
 
     @GetMapping("/hr/reports/pairings/{relationshipId}")

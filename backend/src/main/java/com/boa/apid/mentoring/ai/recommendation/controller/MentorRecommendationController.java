@@ -2,6 +2,7 @@ package com.boa.apid.mentoring.ai.recommendation.controller;
 
 import com.boa.apid.common.response.ApiResponse;
 import com.boa.apid.core.auth.security.ApidUserPrincipal;
+import com.boa.apid.mentoring.ai.recommendation.dto.HrMentorRecommendationRequest;
 import com.boa.apid.mentoring.ai.recommendation.dto.MentorRecommendationRequest;
 import com.boa.apid.mentoring.ai.recommendation.dto.MentorRecommendationResponse;
 import com.boa.apid.mentoring.ai.recommendation.service.MentorRecommendationService;
@@ -30,5 +31,14 @@ public class MentorRecommendationController {
             @AuthenticationPrincipal ApidUserPrincipal actor
     ) {
         return ApiResponse.ok(recommendationService.recommend(request, actor.getUserId()));
+    }
+
+    @PostMapping("/hr-match")
+    @PreAuthorize("isAuthenticated() and !principal.mustChangePassword and hasAuthority('MENTORING_MATCH_MANAGE')")
+    public ApiResponse<MentorRecommendationResponse> recommendForHrMatch(
+            @Valid @RequestBody HrMentorRecommendationRequest request,
+            @AuthenticationPrincipal ApidUserPrincipal actor
+    ) {
+        return ApiResponse.ok(recommendationService.recommendForHrMatch(request, actor.getUserId()));
     }
 }

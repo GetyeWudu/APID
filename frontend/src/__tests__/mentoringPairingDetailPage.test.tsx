@@ -4,6 +4,7 @@ import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import * as AuthContextModule from '../app/AuthContext';
 import type { UserProfile } from '../features/auth/types/auth.types';
+import type { MessageDto } from '../features/coaching/api/coachingCommunicationApi';
 import { mentoringPairingApi, type MentoringSession } from '../features/mentoring/api/mentoringPairingApi';
 import { MentoringPairingDetailPage } from '../features/mentoring/pages/MentoringPairingDetailPage';
 import { ToastProvider } from '../shared/components/ui';
@@ -98,22 +99,63 @@ describe('MentoringPairingDetailPage', () => {
         createdAt: '2026-04-20T08:00:00Z',
       },
     ]);
-    vi.spyOn(mentoringPairingApi, 'listMessages').mockResolvedValue({
-      messages: [
-        {
-          id: 31,
-          relationshipId: 77,
-          senderUserId: 8,
-          senderName: 'Trainee One',
-          body: 'Hello mentor',
-          createdAt: '2026-04-25T10:00:00Z',
-          mine: false,
-        },
-      ],
-      page: 0,
-      pageSize: 50,
-      hasMore: false,
+    vi.spyOn(mentoringPairingApi, 'getRelationshipConversation').mockResolvedValue({
+      id: 501,
+      conversationType: 'GROUP',
+      contextType: 'MENTORING_COHORT_GROUP',
+      mentoringRelationshipId: 77,
+      title: 'Mentoring class',
+      status: 'ACTIVE',
+      unreadCount: 0,
+      participants: [],
+      pinnedMessages: [],
     });
+    vi.spyOn(mentoringPairingApi, 'getConversationMessages').mockResolvedValue([
+      {
+        id: 31,
+        conversationId: 501,
+        senderEmployeeId: 8,
+        senderUserId: 8,
+        senderName: 'Trainee One',
+        senderRole: 'TRAINEE',
+        messageType: 'TEXT',
+        content: 'Hello mentor',
+        pinned: false,
+        deleted: false,
+        createdAt: '2026-04-25T10:00:00Z',
+        attachments: [],
+      },
+    ]);
+  });
+
+  it('shows only the latest five messages from the pairing group chat', async () => {
+    const messages: MessageDto[] = Array.from({ length: 6 }, (_, index) => ({
+      id: 100 + index,
+      conversationId: 501,
+      senderEmployeeId: 8,
+      senderUserId: index % 2 === 0 ? 8 : 7,
+      senderName: index % 2 === 0 ? 'Trainee One' : 'Mentor One',
+      senderRole: index % 2 === 0 ? 'TRAINEE' : 'TRAINER',
+      messageType: 'TEXT',
+      content: `Group message ${index + 1}`,
+      pinned: false,
+      deleted: false,
+      createdAt: `2026-04-25T10:0${index}:00Z`,
+      attachments: [],
+    }));
+    const messagesSpy = vi.spyOn(mentoringPairingApi, 'getConversationMessages')
+      .mockResolvedValue(messages);
+    const conversationSpy = vi.spyOn(mentoringPairingApi, 'getRelationshipConversation');
+
+    renderDetailPage();
+
+    expect(await screen.findByText('Group message 6')).toBeInTheDocument();
+    expect(screen.queryByText('Group message 1')).not.toBeInTheDocument();
+    for (let messageNumber = 2; messageNumber <= 6; messageNumber += 1) {
+      expect(screen.getByText(`Group message ${messageNumber}`)).toBeInTheDocument();
+    }
+    expect(conversationSpy).toHaveBeenCalledWith(77);
+    expect(messagesSpy).toHaveBeenCalledWith(501, undefined, undefined, 5);
   });
 
   it('shows previous sessions and links to the session planner', async () => {

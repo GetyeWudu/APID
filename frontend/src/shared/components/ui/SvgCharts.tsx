@@ -74,13 +74,14 @@ export function SvgHorizontalBarChart({
       <span className="sr-only" style={{ position: 'absolute', width: 1, height: 1, overflow: 'hidden', clip: 'rect(0,0,0,0)' }}>
         {description}
       </span>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.7rem' }}>
+      <div className="svg-horizontal-bar-chart-list" style={{ display: 'flex', flexDirection: 'column', gap: '0.7rem' }}>
         {items.map((item) => {
           const pct = Math.min(100, Math.round((item.value / maxVal) * 100));
           const isFocused = focusedId === item.id;
           return (
             <div
               key={item.id}
+              className="svg-horizontal-bar-chart-row"
               tabIndex={0}
               onFocus={() => setFocusedId(item.id)}
               onBlur={() => setFocusedId(null)}

@@ -294,6 +294,16 @@
   color: #f59e0b;
 }
 
+.hr-ai-rec__star {
+  position: relative;
+  display: inline-flex;
+}
+
+.hr-ai-rec__star-fill {
+  position: absolute;
+  inset: 0;
+}
+
 .hr-ai-rec__rating {
   font-size: 0.75rem;
   font-weight: 600;
