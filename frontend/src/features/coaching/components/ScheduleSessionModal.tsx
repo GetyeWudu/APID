@@ -12,6 +12,7 @@ interface ScheduleSessionModalProps {
   onClose: () => void;
   myCoachees: MyCoacheeItem[];
   mode?: 'MANDATORY_PMS' | 'SELF_DEVELOPMENT';
+  preselectedAssignmentId?: number;
 }
 
 export const ScheduleSessionModal: React.FC<ScheduleSessionModalProps> = ({
@@ -19,11 +20,18 @@ export const ScheduleSessionModal: React.FC<ScheduleSessionModalProps> = ({
   onClose,
   myCoachees,
   mode,
+  preselectedAssignmentId,
 }) => {
   const queryClient = useQueryClient();
 
   const [sessionType, setSessionType] = useState<'MANDATORY_PMS' | 'SELF_DEVELOPMENT'>(mode ?? 'MANDATORY_PMS');
-  const [selectedAssignmentId, setSelectedAssignmentId] = useState<number | ''>('');
+  const [selectedAssignmentId, setSelectedAssignmentId] = useState<number | ''>(preselectedAssignmentId ?? '');
+
+  React.useEffect(() => {
+    if (isOpen && preselectedAssignmentId) {
+      setSelectedAssignmentId(preselectedAssignmentId);
+    }
+  }, [isOpen, preselectedAssignmentId]);
   const [additionalAssignmentIds, setAdditionalAssignmentIds] = useState<number[]>([]);
   const [selectedSkillRequestId, setSelectedSkillRequestId] = useState<number | ''>('');
   const [title, setTitle] = useState('');

@@ -242,30 +242,26 @@ describe('CoachingHomePage test render', () => {
       </QueryClientProvider>
     );
 
-    // The spotlight card should advance focus to Occurrence #2 of 2
-    expect(await screen.findByText(/NEXT FOCUS SESSION — OCCURRENCE #2 OF 2/i)).toBeInTheDocument();
+    // In the new modern Agenda View, sessions are listed compactly with life-cycle filtering
+    expect(await screen.findByText('Agenda View')).toBeInTheDocument();
 
-    // The past pending alert banner should be present for Session 1 with action button
+    // Session 1 is in the past without minutes, so it shows "Log Minutes"
     expect(
-      screen.getByText(/Session #1 has ended and requires discussion minutes/i)
-    ).toBeInTheDocument();
-    expect(
-      screen.getByRole('button', { name: /Log Minutes for Session #1/i })
+      await screen.findByRole('button', { name: /Log Minutes/i })
     ).toBeInTheDocument();
 
-    // Expand the roadmap schedule
-    const expandBtn = screen.getByText(/View All 2 Scheduled Occurrences/i);
-    fireEvent.click(expandBtn);
-
-    // In the roadmap table, Session 1 should display ENDED (AWAITING MINUTES)
-    expect(screen.getByText('ENDED (AWAITING MINUTES)')).toBeInTheDocument();
-
-    // Occurrence 1 should have a "Log Minutes" button in the table, not "Edit / Reschedule"
+    // Occurrence 2 is upcoming
     expect(
-      screen.getByTitle('Log discussion minutes & attendance for this ended session')
+      screen.getByText(/Mandatory Performance Coaching — Rahel Tsegaye — Session 2/i)
     ).toBeInTheDocument();
 
-    // Future Occurrence 2 retains "Edit / Reschedule" in spotlight & table
-    expect(screen.getAllByRole('button', { name: /Edit \/ Reschedule/i })).toHaveLength(2);
+    // Toggle view to Grouped Journey View
+    const journeyToggleBtn = screen.getByRole('button', { name: /Roadmap|Group by Coachee/i });
+    fireEvent.click(journeyToggleBtn);
+
+    // In Journey View, coachee card with Schedule Next Session and sequence numbers are visible
+    expect(await screen.findByRole('button', { name: /Schedule Next Session/i })).toBeInTheDocument();
+    expect(screen.getByText('#1')).toBeInTheDocument();
+    expect(screen.getByText('#2')).toBeInTheDocument();
   });
 });

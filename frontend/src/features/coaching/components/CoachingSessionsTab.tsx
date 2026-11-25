@@ -27,6 +27,9 @@ import {
   Mic,
   Link,
   Download,
+  Search,
+  List,
+  AlertTriangle,
 } from 'lucide-react';
 import { useAuth } from '../../../app/AuthContext';
 import { apiClient } from '../../../shared/api/apiClient';
@@ -79,6 +82,15 @@ export const CoachingSessionsTab: React.FC<CoachingSessionsTabProps> = ({
 
   // Secondary lifecycle filter: 'all' | 'upcoming' | 'completed'
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
+
+  // Dual View Mode: 'AGENDA' (compact chronological rows) vs 'JOURNEY' (grouped by coachee for coach, or remediation roadmap for coachee)
+  const [viewMode, setViewMode] = useState<'AGENDA' | 'JOURNEY'>('AGENDA');
+  const [activeStatusTab, setActiveStatusTab] = useState<'all' | 'action_required' | 'upcoming' | 'completed'>('all');
+  const [selectedCoacheeFilter, setSelectedCoacheeFilter] = useState<string>('ALL');
+  const [searchQuery, setSearchQuery] = useState<string>('');
+  const [agendaPage, setAgendaPage] = useState<number>(1);
+  const [agendaPageSize, setAgendaPageSize] = useState<number>(10);
+  const isCoachUser = Boolean(myCoachees && myCoachees.length > 0);
 
   // Modals state
   const [isScheduleOpen, setIsScheduleOpen] = useState(false);
@@ -201,10 +213,6 @@ export const CoachingSessionsTab: React.FC<CoachingSessionsTabProps> = ({
     return list;
   };
 
-  const visiblePmsSessions = useMemo(
-    () => filterByStatus(pmsSessions),
-    [pmsSessions, statusFilter]
-  );
   const visibleSkillSessions = useMemo(
     () => filterByStatus(skillSessions),
     [skillSessions, statusFilter]
@@ -238,10 +246,6 @@ export const CoachingSessionsTab: React.FC<CoachingSessionsTabProps> = ({
     return { seriesMap, standalone };
   };
 
-  const pmsSeriesData = useMemo(
-    () => groupSessionsBySeries(visiblePmsSessions),
-    [visiblePmsSessions]
-  );
   const skillSeriesData = useMemo(
     () => groupSessionsBySeries(visibleSkillSessions),
     [visibleSkillSessions]
@@ -263,6 +267,1083 @@ export const CoachingSessionsTab: React.FC<CoachingSessionsTabProps> = ({
     const parts = fullName.trim().split(/\s+/);
     if (parts.length >= 2) return `${parts[0][0]}${parts[1][0]}`.toUpperCase();
     return parts[0].slice(0, 2).toUpperCase();
+  };
+
+  const getSessionActionState = (session: CoachingSessionItem) => {
+    const nowMs = Date.now();
+    const startMs = new Date(session.scheduledStartTime).getTime();
+    const durationMs = (session.durationMinutes || 30) * 60 * 1000;
+    const endMs = session.scheduledEndTime ? new Date(session.scheduledEndTime).getTime() : startMs + durationMs;
+    const earlyJoinMs = earlyJoinMinutes * 60 * 1000;
+    const postBufferMs = postBufferMinutes * 60 * 1000;
+    const callOpensAt = startMs - earlyJoinMs;
+    const callClosesAt = endMs + postBufferMs;
+
+    const isCallActive = nowMs >= callOpensAt && nowMs <= callClosesAt;
+    const isMeetingStarted = nowMs >= startMs;
+    const isMeetingEnded = nowMs > endMs;
+    const isPastUncompleted = isMeetingEnded && session.status !== 'COMPLETED' && session.status !== 'CANCELLED';
+    const isCompleted = session.status === 'COMPLETED';
+
+    return { isCallActive, isMeetingStarted, isMeetingEnded, isPastUncompleted, isCompleted };
+  };
+
+  // Render Modern Compact Agenda View (Row height ~64px)
+  const renderAgendaListView = (sessionList: CoachingSessionItem[]) => {
+    // 1. Calculate Status Counts
+    const actionRequiredCount = sessionList.filter((s) => getSessionActionState(s).isPastUncompleted).length;
+    const upcomingCount = sessionList.filter((s) => {
+      const st = getSessionActionState(s);
+      return !st.isPastUncompleted && s.status !== 'COMPLETED' && s.status !== 'CANCELLED';
+    }).length;
+    const completedCount = sessionList.filter((s) => s.status === 'COMPLETED').length;
+
+    // 2. Filter sessions
+    const filtered = sessionList.filter((s) => {
+      const st = getSessionActionState(s);
+
+      if (activeStatusTab === 'action_required' && !st.isPastUncompleted) return false;
+      if (activeStatusTab === 'upcoming' && (st.isPastUncompleted || s.status === 'COMPLETED' || s.status === 'CANCELLED')) return false;
+      if (activeStatusTab === 'completed' && !st.isCompleted) return false;
+
+      if (selectedCoacheeFilter !== 'ALL') {
+        const matchesCoachee = s.participants.some(
+          (p) => p.role === 'COACHEE' && String(p.employeeId) === selectedCoacheeFilter
+        );
+        if (!matchesCoachee) return false;
+      }
+
+      if (searchQuery.trim()) {
+        const q = searchQuery.toLowerCase();
+        const matchTitle = s.title.toLowerCase().includes(q);
+        const matchCoach = s.coachFullName ? s.coachFullName.toLowerCase().includes(q) : false;
+        const matchParticipant = s.participants.some(
+          (p) => (p.fullName && p.fullName.toLowerCase().includes(q)) ||
+                 (p.employeeNumber && p.employeeNumber.toLowerCase().includes(q))
+        );
+        const matchDate = s.scheduledStartTime.toLowerCase().includes(q);
+        if (!matchTitle && !matchCoach && !matchParticipant && !matchDate) return false;
+      }
+
+      return true;
+    }).sort((a, b) => {
+      const stA = getSessionActionState(a);
+      const stB = getSessionActionState(b);
+      if (stA.isPastUncompleted && !stB.isPastUncompleted) return -1;
+      if (!stA.isPastUncompleted && stB.isPastUncompleted) return 1;
+      return new Date(b.scheduledStartTime).getTime() - new Date(a.scheduledStartTime).getTime();
+    });
+
+    const totalPages = Math.ceil(filtered.length / agendaPageSize) || 1;
+    const paged = filtered.slice((agendaPage - 1) * agendaPageSize, agendaPage * agendaPageSize);
+
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.85rem' }}>
+        {/* Smart Filtering & Toolbar */}
+        <div
+          className="apid-card p-3"
+          style={{
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '0.65rem',
+            background: 'var(--surface-subtle, #f8fafc)',
+            border: '1px solid var(--border, #e2e8f0)',
+          }}
+        >
+          {/* Top row: Status Tabs */}
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '0.5rem' }}>
+            <div style={{ display: 'inline-flex', borderRadius: '6px', overflow: 'hidden', border: '1px solid var(--border, #cbd5e1)', background: '#ffffff' }}>
+              <button
+                type="button"
+                onClick={() => { setActiveStatusTab('all'); setAgendaPage(1); }}
+                style={{
+                  padding: '0.35rem 0.65rem',
+                  fontSize: '0.74rem',
+                  fontWeight: activeStatusTab === 'all' ? 700 : 500,
+                  backgroundColor: activeStatusTab === 'all' ? 'var(--surface-subtle, #f1f5f9)' : '#ffffff',
+                  color: activeStatusTab === 'all' ? '#b45309' : '#475569',
+                  border: 'none',
+                  cursor: 'pointer',
+                }}
+              >
+                All ({sessionList.length})
+              </button>
+              <button
+                type="button"
+                onClick={() => { setActiveStatusTab('action_required'); setAgendaPage(1); }}
+                style={{
+                  padding: '0.35rem 0.65rem',
+                  fontSize: '0.74rem',
+                  fontWeight: activeStatusTab === 'action_required' ? 700 : 500,
+                  backgroundColor: activeStatusTab === 'action_required' ? '#fef2f2' : '#ffffff',
+                  color: activeStatusTab === 'action_required' ? '#dc2626' : '#475569',
+                  border: 'none',
+                  borderLeft: '1px solid var(--border, #cbd5e1)',
+                  cursor: 'pointer',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '0.25rem',
+                }}
+              >
+                {actionRequiredCount > 0 && <AlertTriangle size={11} style={{ color: '#dc2626' }} />}
+                <span>Action Required ({actionRequiredCount})</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => { setActiveStatusTab('upcoming'); setAgendaPage(1); }}
+                style={{
+                  padding: '0.35rem 0.65rem',
+                  fontSize: '0.74rem',
+                  fontWeight: activeStatusTab === 'upcoming' ? 700 : 500,
+                  backgroundColor: activeStatusTab === 'upcoming' ? '#eff6ff' : '#ffffff',
+                  color: activeStatusTab === 'upcoming' ? '#1d4ed8' : '#475569',
+                  border: 'none',
+                  borderLeft: '1px solid var(--border, #cbd5e1)',
+                  cursor: 'pointer',
+                }}
+              >
+                Upcoming ({upcomingCount})
+              </button>
+              <button
+                type="button"
+                onClick={() => { setActiveStatusTab('completed'); setAgendaPage(1); }}
+                style={{
+                  padding: '0.35rem 0.65rem',
+                  fontSize: '0.74rem',
+                  fontWeight: activeStatusTab === 'completed' ? 700 : 500,
+                  backgroundColor: activeStatusTab === 'completed' ? '#f1f5f9' : '#ffffff',
+                  color: activeStatusTab === 'completed' ? '#0f172a' : '#475569',
+                  border: 'none',
+                  borderLeft: '1px solid var(--border, #cbd5e1)',
+                  cursor: 'pointer',
+                }}
+              >
+                Completed ({completedCount})
+              </button>
+            </div>
+
+            {/* Rows per page */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+              <span style={{ fontSize: '0.7rem', color: 'var(--muted, #64748b)' }}>Rows:</span>
+              <select
+                value={agendaPageSize}
+                onChange={(e) => { setAgendaPageSize(Number(e.target.value)); setAgendaPage(1); }}
+                style={{
+                  padding: '0.25rem 0.45rem',
+                  fontSize: '0.72rem',
+                  borderRadius: '4px',
+                  border: '1px solid var(--border, #cbd5e1)',
+                  backgroundColor: '#ffffff',
+                  color: 'var(--text, #0f172a)',
+                }}
+              >
+                <option value={10}>10</option>
+                <option value={25}>25</option>
+                <option value={50}>50</option>
+              </select>
+            </div>
+          </div>
+
+          {/* Bottom row: Search & Coachee Filter */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
+            {/* Coachee Filter (for coach) */}
+            {isCoachUser && myCoachees.length > 0 && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
+                <span style={{ fontSize: '0.72rem', color: 'var(--muted, #64748b)' }}>Coachee:</span>
+                <select
+                  value={selectedCoacheeFilter}
+                  onChange={(e) => { setSelectedCoacheeFilter(e.target.value); setAgendaPage(1); }}
+                  style={{
+                    padding: '0.3rem 0.6rem',
+                    fontSize: '0.74rem',
+                    borderRadius: '6px',
+                    border: '1px solid var(--border, #cbd5e1)',
+                    backgroundColor: '#ffffff',
+                    color: 'var(--text, #0f172a)',
+                    minWidth: '160px',
+                  }}
+                >
+                  <option value="ALL">All Coachees ({myCoachees.length})</option>
+                  {myCoachees.map((c) => (
+                    <option key={c.coacheeEmployeeId} value={String(c.coacheeEmployeeId)}>
+                      {c.coacheeFullName} ({c.coacheeEmployeeNumber})
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+
+            {/* Search Input */}
+            <div style={{ position: 'relative', flex: 1, minWidth: '200px' }}>
+              <Search
+                size={13}
+                style={{ position: 'absolute', left: '0.6rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--muted, #64748b)' }}
+              />
+              <input
+                type="text"
+                placeholder="Search session title, participant, date..."
+                value={searchQuery}
+                onChange={(e) => { setSearchQuery(e.target.value); setAgendaPage(1); }}
+                style={{
+                  width: '100%',
+                  padding: '0.3rem 0.6rem 0.3rem 1.8rem',
+                  fontSize: '0.74rem',
+                  borderRadius: '6px',
+                  border: '1px solid var(--border, #cbd5e1)',
+                  backgroundColor: '#ffffff',
+                  color: 'var(--text, #0f172a)',
+                }}
+              />
+            </div>
+
+            {(selectedCoacheeFilter !== 'ALL' || searchQuery.trim() || activeStatusTab !== 'all') && (
+              <button
+                type="button"
+                className="apid-btn apid-btn-outline apid-btn-sm"
+                onClick={() => {
+                  setSelectedCoacheeFilter('ALL');
+                  setSearchQuery('');
+                  setActiveStatusTab('all');
+                  setAgendaPage(1);
+                }}
+                style={{ fontSize: '0.72rem', padding: '0.25rem 0.55rem' }}
+              >
+                Reset Filters
+              </button>
+            )}
+          </div>
+        </div>
+
+        {/* Rows List */}
+        {paged.length === 0 ? (
+          <div
+            style={{
+              padding: '2.5rem',
+              textAlign: 'center',
+              background: 'var(--surface-subtle, #f8fafc)',
+              borderRadius: '8px',
+              border: '1px dashed var(--border, #cbd5e1)',
+              fontSize: '0.84rem',
+              color: 'var(--muted, #64748b)',
+            }}
+          >
+            No coaching sessions match the selected filter criteria.
+          </div>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+            {paged.map((session) => {
+              const st = getSessionActionState(session);
+              const isCoach = currentEmployeeId ? session.coachEmployeeId === currentEmployeeId : true;
+              const coachee = session.participants.find((p) => p.role === 'COACHEE');
+              const isExpanded = !!expandedSessionIds[session.id];
+              const { month, day, weekday, time, eth } = parseDateParts(session.scheduledStartTime);
+
+              const leftColor = st.isPastUncompleted
+                ? '#ea580c'
+                : st.isCompleted
+                ? '#10b981'
+                : st.isCallActive
+                ? '#2563eb'
+                : '#cbd5e1';
+
+              const badgeColor = st.isPastUncompleted
+                ? { bg: '#fef2f2', text: '#c2410c', border: '#fecaca', label: 'Ended (Pending Minutes)' }
+                : st.isCompleted
+                ? { bg: '#f0fdf4', text: '#15803d', border: '#bbf7d0', label: 'Completed' }
+                : session.status === 'CONFIRMED'
+                ? { bg: '#eff6ff', text: '#1d4ed8', border: '#bfdbfe', label: 'Confirmed' }
+                : { bg: '#fefce8', text: '#a16207', border: '#fef08a', label: session.status };
+
+              return (
+                <div
+                  key={session.id}
+                  style={{
+                    backgroundColor: st.isPastUncompleted ? '#fffbf5' : '#ffffff',
+                    border: '1px solid var(--border, #e2e8f0)',
+                    borderLeft: `4px solid ${leftColor}`,
+                    borderRadius: '8px',
+                    padding: '0.65rem 0.85rem',
+                    transition: 'all 0.15s ease',
+                    boxShadow: '0 1px 3px rgba(0,0,0,0.03)',
+                  }}
+                >
+                  <div
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      flexWrap: 'wrap',
+                      gap: '0.65rem',
+                    }}
+                  >
+                    {/* 1. Mini Date Tile */}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem', minWidth: '150px' }}>
+                      <div
+                        style={{
+                          width: 42,
+                          height: 42,
+                          borderRadius: '6px',
+                          backgroundColor: st.isPastUncompleted ? '#fff7ed' : '#f8fafc',
+                          border: `1px solid ${st.isPastUncompleted ? '#ffedd5' : '#e2e8f0'}`,
+                          display: 'flex',
+                          flexDirection: 'column',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          lineHeight: 1,
+                          flexShrink: 0,
+                        }}
+                      >
+                        <span style={{ fontSize: '0.6rem', fontWeight: 800, color: st.isPastUncompleted ? '#c2410c' : '#64748b' }}>
+                          {month}
+                        </span>
+                        <span style={{ fontSize: '1.1rem', fontWeight: 800, color: '#0f172a', margin: '1px 0 0' }}>
+                          {day}
+                        </span>
+                      </div>
+                      <div>
+                        <div style={{ fontSize: '0.78rem', fontWeight: 700, color: '#0f172a' }}>
+                          {weekday} · {time}
+                        </div>
+                        <div style={{ fontSize: '0.68rem', color: '#64748b' }}>
+                          {eth.formattedDual} · {session.durationMinutes || 30}m
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* 2. Title & Participant Details */}
+                    <div style={{ flex: 1, minWidth: '220px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', flexWrap: 'wrap' }}>
+                        <strong style={{ fontSize: '0.86rem', color: '#0f172a' }}>{session.title}</strong>
+                        {session.sequenceNumber && (
+                          <span
+                            style={{
+                              fontSize: '0.65rem',
+                              fontWeight: 800,
+                              padding: '0.08rem 0.4rem',
+                              borderRadius: '4px',
+                              backgroundColor: 'rgba(202, 138, 4, 0.12)',
+                              color: '#b45309',
+                              border: '1px solid rgba(202, 138, 4, 0.25)',
+                            }}
+                          >
+                            Session #{session.sequenceNumber}
+                          </span>
+                        )}
+                        <span
+                          style={{
+                            fontSize: '0.65rem',
+                            fontWeight: 600,
+                            padding: '0.08rem 0.4rem',
+                            borderRadius: '4px',
+                            backgroundColor: '#f1f5f9',
+                            color: '#475569',
+                          }}
+                        >
+                          {session.meetingMode === 'VIRTUAL_VIDEO' ? 'LiveKit Video' : session.meetingMode || '1-on-1'}
+                        </span>
+                      </div>
+                      <div style={{ fontSize: '0.72rem', color: '#64748b', marginTop: '0.15rem' }}>
+                        {isCoach ? (
+                          <span>
+                            Coachee: <strong style={{ color: '#334155' }}>{coachee?.fullName || 'Assigned Coachee'}</strong>{' '}
+                            {coachee?.employeeNumber ? `(${coachee.employeeNumber})` : ''} · {coachee?.departmentName?.replace(' Branch Operations', '') || 'Branch'}
+                          </span>
+                        ) : (
+                          <span>
+                            Coach: <strong style={{ color: '#334155' }}>{session.coachFullName || 'Assigned Coach'}</strong> · {session.coachJobTitle || 'Branch Manager'}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* 3. Status Pill */}
+                    <div style={{ minWidth: '120px' }}>
+                      <span
+                        style={{
+                          fontSize: '0.66rem',
+                          fontWeight: 700,
+                          padding: '0.15rem 0.5rem',
+                          borderRadius: '999px',
+                          backgroundColor: badgeColor.bg,
+                          color: badgeColor.text,
+                          border: `1px solid ${badgeColor.border}`,
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '0.25rem',
+                          whiteSpace: 'nowrap',
+                        }}
+                      >
+                        {st.isPastUncompleted && <AlertCircle size={10} />}
+                        {st.isCompleted && <CheckCircle2 size={10} />}
+                        {badgeColor.label}
+                      </span>
+                    </div>
+
+                    {/* 4. Action CTAs */}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', flexWrap: 'wrap' }}>
+                      {isCoach ? (
+                        <>
+                          {st.isPastUncompleted && (
+                            <button
+                              type="button"
+                              className="apid-btn apid-btn-sm"
+                              onClick={(e) => { e.stopPropagation(); setSelectedForComplete(session); }}
+                              style={{
+                                backgroundColor: '#ea580c',
+                                color: '#ffffff',
+                                fontWeight: 700,
+                                fontSize: '0.74rem',
+                                padding: '0.3rem 0.65rem',
+                                border: 'none',
+                                borderRadius: '6px',
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '0.25rem',
+                              }}
+                            >
+                              <CheckCircle2 size={12} />
+                              <span>Log Minutes</span>
+                            </button>
+                          )}
+                          {st.isCallActive && (
+                            <button
+                              type="button"
+                              className="apid-btn apid-btn-sm"
+                              onClick={(e) => { e.stopPropagation(); setSelectedForVideo(session); }}
+                              style={{
+                                backgroundColor: '#2563eb',
+                                color: '#ffffff',
+                                fontWeight: 700,
+                                fontSize: '0.74rem',
+                                padding: '0.3rem 0.65rem',
+                                border: 'none',
+                                borderRadius: '6px',
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '0.25rem',
+                              }}
+                            >
+                              <Video size={12} />
+                              <span>Join Video</span>
+                            </button>
+                          )}
+                          {st.isCompleted && (
+                            <>
+                              <button
+                                type="button"
+                                className="apid-btn apid-btn-outline apid-btn-sm"
+                                onClick={(e) => { e.stopPropagation(); setSelectedForViewMinutes(session); }}
+                                style={{ fontSize: '0.7rem', padding: '0.25rem 0.5rem', display: 'inline-flex', alignItems: 'center', gap: '0.2rem' }}
+                              >
+                                <FileText size={11} />
+                                <span>Minutes</span>
+                              </button>
+                              <button
+                                type="button"
+                                className="apid-btn apid-btn-outline apid-btn-sm"
+                                onClick={(e) => { e.stopPropagation(); setSelectedForComplete(session); }}
+                                style={{ fontSize: '0.7rem', padding: '0.25rem 0.5rem' }}
+                              >
+                                Edit
+                              </button>
+                              <button
+                                type="button"
+                                className="apid-btn apid-btn-outline apid-btn-sm"
+                                onClick={(e) => { e.stopPropagation(); setSelectedForFeedback(session); }}
+                                title="Coachee Feedback"
+                                style={{ fontSize: '0.7rem', padding: '0.25rem 0.45rem' }}
+                              >
+                                <Star size={11} style={{ color: '#d97706' }} />
+                              </button>
+                            </>
+                          )}
+                          {!st.isCompleted && !st.isPastUncompleted && (
+                            <button
+                              type="button"
+                              className="apid-btn apid-btn-outline apid-btn-sm"
+                              onClick={(e) => { e.stopPropagation(); setSelectedForEdit(session); }}
+                              style={{ fontSize: '0.7rem', padding: '0.25rem 0.5rem' }}
+                            >
+                              Reschedule
+                            </button>
+                          )}
+                        </>
+                      ) : (
+                        <>
+                          {st.isCallActive && (
+                            <button
+                              type="button"
+                              className="apid-btn apid-btn-sm"
+                              onClick={(e) => { e.stopPropagation(); setSelectedForVideo(session); }}
+                              style={{
+                                backgroundColor: '#2563eb',
+                                color: '#ffffff',
+                                fontWeight: 700,
+                                fontSize: '0.74rem',
+                                padding: '0.3rem 0.65rem',
+                                border: 'none',
+                                borderRadius: '6px',
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '0.25rem',
+                              }}
+                            >
+                              <Video size={12} />
+                              <span>Join Call</span>
+                            </button>
+                          )}
+                          {st.isCompleted && (
+                            <>
+                              <button
+                                type="button"
+                                className="apid-btn apid-btn-outline apid-btn-sm"
+                                onClick={(e) => { e.stopPropagation(); setSelectedForViewMinutes(session); }}
+                                style={{ fontSize: '0.7rem', padding: '0.25rem 0.5rem', display: 'inline-flex', alignItems: 'center', gap: '0.2rem' }}
+                              >
+                                <FileText size={11} />
+                                <span>Minutes</span>
+                              </button>
+                              <button
+                                type="button"
+                                className="apid-btn apid-btn-primary apid-btn-sm"
+                                onClick={(e) => { e.stopPropagation(); setSelectedForFeedback(session); }}
+                                style={{
+                                  fontSize: '0.7rem',
+                                  padding: '0.25rem 0.6rem',
+                                  backgroundColor: '#b45309',
+                                  borderColor: '#b45309',
+                                  color: '#ffffff',
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: '0.2rem',
+                                }}
+                              >
+                                <Star size={11} />
+                                <span>Give Feedback</span>
+                              </button>
+                            </>
+                          )}
+                          {!st.isCompleted && (
+                            <button
+                              type="button"
+                              className="apid-btn apid-btn-outline apid-btn-sm"
+                              onClick={(e) => { e.stopPropagation(); setSelectedForReschedule(session); }}
+                              style={{ fontSize: '0.7rem', padding: '0.25rem 0.5rem' }}
+                            >
+                              Reschedule
+                            </button>
+                          )}
+                        </>
+                      )}
+
+                      {/* Expand Inline Drawer Toggle */}
+                      <button
+                        type="button"
+                        onClick={() => toggleExpand(session.id)}
+                        style={{
+                          background: 'none',
+                          border: 'none',
+                          cursor: 'pointer',
+                          padding: '0.2rem 0.35rem',
+                          color: '#64748b',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                        }}
+                        title={isExpanded ? 'Collapse notes' : 'Expand notes'}
+                      >
+                        {isExpanded ? <ChevronUp size={15} /> : <ChevronDown size={15} />}
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Expandable Inline Details Drawer */}
+                  {isExpanded && (
+                    <div
+                      style={{
+                        marginTop: '0.65rem',
+                        paddingTop: '0.65rem',
+                        borderTop: '1px dashed var(--border, #e2e8f0)',
+                        fontSize: '0.76rem',
+                        color: '#475569',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: '0.45rem',
+                      }}
+                    >
+                      {session.sessionNotesMinutes && (
+                        <div>
+                          <strong style={{ color: '#0f172a', display: 'block', marginBottom: '0.15rem' }}>
+                            Discussion Minutes &amp; Directives:
+                          </strong>
+                          <div style={{ background: '#f8fafc', padding: '0.5rem 0.75rem', borderRadius: '6px', border: '1px solid #f1f5f9', whiteSpace: 'pre-line' }}>
+                            {session.sessionNotesMinutes}
+                          </div>
+                        </div>
+                      )}
+                      {session.actionItems && (
+                        <div>
+                          <strong style={{ color: '#0f172a', display: 'block', marginBottom: '0.15rem' }}>
+                            Assigned Remediation Action Items:
+                          </strong>
+                          <div style={{ background: '#fffbeb', padding: '0.5rem 0.75rem', borderRadius: '6px', border: '1px solid #fef3c7', whiteSpace: 'pre-line', color: '#92400e' }}>
+                            {session.actionItems}
+                          </div>
+                        </div>
+                      )}
+                      {session.prepNotes && (
+                        <div style={{ background: 'rgba(202, 138, 4, 0.05)', padding: '0.45rem 0.7rem', borderRadius: '6px', border: '1px solid rgba(202, 138, 4, 0.2)' }}>
+                          <span style={{ fontWeight: 700, color: '#b45309' }}>Session Preparation Notes: </span>
+                          <span>{session.prepNotes}</span>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
+
+        {/* Pagination Bar */}
+        {filtered.length > agendaPageSize && (
+          <div
+            style={{
+              padding: '0.65rem 0.85rem',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              backgroundColor: 'var(--surface-subtle, #f8fafc)',
+              borderRadius: '8px',
+              border: '1px solid var(--border, #e2e8f0)',
+            }}
+          >
+            <span style={{ fontSize: '0.72rem', color: 'var(--muted, #64748b)' }}>
+              Showing {(agendaPage - 1) * agendaPageSize + 1} to {Math.min(agendaPage * agendaPageSize, filtered.length)} of {filtered.length} sessions
+            </span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+              <button
+                type="button"
+                className="apid-btn apid-btn-outline apid-btn-sm"
+                onClick={() => setAgendaPage((p) => Math.max(1, p - 1))}
+                disabled={agendaPage === 1}
+                style={{ fontSize: '0.72rem', padding: '0.2rem 0.55rem' }}
+              >
+                Previous
+              </button>
+              <span style={{ fontSize: '0.72rem', fontWeight: 700, padding: '0 0.4rem', color: 'var(--text, #0f172a)' }}>
+                Page {agendaPage} of {totalPages}
+              </span>
+              <button
+                type="button"
+                className="apid-btn apid-btn-outline apid-btn-sm"
+                onClick={() => setAgendaPage((p) => Math.min(totalPages, p + 1))}
+                disabled={agendaPage === totalPages}
+                style={{ fontSize: '0.72rem', padding: '0.2rem 0.55rem' }}
+              >
+                Next
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  // Render Coachee Journey / Roadmap View (View 2)
+  const renderCoacheeJourneyView = (sessionList: CoachingSessionItem[]) => {
+    if (isCoachUser) {
+      // ────────────────── COACH PERSPECTIVE: GROUP BY COACHEE ──────────────────
+      if (myCoachees.length === 0) {
+        return (
+          <div style={{ padding: '2.5rem', textAlign: 'center', color: 'var(--muted, #64748b)', fontSize: '0.85rem' }}>
+            No assigned coachees currently enrolled in mandatory PMS remediation.
+          </div>
+        );
+      }
+
+      return (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+          {myCoachees.map((coachee) => {
+            const coacheeSessions = sessionList.filter((s) =>
+              s.participants.some((p) => p.role === 'COACHEE' && p.employeeId === coachee.coacheeEmployeeId)
+            ).sort((a, b) => (a.sequenceNumber || 1) - (b.sequenceNumber || 1));
+
+            const completedCount = coacheeSessions.filter((s) => s.status === 'COMPLETED').length;
+            const totalTarget = 10;
+            const progressPercent = Math.min(100, Math.round((completedCount / totalTarget) * 100));
+
+            return (
+              <div
+                key={coachee.assignmentId}
+                className="apid-card"
+                style={{
+                  border: '1px solid var(--border, #e2e8f0)',
+                  borderRadius: '12px',
+                  overflow: 'hidden',
+                  background: '#ffffff',
+                }}
+              >
+                {/* Coachee Header Ribbon */}
+                <div
+                  style={{
+                    padding: '0.85rem 1.15rem',
+                    background: 'linear-gradient(to right, rgba(254, 243, 199, 0.4) 0%, rgba(255, 255, 255, 1) 100%)',
+                    borderBottom: '1px solid var(--border, #e2e8f0)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    flexWrap: 'wrap',
+                    gap: '0.75rem',
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem' }}>
+                    <div
+                      style={{
+                        width: 40,
+                        height: 40,
+                        borderRadius: '50%',
+                        backgroundColor: '#ca8a04',
+                        color: '#ffffff',
+                        fontWeight: 800,
+                        fontSize: '0.88rem',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                      }}
+                    >
+                      {getInitials(coachee.coacheeFullName)}
+                    </div>
+                    <div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                        <strong style={{ fontSize: '0.95rem', color: '#0f172a' }}>{coachee.coacheeFullName}</strong>
+                        <span style={{ fontSize: '0.74rem', color: '#64748b' }}>({coachee.coacheeEmployeeNumber})</span>
+                        <span
+                          style={{
+                            fontSize: '0.65rem',
+                            fontWeight: 700,
+                            padding: '0.1rem 0.45rem',
+                            borderRadius: '999px',
+                            backgroundColor: '#fee2e2',
+                            color: '#991b1b',
+                            border: '1px solid #fca5a5',
+                          }}
+                        >
+                          Critical Remediation
+                        </span>
+                      </div>
+                      <div style={{ fontSize: '0.74rem', color: '#64748b', marginTop: '0.15rem' }}>
+                        {coachee.coacheeDepartment?.replace(' Branch Operations', '') || 'Branch Operations'} · Focus: <strong>Branch FX Intake &amp; Deposit Mobilization</strong>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Progress Meter & Schedule Button */}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', flexWrap: 'wrap' }}>
+                    <div style={{ minWidth: '140px' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.7rem', fontWeight: 700, marginBottom: '0.2rem' }}>
+                        <span style={{ color: '#0f172a' }}>{completedCount} of {totalTarget} Completed</span>
+                        <span style={{ color: '#b45309' }}>{progressPercent}%</span>
+                      </div>
+                      <div style={{ width: '100%', height: '6px', borderRadius: '999px', backgroundColor: '#e2e8f0', overflow: 'hidden' }}>
+                        <div style={{ width: `${progressPercent}%`, height: '100%', backgroundColor: '#ca8a04', transition: 'width 0.3s ease' }} />
+                      </div>
+                    </div>
+
+                    <button
+                      type="button"
+                      className="apid-btn apid-btn-primary apid-btn-sm"
+                      onClick={() => setIsScheduleOpen(true)}
+                      style={{
+                        backgroundColor: '#ca8a04',
+                        borderColor: '#ca8a04',
+                        color: '#ffffff',
+                        fontSize: '0.74rem',
+                        fontWeight: 700,
+                        padding: '0.35rem 0.75rem',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '0.3rem',
+                      }}
+                    >
+                      <Plus size={13} />
+                      <span>Schedule Next Session</span>
+                    </button>
+                  </div>
+                </div>
+
+                {/* Coachee Sessions Table */}
+                <div style={{ overflowX: 'auto' }}>
+                  {coacheeSessions.length === 0 ? (
+                    <div style={{ padding: '1.75rem', textAlign: 'center', color: '#64748b', fontSize: '0.78rem' }}>
+                      No sessions scheduled yet for this coachee. Kickoff session is pending. Click &quot;Schedule Next Session&quot; to begin.
+                    </div>
+                  ) : (
+                    <table style={{ width: '100%', fontSize: '0.78rem', borderCollapse: 'collapse' }}>
+                      <thead>
+                        <tr style={{ background: '#f8fafc', borderBottom: '1px solid #e2e8f0' }}>
+                          <th style={{ padding: '0.55rem 0.75rem', textAlign: 'left', color: '#475569' }}>#</th>
+                          <th style={{ padding: '0.55rem 0.75rem', textAlign: 'left', color: '#475569' }}>Date &amp; Time (EAT)</th>
+                          <th style={{ padding: '0.55rem 0.75rem', textAlign: 'left', color: '#475569' }}>Milestone Focus</th>
+                          <th style={{ padding: '0.55rem 0.75rem', textAlign: 'center', color: '#475569' }}>Status</th>
+                          <th style={{ padding: '0.55rem 0.75rem', textAlign: 'right', color: '#475569' }}>Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {coacheeSessions.map((s, idx) => {
+                          const st = getSessionActionState(s);
+                          const { weekday, month, day, time } = parseDateParts(s.scheduledStartTime);
+                          return (
+                            <tr key={s.id} style={{ borderBottom: '1px solid #f1f5f9' }}>
+                              <td style={{ padding: '0.55rem 0.75rem', fontWeight: 800, color: '#0f172a' }}>
+                                #{s.sequenceNumber || idx + 1}
+                              </td>
+                              <td style={{ padding: '0.55rem 0.75rem' }}>
+                                <div style={{ fontWeight: 700, color: '#0f172a' }}>{weekday}, {month} {day}</div>
+                                <div style={{ fontSize: '0.7rem', color: '#64748b' }}>{time} ({s.durationMinutes || 30}m)</div>
+                              </td>
+                              <td style={{ padding: '0.55rem 0.75rem' }}>
+                                <div style={{ fontWeight: 600, color: '#0f172a' }}>{s.title}</div>
+                                <div style={{ fontSize: '0.7rem', color: '#64748b' }}>
+                                  {s.meetingMode === 'VIRTUAL_VIDEO' ? 'LiveKit Video' : s.meetingMode || '1-on-1'}
+                                </div>
+                              </td>
+                              <td style={{ padding: '0.55rem 0.75rem', textAlign: 'center' }}>
+                                <span
+                                  style={{
+                                    fontSize: '0.66rem',
+                                    fontWeight: 700,
+                                    padding: '0.12rem 0.45rem',
+                                    borderRadius: '999px',
+                                    backgroundColor: st.isPastUncompleted ? '#fef2f2' : st.isCompleted ? '#f0fdf4' : '#eff6ff',
+                                    color: st.isPastUncompleted ? '#c2410c' : st.isCompleted ? '#15803d' : '#1d4ed8',
+                                    border: `1px solid ${st.isPastUncompleted ? '#fecaca' : st.isCompleted ? '#bbf7d0' : '#bfdbfe'}`,
+                                  }}
+                                >
+                                  {st.isPastUncompleted ? 'Pending Minutes' : s.status}
+                                </span>
+                              </td>
+                              <td style={{ padding: '0.55rem 0.75rem', textAlign: 'right' }}>
+                                <div style={{ display: 'inline-flex', alignItems: 'center', gap: '0.3rem' }}>
+                                  {st.isPastUncompleted && (
+                                    <button
+                                      type="button"
+                                      className="apid-btn apid-btn-sm"
+                                      onClick={() => setSelectedForComplete(s)}
+                                      style={{ backgroundColor: '#ea580c', color: '#fff', fontSize: '0.7rem', padding: '0.2rem 0.5rem', border: 'none', borderRadius: '4px' }}
+                                    >
+                                      Log Minutes
+                                    </button>
+                                  )}
+                                  {st.isCallActive && (
+                                    <button
+                                      type="button"
+                                      className="apid-btn apid-btn-sm"
+                                      onClick={() => setSelectedForVideo(s)}
+                                      style={{ backgroundColor: '#2563eb', color: '#fff', fontSize: '0.7rem', padding: '0.2rem 0.5rem', border: 'none', borderRadius: '4px' }}
+                                    >
+                                      Join Call
+                                    </button>
+                                  )}
+                                  {st.isCompleted && (
+                                    <button
+                                      type="button"
+                                      className="apid-btn apid-btn-outline apid-btn-sm"
+                                      onClick={() => setSelectedForViewMinutes(s)}
+                                      style={{ fontSize: '0.7rem', padding: '0.2rem 0.45rem' }}
+                                    >
+                                      Minutes
+                                    </button>
+                                  )}
+                                </div>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      );
+    } else {
+      // ────────────────── COACHEE PERSPECTIVE: MY REMEDIATION ROADMAP ──────────────────
+      const coachName = sessionList[0]?.coachFullName || 'Assigned Performance Coach';
+      const coachJob = sessionList[0]?.coachJobTitle || 'Branch Manager';
+      const completedCount = sessionList.filter((s) => s.status === 'COMPLETED').length;
+      const totalTarget = 10;
+      const progressPercent = Math.min(100, Math.round((completedCount / totalTarget) * 100));
+
+      return (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+          {/* Executive Overview Hero Card */}
+          <div
+            className="apid-card p-4"
+            style={{
+              background: 'linear-gradient(135deg, rgba(254, 243, 199, 0.25) 0%, rgba(255, 255, 255, 1) 100%)',
+              border: '1.5px solid rgba(202, 138, 4, 0.3)',
+              borderRadius: '12px',
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '1rem' }}>
+              <div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', marginBottom: '0.3rem' }}>
+                  <span
+                    style={{
+                      fontSize: '0.68rem',
+                      fontWeight: 800,
+                      padding: '0.12rem 0.5rem',
+                      borderRadius: '999px',
+                      backgroundColor: 'rgba(202, 138, 4, 0.15)',
+                      color: '#b45309',
+                      border: '1px solid rgba(202, 138, 4, 0.3)',
+                    }}
+                  >
+                    FY 2026/27 · Q2 Remediation Pathway
+                  </span>
+                  <span style={{ fontSize: '0.72rem', color: '#64748b' }}>10 Mandatory Sessions</span>
+                </div>
+                <h3 style={{ margin: 0, fontSize: '1.15rem', fontWeight: 800, color: '#0f172a' }}>
+                  My 1-on-1 Performance Coaching Roadmap
+                </h3>
+                <p style={{ margin: '0.2rem 0 0', fontSize: '0.8rem', color: '#64748b' }}>
+                  Coached by <strong>{coachName}</strong> ({coachJob}) · Target Weakness: <strong>Branch Foreign Exchange Intake &amp; KYC Verification</strong>
+                </p>
+              </div>
+
+              {/* Progress Meter */}
+              <div style={{ minWidth: '180px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem', fontWeight: 700, marginBottom: '0.3rem' }}>
+                  <span style={{ color: '#0f172a' }}>{completedCount} of {totalTarget} Completed</span>
+                  <span style={{ color: '#b45309' }}>{progressPercent}%</span>
+                </div>
+                <div style={{ width: '100%', height: '8px', borderRadius: '999px', backgroundColor: '#e2e8f0', overflow: 'hidden' }}>
+                  <div style={{ width: `${progressPercent}%`, height: '100%', backgroundColor: '#ca8a04', transition: 'width 0.3s ease' }} />
+                </div>
+                <span style={{ fontSize: '0.68rem', color: '#64748b', marginTop: '0.2rem', display: 'block' }}>
+                  {totalTarget - completedCount} sessions remaining before quarterly gate
+                </span>
+              </div>
+            </div>
+          </div>
+
+          {/* 10-Milestone Table */}
+          <div className="apid-card" style={{ border: '1px solid var(--border, #e2e8f0)', borderRadius: '12px', overflow: 'hidden', background: '#ffffff' }}>
+            <div style={{ padding: '0.75rem 1rem', background: '#f8fafc', borderBottom: '1px solid #e2e8f0' }}>
+              <strong style={{ fontSize: '0.85rem', color: '#0f172a' }}>Quarterly Session History &amp; Milestone Timeline</strong>
+            </div>
+
+            <div style={{ overflowX: 'auto' }}>
+              <table style={{ width: '100%', fontSize: '0.78rem', borderCollapse: 'collapse' }}>
+                <thead>
+                  <tr style={{ background: '#f8fafc', borderBottom: '1px solid #e2e8f0' }}>
+                    <th style={{ padding: '0.55rem 0.75rem', textAlign: 'left', color: '#475569' }}>Milestone #</th>
+                    <th style={{ padding: '0.55rem 0.75rem', textAlign: 'left', color: '#475569' }}>Date &amp; Time (EAT)</th>
+                    <th style={{ padding: '0.55rem 0.75rem', textAlign: 'left', color: '#475569' }}>Focus Area</th>
+                    <th style={{ padding: '0.55rem 0.75rem', textAlign: 'center', color: '#475569' }}>Status</th>
+                    <th style={{ padding: '0.55rem 0.75rem', textAlign: 'right', color: '#475569' }}>Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {sessionList.map((s, idx) => {
+                    const st = getSessionActionState(s);
+                    const { weekday, month, day, time } = parseDateParts(s.scheduledStartTime);
+                    return (
+                      <tr key={s.id} style={{ borderBottom: '1px solid #f1f5f9' }}>
+                        <td style={{ padding: '0.55rem 0.75rem', fontWeight: 800, color: '#0f172a' }}>
+                          Session #{s.sequenceNumber || idx + 1}
+                        </td>
+                        <td style={{ padding: '0.55rem 0.75rem' }}>
+                          <div style={{ fontWeight: 700, color: '#0f172a' }}>{weekday}, {month} {day}</div>
+                          <div style={{ fontSize: '0.7rem', color: '#64748b' }}>{time}</div>
+                        </td>
+                        <td style={{ padding: '0.55rem 0.75rem' }}>
+                          <div style={{ fontWeight: 600, color: '#0f172a' }}>{s.title}</div>
+                          <div style={{ fontSize: '0.7rem', color: '#64748b' }}>
+                            {s.meetingMode === 'VIRTUAL_VIDEO' ? 'LiveKit Video' : s.meetingMode || '1-on-1'}
+                          </div>
+                        </td>
+                        <td style={{ padding: '0.55rem 0.75rem', textAlign: 'center' }}>
+                          <span
+                            style={{
+                              fontSize: '0.66rem',
+                              fontWeight: 700,
+                              padding: '0.12rem 0.45rem',
+                              borderRadius: '999px',
+                              backgroundColor: st.isCompleted ? '#f0fdf4' : '#eff6ff',
+                              color: st.isCompleted ? '#15803d' : '#1d4ed8',
+                              border: `1px solid ${st.isCompleted ? '#bbf7d0' : '#bfdbfe'}`,
+                            }}
+                          >
+                            {s.status}
+                          </span>
+                        </td>
+                        <td style={{ padding: '0.55rem 0.75rem', textAlign: 'right' }}>
+                          <div style={{ display: 'inline-flex', alignItems: 'center', gap: '0.3rem' }}>
+                            {st.isCallActive && (
+                              <button
+                                type="button"
+                                className="apid-btn apid-btn-sm"
+                                onClick={() => setSelectedForVideo(s)}
+                                style={{ backgroundColor: '#2563eb', color: '#fff', fontSize: '0.7rem', padding: '0.2rem 0.5rem', border: 'none', borderRadius: '4px' }}
+                              >
+                                Join Call
+                              </button>
+                            )}
+                            {st.isCompleted && (
+                              <>
+                                <button
+                                  type="button"
+                                  className="apid-btn apid-btn-outline apid-btn-sm"
+                                  onClick={() => setSelectedForViewMinutes(s)}
+                                  style={{ fontSize: '0.7rem', padding: '0.2rem 0.45rem' }}
+                                >
+                                  View Minutes
+                                </button>
+                                <button
+                                  type="button"
+                                  className="apid-btn apid-btn-primary apid-btn-sm"
+                                  onClick={() => setSelectedForFeedback(s)}
+                                  style={{
+                                    fontSize: '0.7rem',
+                                    padding: '0.2rem 0.55rem',
+                                    backgroundColor: '#b45309',
+                                    borderColor: '#b45309',
+                                    color: '#ffffff',
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    gap: '0.2rem',
+                                  }}
+                                >
+                                  <Star size={11} />
+                                  <span>Feedback</span>
+                                </button>
+                              </>
+                            )}
+                            {!st.isCompleted && (
+                              <button
+                                type="button"
+                                className="apid-btn apid-btn-outline apid-btn-sm"
+                                onClick={() => setSelectedForReschedule(s)}
+                                style={{ fontSize: '0.7rem', padding: '0.2rem 0.45rem' }}
+                              >
+                                Reschedule
+                              </button>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      );
+    }
   };
 
   // Render an individual Executive Meeting Card
@@ -2770,7 +3851,7 @@ export const CoachingSessionsTab: React.FC<CoachingSessionsTabProps> = ({
                           color: 'var(--brand-gold, #ca8a04)',
                         }}
                       >
-                        {visiblePmsSessions.length} {visiblePmsSessions.length === 1 ? 'Meeting' : 'Meetings'}
+                        {pmsSessions.length} {pmsSessions.length === 1 ? 'Meeting' : 'Meetings'}
                       </span>
                     </h3>
                     <p style={{ margin: '0.15rem 0 0', fontSize: '0.8rem', color: 'var(--muted, #64748b)' }}>
@@ -2778,44 +3859,67 @@ export const CoachingSessionsTab: React.FC<CoachingSessionsTabProps> = ({
                     </p>
                   </div>
                 </div>
+
+                {/* Modern Dual View Switcher Toggle */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
+                  <div style={{ display: 'inline-flex', borderRadius: '8px', overflow: 'hidden', border: '1px solid var(--border, #e2e8f0)', background: 'var(--surface, #ffffff)' }}>
+                    <button
+                      type="button"
+                      onClick={() => { setViewMode('AGENDA'); setAgendaPage(1); }}
+                      style={{
+                        padding: '0.35rem 0.75rem',
+                        fontSize: '0.76rem',
+                        fontWeight: viewMode === 'AGENDA' ? 700 : 500,
+                        backgroundColor: viewMode === 'AGENDA' ? 'var(--surface-subtle, #f1f5f9)' : 'var(--surface, #ffffff)',
+                        color: viewMode === 'AGENDA' ? '#b45309' : 'var(--muted, #64748b)',
+                        border: 'none',
+                        borderRight: '1px solid var(--border, #e2e8f0)',
+                        cursor: 'pointer',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '0.35rem',
+                      }}
+                    >
+                      <List size={13} />
+                      <span>Agenda View</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => { setViewMode('JOURNEY'); setAgendaPage(1); }}
+                      style={{
+                        padding: '0.35rem 0.75rem',
+                        fontSize: '0.76rem',
+                        fontWeight: viewMode === 'JOURNEY' ? 700 : 500,
+                        backgroundColor: viewMode === 'JOURNEY' ? 'var(--surface-subtle, #f1f5f9)' : 'var(--surface, #ffffff)',
+                        color: viewMode === 'JOURNEY' ? '#b45309' : 'var(--muted, #64748b)',
+                        border: 'none',
+                        cursor: 'pointer',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '0.35rem',
+                      }}
+                    >
+                      {isCoachUser ? (
+                        <>
+                          <Users size={13} />
+                          <span>Group by Coachee ({myCoachees.length})</span>
+                        </>
+                      ) : (
+                        <>
+                          <Award size={13} />
+                          <span>My Remediation Roadmap</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
+                </div>
               </div>
 
-              {/* Series Rhythm Hub Cards & Standalone Sessions */}
-              {visiblePmsSessions.length > 0 ? (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
-                  {/* Series Recurring Rhythm Cards */}
-                  {Array.from(pmsSeriesData.seriesMap.entries()).map(([seriesId, seriesSessions]) =>
-                    renderSeriesCard(seriesId, seriesSessions)
-                  )}
-
-                  {/* Standalone Sessions (if any) */}
-                  {pmsSeriesData.standalone.length > 0 && (
-                    <div style={{ marginTop: '0.5rem' }}>
-                      {pmsSeriesData.seriesMap.size > 0 && (
-                        <h4 style={{ fontSize: '0.9rem', fontWeight: 700, color: 'var(--muted, #64748b)', marginBottom: '0.75rem' }}>
-                          Standalone & Ad-Hoc Sessions
-                        </h4>
-                      )}
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-                        {pmsSeriesData.standalone.map(renderMeetingCard)}
-                      </div>
-                    </div>
-                  )}
-                </div>
+              {/* View 1: Agenda Compact List vs View 2: Coachee Journey / Roadmap */}
+              {viewMode === 'AGENDA' ? (
+                renderAgendaListView(pmsSessions)
               ) : (
-                <div
-                  style={{
-                    padding: '2rem',
-                    textAlign: 'center',
-                    background: 'var(--surface-subtle, #f8fafc)',
-                    borderRadius: '8px',
-                    border: '1px dashed var(--border, #cbd5e1)',
-                    fontSize: '0.88rem',
-                    color: 'var(--muted, #64748b)',
-                  }}
-                >
-                  No mandatory PMS coaching sessions match the selected filter.
-                </div>
+                renderCoacheeJourneyView(pmsSessions)
               )}
             </div>
           )}
