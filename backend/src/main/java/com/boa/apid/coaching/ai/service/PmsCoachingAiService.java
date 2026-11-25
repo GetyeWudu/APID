@@ -8,6 +8,8 @@ import com.boa.apid.coaching.report.dto.DistrictAnalyticsDto;
 import com.boa.apid.coaching.report.dto.DistrictBranchAnalyticsDto;
 import com.boa.apid.coaching.report.dto.PmsTalentProgressItemDto;
 import com.boa.apid.coaching.report.service.PmsCoachingReportService;
+import com.boa.apid.coaching.session.entity.CoachingSession;
+import com.boa.apid.coaching.session.repository.CoachingSessionRepository;
 import com.boa.apid.core.organization.entity.Employee;
 import com.boa.apid.core.organization.repository.EmployeeRepository;
 import com.boa.apid.platform.ai.api.AIProvider;
@@ -47,6 +49,7 @@ public class PmsCoachingAiService {
     private final ObjectMapper objectMapper;
     private final StringRedisTemplate redisTemplate;
     private final EmployeeRepository employeeRepository;
+    private final CoachingSessionRepository sessionRepository;
 
     // Inference Admission Controller (Protects GPU from overload; limits concurrent inference slots)
     private final Semaphore inferenceAdmissionSemaphore = new Semaphore(4);
@@ -64,13 +67,15 @@ public class PmsCoachingAiService {
             PmsCoachingReportService reportService,
             ObjectMapper objectMapper,
             @Autowired(required = false) StringRedisTemplate redisTemplate,
-            @Autowired(required = false) EmployeeRepository employeeRepository
+            @Autowired(required = false) EmployeeRepository employeeRepository,
+            @Autowired(required = false) CoachingSessionRepository sessionRepository
     ) {
         this.aiProvider = aiProvider;
         this.reportService = reportService;
         this.objectMapper = objectMapper;
         this.redisTemplate = redisTemplate;
         this.employeeRepository = employeeRepository;
+        this.sessionRepository = sessionRepository;
     }
 
     public AiExecutiveBriefingDto getExecutiveBriefing(Long quarterId, boolean forceRegenerate) {
@@ -407,8 +412,31 @@ public class PmsCoachingAiService {
                         .append(" (").append(t.ratingBand()).append(")")
                         .append(" | Assigned Coach: ").append(t.coachName())
                         .append(" | Sessions: ").append(t.completedSessions()).append("/").append(t.approvedTarget())
+                        .append(" | Trajectory: ").append(t.progressTrajectory())
                         .append(" | Focus Gap: ").append(t.targetWeaknessKpi())
                         .append("\n");
+
+                if (sessionRepository != null && t.assignmentId() != null) {
+                    try {
+                        List<CoachingSession> sList = sessionRepository.findAllByAssignmentIdOrderByScheduledStartTimeDesc(t.assignmentId());
+                        if (!sList.isEmpty()) {
+                            contextBuilder.append("  * Detailed Coaching Sessions & Recorded Minutes for ").append(t.coacheeName()).append(":\n");
+                            for (CoachingSession cs : sList.stream().limit(3).toList()) {
+                                contextBuilder.append("    - Session #").append(cs.getSequenceNumber() != null ? cs.getSequenceNumber() : 1)
+                                        .append(" [").append(cs.getStatus()).append("]: ").append(cs.getTitle())
+                                        .append(" (Duration: ").append(cs.getDurationMinutes()).append("m)\n");
+                                if (cs.getSessionNotesMinutes() != null && !cs.getSessionNotesMinutes().isBlank()) {
+                                    contextBuilder.append("      Minutes & Directives: ").append(cs.getSessionNotesMinutes().replace("\n", " ")).append("\n");
+                                }
+                                if (cs.getActionItems() != null && !cs.getActionItems().isBlank()) {
+                                    contextBuilder.append("      Remediation Action Items: ").append(cs.getActionItems().replace("\n", " ")).append("\n");
+                                }
+                            }
+                        }
+                    } catch (Exception ex) {
+                        log.debug("Could not fetch sessions for assignment {}: {}", t.assignmentId(), ex.getMessage());
+                    }
+                }
             }
             contextBuilder.append("\n");
         } else {
@@ -426,30 +454,26 @@ public class PmsCoachingAiService {
 
         String prompt = """
                 You are the Bank of Abyssinia APID Enterprise Decision-Support Copilot.
-                Answer the administrator's question strictly based on the verified database grounding context below.
+                Answer the administrator's question intelligently, thoroughly, and factually based on the verified database grounding context below.
 
                 Database Grounding Context:
                 %s
 
                 Administrator Question: "%s"
 
-                Formatting Instructions:
-                1. Answer directly and factually with executive clarity.
-                2. If the question asks about a specific coachee, provide their complete remediation dossier:
-                   Coach: [Coach Name]
-                   • Coachee: [Coachee Name] (Staff ID: [ID]) [[Branch], [District]] — Rating: [Score to 2 decimals] ([Tier] Tier)
-                   • Sessions: [Completed] of [Target] sessions completed (Trajectory: [Trajectory])
-                   • Primary Gap: [Focus Gap KPI]
-                3. If listing multiple coaches, group coachees under their coach:
-                   Coach: [Coach Name]
-                   • Coachee: [Coachee Name] ([Branch]) — Rating: [Score to 2 decimals] ([Tier] Tier)
-                4. Always format ratings to 2 decimal places (e.g. 1.45 instead of 1.4500).
-                5. Do NOT include stray markdown stars like *Coach* or unclosed asterisks in section titles. Use clean text.
-                6. Always conclude with an executive takeaway section formatted as:
-                **Executive Takeaway:** [One or two sentences summarizing leadership implications and next steps]
+                Formatting & Behavioral Instructions:
+                1. Answer directly and factually with executive intelligence. Provide rich, useful answers, not shallow snippets.
+                2. If the user asks for "additional explanations", discussion minutes, or takeaways about a coachee, refer directly to their recorded session minutes, discussion notes, action items, and coaching trajectory provided in the context.
+                3. If the user asks about a coach (e.g. Worku Wolde) or asks for "all coachees", list and summarize EVERY coachee assigned to that coach with their individual ratings, completed sessions, and status. Do NOT stop after just one coachee.
+                4. If the user asks about an employee who is not in remediation, explain that in Bank of Abyssinia PMS, only staff with appraisal ratings below 3.0 are enrolled in mandatory remedial coaching.
+                5. Always format ratings to 2 decimal places (e.g. 1.45 instead of 1.4500).
+                6. Do NOT include stray markdown stars like *Coach* or unclosed asterisks in section titles. Use clean text.
+                7. Always conclude with an executive takeaway section formatted as:
+                **Executive Takeaway:** [One or two actionable sentences summarizing leadership implications and next steps]
                 """.formatted(contextBuilder.toString(), cleanQuery);
 
         String answer;
+        String modelName = "qwen3:8b (CUDA GPU)";
         long duration;
         boolean permitAcquired = false;
         try {
@@ -459,20 +483,25 @@ public class PmsCoachingAiService {
                 log.warn("Inference admission queue full (> {}ms). Serving grounded deterministic answer to maintain 100% availability.", queueTimeoutMs);
                 answer = generateGroundedFallbackAnswer(cleanQuery, matchedTalents, matchedDistricts, matchedBranches, talents, analytics);
                 duration = System.currentTimeMillis() - start;
+                modelName = "APID Rule-Based (Queue Limit)";
             } else {
                 AIResponse aiResp = aiProvider.generate(prompt, new AIRequestOptions(0.2, null, null, false));
                 if (aiResp != null && aiResp.success() && aiResp.content() != null && !aiResp.content().isBlank()) {
                     answer = aiResp.content();
                     duration = aiResp.durationMs();
+                    modelName = "qwen3:8b (CUDA GPU)";
                 } else {
+                    log.warn("Ollama inference unavailable (error: {}), serving grounded deterministic answer.", aiResp != null ? aiResp.errorMessage() : "null response");
                     answer = generateGroundedFallbackAnswer(cleanQuery, matchedTalents, matchedDistricts, matchedBranches, talents, analytics);
                     duration = System.currentTimeMillis() - start;
+                    modelName = "APID Rule-Based (Ollama Offline)";
                 }
             }
         } catch (Exception ex) {
             log.warn("Ollama copilot query failed, using deterministic grounded answer: {}", ex.getMessage());
             answer = generateGroundedFallbackAnswer(cleanQuery, matchedTalents, matchedDistricts, matchedBranches, talents, analytics);
             duration = System.currentTimeMillis() - start;
+            modelName = "APID Rule-Based (Ollama Offline)";
         } finally {
             if (permitAcquired) {
                 inferenceAdmissionSemaphore.release();
@@ -511,7 +540,7 @@ public class PmsCoachingAiService {
             links.add(AiCopilotActionLinkDto.branchFilter("Filter Addis Kazanchis Branch (Critical)", "Central District", "Addis Kazanchis Branch Operations"));
         }
 
-        AiCopilotResponseDto responseDto = new AiCopilotResponseDto(cleanQuery, answer, links, "qwen3:8b", duration);
+        AiCopilotResponseDto responseDto = new AiCopilotResponseDto(cleanQuery, answer, links, modelName, duration);
         saveToRedisCache(cacheKey, responseDto);
         return responseDto;
     }
@@ -606,21 +635,25 @@ public class PmsCoachingAiService {
     }
 
     private String extractUnknownPersonQuery(String queryLower) {
-        // Pattern 1: "summarize <name>'s ..." or "who is <name>?" or "tell me about <name>"
-        Matcher m1 = Pattern.compile("(?:summarize|overview of|profile of|status of|report for|who is|tell me about)\\s+([a-zA-Z\\s]{3,35}?)(?:'s|\\s+current|\\s+coaching|\\s+status|\\s+gaps|\\?|$)").matcher(queryLower);
+        // Pattern 0: "give me the coaching report of <name>" or "report of <name>" or "coaching report of <name>"
+        Matcher m0 = Pattern.compile("(?:give me the |what is the |show me the |provide the )?(?:coaching report of|coaching summary of|coaching status of|report of|report for|status of|profile of|overview of|summarize|who is|tell me about)\\s+([a-zA-Z\\s]{3,35}?)(?:'s|\\s+current|\\s+coaching|\\s+status|\\s+gaps|\\?|$)").matcher(queryLower);
+        if (m0.find()) {
+            String candidate = m0.group(1).trim();
+            if (!candidate.isBlank() && !isSystemKeyword(candidate)) {
+                return candidate;
+            }
+        }
+        // Pattern 1: "<name>'s current coaching status"
+        Matcher m1 = Pattern.compile("^([a-zA-Z\\s]{3,35}?)'s\\s+(?:current\\s+)?coaching").matcher(queryLower);
         if (m1.find()) {
             String candidate = m1.group(1).trim();
             if (!candidate.isBlank() && !isSystemKeyword(candidate)) {
                 return candidate;
             }
         }
-        // Pattern 2: "<name>'s current coaching status"
-        Matcher m2 = Pattern.compile("^([a-zA-Z\\s]{3,35}?)'s\\s+(?:current\\s+)?coaching").matcher(queryLower);
-        if (m2.find()) {
-            String candidate = m2.group(1).trim();
-            if (!candidate.isBlank() && !isSystemKeyword(candidate)) {
-                return candidate;
-            }
+        // Pattern 2: direct 2-word person name (e.g., "selam kebede")
+        if (queryLower.matches("^[a-z]{2,20}\\s+[a-z]{2,20}$") && !isSystemKeyword(queryLower)) {
+            return queryLower.trim();
         }
         return null;
     }
@@ -688,23 +721,63 @@ public class PmsCoachingAiService {
             return sb.toString();
         }
 
+        // If query asks for a specific coach or multiple coachees
+        if (matchedTalents.size() > 1 || qLower.contains("coach") || qLower.contains("all coachees")) {
+            Map<String, List<PmsTalentProgressItemDto>> byCoach = new LinkedHashMap<>();
+            for (PmsTalentProgressItemDto t : matchedTalents) {
+                byCoach.computeIfAbsent(t.coachName() != null ? t.coachName() : "Unassigned Coach", k -> new ArrayList<>()).add(t);
+            }
+            StringBuilder sb = new StringBuilder();
+            for (Map.Entry<String, List<PmsTalentProgressItemDto>> entry : byCoach.entrySet()) {
+                sb.append(String.format("### Coach **%s** — Assigned Remediation Roster (%d Coachees):\n\n", entry.getKey(), entry.getValue().size()));
+                for (PmsTalentProgressItemDto t : entry.getValue()) {
+                    sb.append(String.format("- **%s** (Staff ID: %s) [%s, %s]\n", t.coacheeName(), t.coacheeStaffId(), t.department().replace(" Branch Operations", ""), t.directorate()));
+                    sb.append(String.format("  • **Rating:** %.2f (%s Tier) | **Sessions:** %d of %d Completed (Trajectory: %s)\n", t.startingRating(), toTitleCase(t.ratingBand()), t.completedSessions(), t.approvedTarget(), t.progressTrajectory()));
+                    sb.append(String.format("  • **Primary Gap:** %s\n\n", t.targetWeaknessKpi()));
+                }
+            }
+            sb.append("**Executive Takeaway:** Prioritize structured session delivery across all assigned coachees to accelerate completion rhythm and meet quarterly targets.");
+            return sb.toString();
+        }
+
         if (!matchedTalents.isEmpty()) {
             PmsTalentProgressItemDto t = matchedTalents.get(0);
-            return String.format(
-                    "Coach: %s\n\n" +
-                            "• Coachee: %s (Staff ID: %s) [%s, %s] — Rating: %.2f (%s Tier)\n" +
-                            "• Sessions: %d of %d sessions completed (Trajectory: %s)\n" +
-                            "• Primary Gap: %s\n\n" +
-                            "**Executive Takeaway:** %s’s %s tier baseline rating (%.2f) and %d of %d sessions completed require immediate intervention. Coach %s must prioritize addressing the %s deficit to align with bank-wide remediation targets.",
-                    t.coachName(),
+            StringBuilder sb = new StringBuilder();
+            sb.append(String.format("Coach: **%s**\n\n", t.coachName()));
+            sb.append(String.format("• **Coachee:** %s (Staff ID: %s) [%s, %s] — Rating: %.2f (%s Tier)\n",
                     t.coacheeName(), t.coacheeStaffId(), t.department().replace(" Branch Operations", ""), t.directorate(),
-                    t.startingRating(), toTitleCase(t.ratingBand()),
-                    t.completedSessions(), t.approvedTarget(), t.progressTrajectory(),
-                    t.targetWeaknessKpi(),
+                    t.startingRating(), toTitleCase(t.ratingBand())));
+            sb.append(String.format("• **Sessions:** %d of %d sessions completed (Trajectory: %s)\n",
+                    t.completedSessions(), t.approvedTarget(), t.progressTrajectory()));
+            sb.append(String.format("• **Primary Gap:** %s\n\n", t.targetWeaknessKpi()));
+
+            if (sessionRepository != null && t.assignmentId() != null) {
+                try {
+                    List<CoachingSession> sList = sessionRepository.findAllByAssignmentIdOrderByScheduledStartTimeDesc(t.assignmentId());
+                    if (!sList.isEmpty()) {
+                        sb.append("**Recent Coaching Session Insights & Notes:**\n");
+                        for (CoachingSession cs : sList.stream().limit(3).toList()) {
+                            sb.append(String.format("- **Session #%d** [%s]: %s (%dm)\n",
+                                    cs.getSequenceNumber() != null ? cs.getSequenceNumber() : 1, cs.getStatus(), cs.getTitle(), cs.getDurationMinutes()));
+                            if (cs.getSessionNotesMinutes() != null && !cs.getSessionNotesMinutes().isBlank()) {
+                                sb.append("  *Minutes:* ").append(cs.getSessionNotesMinutes().replace("\n", " ")).append("\n");
+                            }
+                            if (cs.getActionItems() != null && !cs.getActionItems().isBlank()) {
+                                sb.append("  *Action Items:* ").append(cs.getActionItems().replace("\n", " ")).append("\n");
+                            }
+                        }
+                        sb.append("\n");
+                    }
+                } catch (Exception ex) {
+                    log.debug("Session query failed for talent fallback: {}", ex.getMessage());
+                }
+            }
+
+            sb.append(String.format("**Executive Takeaway:** %s’s %s tier baseline rating (%.2f) and %d of %d sessions completed require immediate intervention. Coach %s must prioritize addressing the %s deficit to align with bank-wide remediation targets.",
                     t.coacheeName(), toTitleCase(t.ratingBand()), t.startingRating(),
                     t.completedSessions(), t.approvedTarget(),
-                    t.coachName(), t.targetWeaknessKpi()
-            );
+                    t.coachName(), t.targetWeaknessKpi()));
+            return sb.toString();
         }
 
         if (!matchedBranches.isEmpty()) {

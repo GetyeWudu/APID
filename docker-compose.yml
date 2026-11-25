@@ -50,6 +50,7 @@ services:
     ports:
       - "${BACKEND_PORT:-8080}:8080"
     extra_hosts:
+      - "host.docker.internal:host-gateway"
       - "apid.test:10.9.82.23"
       - "apid-dc01.apid.test:10.9.82.23"
     environment:
@@ -76,7 +77,7 @@ services:
       LIVEKIT_TOKEN_TTL: ${LIVEKIT_TOKEN_TTL:-7200}
       AI_ENABLED: ${AI_ENABLED:-true}
       AI_PROVIDER: ${AI_PROVIDER:-ollama}
-      OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://10.9.36.155:11434}
+      OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://host.docker.internal:11434}
       OLLAMA_MODEL: ${OLLAMA_MODEL:-qwen3:8b}
       OLLAMA_TIMEOUT_SECONDS: ${OLLAMA_TIMEOUT_SECONDS:-120}
       APID_LDAP_ENABLED: ${APID_LDAP_ENABLED:-true}

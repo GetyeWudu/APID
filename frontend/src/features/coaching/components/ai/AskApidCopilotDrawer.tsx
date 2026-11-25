@@ -22,6 +22,7 @@ interface ChatMessage {
   actionLinks?: AiCopilotActionLink[];
   timestamp: string;
   durationMs?: number;
+  model?: string;
 }
 
 interface AskApidCopilotDrawerProps {
@@ -488,7 +489,7 @@ export const AskApidCopilotDrawer: React.FC<AskApidCopilotDrawerProps> = ({
         setMessages((prev) =>
           prev.map((m) =>
             m.id === aiMessageId
-              ? { ...m, text: resp.answer, actionLinks: resp.actionLinks, durationMs: resp.durationMs }
+              ? { ...m, text: resp.answer, actionLinks: resp.actionLinks, durationMs: resp.durationMs, model: resp.model }
               : m
           )
         );
@@ -515,8 +516,9 @@ export const AskApidCopilotDrawer: React.FC<AskApidCopilotDrawerProps> = ({
               const parsed = JSON.parse(dataStr);
               if (parsed.type === 'meta') {
                 actionLinks = parsed.actionLinks || [];
+                const model = parsed.model;
                 setMessages((prev) =>
-                  prev.map((m) => (m.id === aiMessageId ? { ...m, actionLinks } : m))
+                  prev.map((m) => (m.id === aiMessageId ? { ...m, actionLinks, model } : m))
                 );
               } else if (parsed.type === 'chunk' && parsed.text) {
                 streamedText += parsed.text;
@@ -539,7 +541,7 @@ export const AskApidCopilotDrawer: React.FC<AskApidCopilotDrawerProps> = ({
         setMessages((prev) =>
           prev.map((m) =>
             m.id === aiMessageId
-              ? { ...m, text: resp.answer, actionLinks: resp.actionLinks, durationMs: resp.durationMs }
+              ? { ...m, text: resp.answer, actionLinks: resp.actionLinks, durationMs: resp.durationMs, model: resp.model }
               : m
           )
         );
@@ -703,7 +705,37 @@ export const AskApidCopilotDrawer: React.FC<AskApidCopilotDrawerProps> = ({
                   {isUser ? (
                     <span style={{ fontWeight: 600, color: '#374151' }}>You</span>
                   ) : (
-                    <span style={{ fontWeight: 600, color: '#0f172a' }}>APID Intelligence</span>
+                    <>
+                      <span style={{ fontWeight: 700, color: '#0f172a' }}>APID Intelligence</span>
+                      {m.model && (
+                        <span
+                          style={{
+                            fontSize: '0.65rem',
+                            fontWeight: 700,
+                            padding: '0.08rem 0.4rem',
+                            borderRadius: '4px',
+                            backgroundColor:
+                              m.model.toLowerCase().includes('qwen') || m.model.toLowerCase().includes('cuda')
+                                ? 'rgba(34, 197, 94, 0.12)'
+                                : 'rgba(239, 68, 68, 0.12)',
+                            color:
+                              m.model.toLowerCase().includes('qwen') || m.model.toLowerCase().includes('cuda')
+                                ? '#15803d'
+                                : '#b91c1c',
+                            border: `1px solid ${
+                              m.model.toLowerCase().includes('qwen') || m.model.toLowerCase().includes('cuda')
+                                ? 'rgba(34, 197, 94, 0.25)'
+                                : 'rgba(239, 68, 68, 0.25)'
+                            }`,
+                          }}
+                        >
+                          {m.model.toLowerCase().includes('qwen') || m.model.toLowerCase().includes('cuda')
+                            ? '⚡ '
+                            : '⚠️ '}
+                          {m.model}
+                        </span>
+                      )}
+                    </>
                   )}
                   {m.durationMs ? <span>({(m.durationMs / 1000).toFixed(1)}s)</span> : null}
                   <span>· {m.timestamp}</span>
