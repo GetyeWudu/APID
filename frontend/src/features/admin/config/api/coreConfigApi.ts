@@ -25,6 +25,7 @@ export interface PublicConfigSettings {
   coachingAllowJointPmsGroup?: boolean;
   coachingMaxJointGroupSize?: number;
   coachingVideoPostBufferMinutes?: number;
+  coachingAdSyncInterval?: '7_DAYS' | '1_DAY' | '12_HOURS' | '1_HOUR' | string;
 }
 
 export interface ActiveConfigSnapshot {

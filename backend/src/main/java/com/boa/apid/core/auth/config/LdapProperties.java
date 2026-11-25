@@ -21,7 +21,7 @@ public class LdapProperties {
     private int timeoutMs = 5000;
     private String trustCertPath = "classpath:certs/apid-ca.crt";
     private boolean syncEnabled = true;
-    private String syncCron = "0 */30 * * * *";
+    private String syncCron = "7_DAYS";
     private long syncInitialDelayMs = 15000;
 
     public boolean isSyncEnabled() {

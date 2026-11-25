@@ -21,6 +21,7 @@ public class PublicConfigDto {
     private Boolean coachingAllowJointPmsGroup;
     private Integer coachingMaxJointGroupSize;
     private Integer coachingVideoPostBufferMinutes;
+    private String coachingAdSyncInterval;
 
     public PublicConfigDto() {
     }
@@ -42,6 +43,44 @@ public class PublicConfigDto {
             Integer coachingMaxJointGroupSize,
             Integer coachingVideoPostBufferMinutes
     ) {
+        this(
+                mandatoryCutoffRounded,
+                missedSessionAlertThreshold,
+                inactivityReminderDays,
+                maxFileUploadMb,
+                coachingMinSessionsPerQuarter,
+                coachingEarlyJoinWindowMinutes,
+                coachingMinRescheduleNoticeHours,
+                coachingMaxReschedulesPerSession,
+                coachingRequireDeclineReason,
+                coachingMaxSessionsPerWeek,
+                coachingAllowSaturdayScheduling,
+                coachingRescheduleScope,
+                coachingAllowJointPmsGroup,
+                coachingMaxJointGroupSize,
+                coachingVideoPostBufferMinutes,
+                "7_DAYS"
+        );
+    }
+
+    public PublicConfigDto(
+            Integer mandatoryCutoffRounded,
+            Integer missedSessionAlertThreshold,
+            Integer inactivityReminderDays,
+            Integer maxFileUploadMb,
+            Integer coachingMinSessionsPerQuarter,
+            Integer coachingEarlyJoinWindowMinutes,
+            Integer coachingMinRescheduleNoticeHours,
+            Integer coachingMaxReschedulesPerSession,
+            Boolean coachingRequireDeclineReason,
+            Integer coachingMaxSessionsPerWeek,
+            Boolean coachingAllowSaturdayScheduling,
+            String coachingRescheduleScope,
+            Boolean coachingAllowJointPmsGroup,
+            Integer coachingMaxJointGroupSize,
+            Integer coachingVideoPostBufferMinutes,
+            String coachingAdSyncInterval
+    ) {
         this.mandatoryCutoffRounded = mandatoryCutoffRounded;
         this.missedSessionAlertThreshold = missedSessionAlertThreshold;
         this.inactivityReminderDays = inactivityReminderDays;
@@ -57,6 +96,7 @@ public class PublicConfigDto {
         this.coachingAllowJointPmsGroup = coachingAllowJointPmsGroup;
         this.coachingMaxJointGroupSize = coachingMaxJointGroupSize;
         this.coachingVideoPostBufferMinutes = coachingVideoPostBufferMinutes;
+        this.coachingAdSyncInterval = coachingAdSyncInterval != null ? coachingAdSyncInterval : "7_DAYS";
     }
 
     public Integer getMandatoryCutoffRounded() { return mandatoryCutoffRounded; }
@@ -91,4 +131,6 @@ public class PublicConfigDto {
     public void setCoachingMaxJointGroupSize(Integer coachingMaxJointGroupSize) { this.coachingMaxJointGroupSize = coachingMaxJointGroupSize; }
     public Integer getCoachingVideoPostBufferMinutes() { return coachingVideoPostBufferMinutes; }
     public void setCoachingVideoPostBufferMinutes(Integer coachingVideoPostBufferMinutes) { this.coachingVideoPostBufferMinutes = coachingVideoPostBufferMinutes; }
+    public String getCoachingAdSyncInterval() { return coachingAdSyncInterval; }
+    public void setCoachingAdSyncInterval(String coachingAdSyncInterval) { this.coachingAdSyncInterval = coachingAdSyncInterval; }
 }

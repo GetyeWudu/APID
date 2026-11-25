@@ -246,7 +246,7 @@ export function UsersPanel() {
           style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: '0.4rem' }}
           disabled={syncing || busy}
           onClick={handleManualSync}
-          title="Trigger immediate Active Directory synchronization and role reconciliation (Scheduled every 30m)"
+          title="Trigger immediate Active Directory synchronization and role reconciliation (Scheduled cadence configured in Coaching Rules & Policies)"
         >
           <span>{syncing ? '⏳ Syncing AD...' : '🔄 Sync Active Directory'}</span>
         </button>

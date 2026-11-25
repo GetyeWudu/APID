@@ -99,6 +99,8 @@ public class CoreConfigService {
                 "Minutes before scheduled start time that the Daily.co video room join button unlocks for participants", true);
         ensureDefaultConfig("coaching.video_post_buffer_minutes", "30", ConfigValueType.INTEGER,
                 "Minutes after scheduled end time that the Daily.co video room remains accessible before closing", true);
+        ensureDefaultConfig("coaching.ad_sync_interval", "7_DAYS", ConfigValueType.STRING,
+                "Active Directory (AD DS) background synchronization interval. Predefined: 7_DAYS (7 days), 1_DAY (1 day), 12_HOURS (12 hours), 1_HOUR (1 hour)", true);
     }
 
     private void ensureDefaultConfig(String key, String defaultValue, ConfigValueType type, String description, boolean isPublic) {
@@ -443,6 +445,15 @@ public class CoreConfigService {
                 return trimmed.toLowerCase(Locale.ROOT);
             }
             case STRING -> {
+                if ("coaching.ad_sync_interval".equals(key)) {
+                    String upper = trimmed.toUpperCase(Locale.ROOT).replace(" ", "_");
+                    if (!List.of("7_DAYS", "1_DAY", "12_HOURS", "1_HOUR").contains(upper)) {
+                        throw new BusinessException("INVALID_CONFIG_VALUE",
+                                "Active Directory sync cadence must be one of the predefined values: 7_DAYS (7 days), 1_DAY (1 day), 12_HOURS (12 hours), or 1_HOUR (1 hour)",
+                                HttpStatus.BAD_REQUEST);
+                    }
+                    return upper;
+                }
                 return trimmed;
             }
         }

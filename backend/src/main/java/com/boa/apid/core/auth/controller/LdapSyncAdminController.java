@@ -25,14 +25,14 @@ public class LdapSyncAdminController {
     }
 
     @PostMapping("/sync")
-    @PreAuthorize("hasAuthority('USER_MANAGE')")
+    @PreAuthorize("hasAnyAuthority('USER_MANAGE', 'COACHING_POLICY_MANAGE', 'COACHING_ASSIGNMENT_VIEW_ALL') or hasRole('Super Admin')")
     public ApiResponse<ActiveDirectorySyncService.AdSyncResult> triggerManualSync() {
         ActiveDirectorySyncService.AdSyncResult result = syncScheduler.triggerSync("Admin manual REST trigger");
         return ApiResponse.ok(result.message(), result);
     }
 
     @GetMapping("/status")
-    @PreAuthorize("hasAuthority('USER_MANAGE')")
+    @PreAuthorize("hasAnyAuthority('USER_MANAGE', 'COACHING_POLICY_MANAGE', 'COACHING_ASSIGNMENT_VIEW_ALL') or hasRole('Super Admin')")
     public ApiResponse<Map<String, Object>> getLdapStatus() {
         return ApiResponse.ok(Map.of(
                 "enabled", ldapProperties.isEnabled(),
@@ -41,7 +41,9 @@ public class LdapSyncAdminController {
                 "domain", ldapProperties.getDomain(),
                 "userSearchBase", ldapProperties.getUserSearchBase(),
                 "syncEnabled", ldapProperties.isSyncEnabled(),
-                "syncCron", ldapProperties.getSyncCron()
+                "syncInterval", syncScheduler.resolveConfiguredIntervalLabel(),
+                "lastSyncTime", syncScheduler.getLastSyncTime() != null ? syncScheduler.getLastSyncTime().toString() : "Not executed yet",
+                "nextScheduledSyncTime", syncScheduler.getNextScheduledSyncTime() != null ? syncScheduler.getNextScheduledSyncTime().toString() : "N/A"
         ));
     }
 }

@@ -15,8 +15,11 @@ import {
   Target,
   Sparkles,
   Users,
+  RefreshCw,
+  Loader2,
 } from 'lucide-react';
 import { coreConfigApi } from '../../admin/config/api/coreConfigApi';
+import { usersApi } from '../../admin/users/api/usersApi';
 import { coachingGovernanceApi, CoachingPolicyVersionItem } from '../api/coachingSessionApi';
 import { AssignmentPathway } from '../api/coachingAssignmentApi';
 
@@ -43,6 +46,9 @@ export const CoachingRulesTab: React.FC = () => {
   const [rescheduleScope, setRescheduleScope] = useState<'SAME_DAY_ONLY' | 'SAME_WEEK' | 'QUARTER_FLEXIBLE'>('SAME_WEEK');
   const [allowJointPmsGroup, setAllowJointPmsGroup] = useState<boolean>(true);
   const [maxJointGroupSize, setMaxJointGroupSize] = useState<number>(4);
+  const [adSyncInterval, setAdSyncInterval] = useState<'7_DAYS' | '1_DAY' | '12_HOURS' | '1_HOUR'>('7_DAYS');
+  const [isTriggeringSync, setIsTriggeringSync] = useState(false);
+  const [syncResultMsg, setSyncResultMsg] = useState<{ text: string; isError?: boolean } | null>(null);
 
   const [savedSuccess, setSavedSuccess] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -109,6 +115,12 @@ export const CoachingRulesTab: React.FC = () => {
       if (cfg.coachingMaxJointGroupSize !== undefined) {
         setMaxJointGroupSize(cfg.coachingMaxJointGroupSize);
       }
+      if (cfg.coachingAdSyncInterval !== undefined) {
+        const norm = cfg.coachingAdSyncInterval.toUpperCase().replace(' ', '_');
+        if (norm === '7_DAYS' || norm === '1_DAY' || norm === '12_HOURS' || norm === '1_HOUR') {
+          setAdSyncInterval(norm as any);
+        }
+      }
     }
   }, [configSnapshot]);
 
@@ -125,6 +137,7 @@ export const CoachingRulesTab: React.FC = () => {
         { configKey: 'coaching.reschedule_scope', configValue: String(rescheduleScope) },
         { configKey: 'coaching.allow_joint_pms_group', configValue: String(allowJointPmsGroup) },
         { configKey: 'coaching.max_joint_group_size', configValue: String(maxJointGroupSize) },
+        { configKey: 'coaching.ad_sync_interval', configValue: adSyncInterval },
       ];
       return coreConfigApi.updateConfigs(updates);
     },
@@ -151,6 +164,26 @@ export const CoachingRulesTab: React.FC = () => {
     setRescheduleScope('SAME_WEEK');
     setAllowJointPmsGroup(true);
     setMaxJointGroupSize(4);
+    setAdSyncInterval('7_DAYS');
+  };
+
+  const handleTriggerManualAdSync = async () => {
+    try {
+      setIsTriggeringSync(true);
+      setSyncResultMsg(null);
+      const res = await usersApi.syncLdap();
+      setSyncResultMsg({
+        text: `Active Directory synchronization completed successfully: ${res.usersScanned} directory users scanned, ${res.usersUpdated} updated in ${res.durationMs}ms.`,
+      });
+      setTimeout(() => setSyncResultMsg(null), 7000);
+    } catch (err: any) {
+      setSyncResultMsg({
+        text: err?.response?.data?.message || err?.message || 'Failed to trigger Active Directory synchronization.',
+        isError: true,
+      });
+    } finally {
+      setIsTriggeringSync(false);
+    }
   };
 
   // Open Edit Policy Modal
@@ -825,6 +858,109 @@ export const CoachingRulesTab: React.FC = () => {
               />
               <span style={{ fontSize: '0.8rem', color: '#64748b' }}>coachees</span>
             </div>
+          </div>
+        </div>
+
+        {/* Rule 8: Active Directory (AD DS) Directory Sync Cadence */}
+        <div
+          className="apid-card"
+          style={{
+            background: '#ffffff',
+            borderRadius: '12px',
+            border: '1px solid #e2e8f0',
+            padding: '1.25rem',
+            display: 'flex',
+            flexDirection: 'column',
+            justifyContent: 'space-between',
+          }}
+        >
+          <div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem' }}>
+              <div
+                style={{
+                  width: 28,
+                  height: 28,
+                  borderRadius: '6px',
+                  background: 'rgba(2, 132, 199, 0.1)',
+                  color: '#0284c7',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                }}
+              >
+                <RefreshCw size={15} />
+              </div>
+              <h3 style={{ fontSize: '0.96rem', fontWeight: 700, margin: 0, color: '#0f172a' }}>
+                AD DS Directory Sync Cadence
+              </h3>
+            </div>
+            <p style={{ margin: '0 0 1rem 0', fontSize: '0.82rem', color: '#64748b', lineHeight: 1.5 }}>
+              Periodic background synchronization interval for employee directory data, manager hierarchy, and branch assignments from Bank of Abyssinia AD DS.
+            </p>
+          </div>
+
+          <div>
+            <select
+              value={adSyncInterval}
+              onChange={(e) => setAdSyncInterval(e.target.value as any)}
+              style={{
+                width: '100%',
+                padding: '0.45rem 0.65rem',
+                borderRadius: '6px',
+                border: '1px solid #cbd5e1',
+                fontSize: '0.88rem',
+                fontWeight: 600,
+                color: '#334155',
+                backgroundColor: '#f8fafc',
+              }}
+            >
+              <option value="7_DAYS">7 Days (Weekly - Governance Default)</option>
+              <option value="1_DAY">1 Day (Daily Sync)</option>
+              <option value="12_HOURS">12 Hours (Twice Daily)</option>
+              <option value="1_HOUR">1 Hour (High Frequency)</option>
+            </select>
+            <p style={{ margin: '0.4rem 0 0.75rem 0', fontSize: '0.74rem', color: '#94a3b8' }}>
+              Default: 7 days. Replaces legacy hardcoded 30-minute interval with enterprise directory governance.
+            </p>
+
+            <button
+              type="button"
+              className="apid-btn apid-btn-outline"
+              onClick={handleTriggerManualAdSync}
+              disabled={isTriggeringSync}
+              style={{
+                width: '100%',
+                padding: '0.4rem 0.65rem',
+                fontSize: '0.78rem',
+                display: 'inline-flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '0.4rem',
+                color: '#0284c7',
+                borderColor: '#bae6fd',
+                backgroundColor: '#f0f9ff',
+              }}
+            >
+              {isTriggeringSync ? <Loader2 size={13} className="spin" /> : <RefreshCw size={13} />}
+              <span>{isTriggeringSync ? 'Reconciling Directory...' : 'Trigger AD DS Sync Now'}</span>
+            </button>
+
+            {syncResultMsg && (
+              <div
+                style={{
+                  marginTop: '0.5rem',
+                  padding: '0.4rem 0.6rem',
+                  borderRadius: '6px',
+                  fontSize: '0.74rem',
+                  lineHeight: 1.4,
+                  backgroundColor: syncResultMsg.isError ? '#fef2f2' : '#f0fdf4',
+                  color: syncResultMsg.isError ? '#b91c1c' : '#15803d',
+                  border: `1px solid ${syncResultMsg.isError ? '#fecaca' : '#bbf7d0'}`,
+                }}
+              >
+                {syncResultMsg.text}
+              </div>
+            )}
           </div>
         </div>
       </div>

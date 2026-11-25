@@ -1,9 +1,32 @@
 import { describe, it, expect, vi } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { PmsAdminDashboardPage } from '../features/coaching/pages/PmsAdminDashboardPage';
 import * as AuthContextModule from '../app/AuthContext';
+
+vi.mock('../features/admin/config/api/coreConfigApi', () => ({
+  coreConfigApi: {
+    getActiveConfig: vi.fn().mockResolvedValue({
+      activeQuarter: { quarterId: 2, fiscalYear: '2026/27', quarter: 2, label: 'FY 2026/27 · Q2' },
+      calendarQuarterLabel: null,
+      publicConfig: {
+        mandatoryCutoffRounded: 3,
+        missedSessionAlertThreshold: 2,
+        inactivityReminderDays: 14,
+        maxFileUploadMb: 25,
+        coachingAdSyncInterval: '7_DAYS',
+      },
+    }),
+    updateConfigs: vi.fn().mockResolvedValue([]),
+  },
+}));
+
+vi.mock('../features/coaching/api/coachingSessionApi', () => ({
+  coachingGovernanceApi: {
+    getPolicies: vi.fn().mockResolvedValue([]),
+  },
+}));
 
 vi.mock('../features/coaching/api/pmsReportApi', () => ({
   pmsReportApi: {
@@ -145,6 +168,31 @@ describe('PmsAdminDashboardPage 3-Tab Architecture', () => {
     ).toBeInTheDocument();
     expect(
       screen.getByPlaceholderText(/Search district, branch/i)
+    ).toBeInTheDocument();
+  });
+
+  it('renders Coaching Rules & Policies tab with AD DS Sync Cadence card', async () => {
+    renderWithAuth(['/coaching/pms?tab=policies']);
+
+    await waitFor(() => {
+      expect(
+        screen.getByText(/AD DS Directory Sync Cadence/i)
+      ).toBeInTheDocument();
+    });
+    expect(
+      screen.getByText(/7 Days \(Weekly - Governance Default\)/i)
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/1 Day \(Daily Sync\)/i)
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/12 Hours \(Twice Daily\)/i)
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/1 Hour \(High Frequency\)/i)
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: /Trigger AD DS Sync Now/i })
     ).toBeInTheDocument();
   });
 });
