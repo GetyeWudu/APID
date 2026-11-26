@@ -72,4 +72,22 @@ public interface MentoringRelationshipMemberRepository extends JpaRepository<Men
     List<MentoringRelationshipMember> findByRelationship_IdInOrderByJoinedAtAsc(
             Collection<Long> relationshipIds
     );
+
+    /**
+     * Finds the active member record for a specific mentor-trainee pair
+     * in any active INDIVIDUAL relationship. Used when creating group sessions.
+     */
+    @EntityGraph(attributePaths = {"relationship", "relationship.request", "traineeUser"})
+    @Query("""
+            SELECT m FROM MentoringRelationshipMember m
+            WHERE m.mentorUser.id = :mentorUserId
+              AND m.traineeUser.id = :traineeUserId
+              AND m.status = com.boa.apid.mentoring.pairing.entity.MentoringRelationshipMemberStatus.ACTIVE
+              AND m.relationship.status = com.boa.apid.mentoring.pairing.entity.MentoringRelationshipStatus.ACTIVE
+              AND m.relationship.request.requestType = com.boa.apid.mentoring.pairing.entity.MentoringRequestType.INDIVIDUAL
+            """)
+    java.util.Optional<MentoringRelationshipMember> findActiveIndividualMemberByMentorAndTrainee(
+            @Param("mentorUserId") Long mentorUserId,
+            @Param("traineeUserId") Long traineeUserId
+    );
 }

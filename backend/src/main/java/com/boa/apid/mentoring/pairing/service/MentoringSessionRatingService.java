@@ -11,6 +11,7 @@ import com.boa.apid.mentoring.pairing.entity.MentoringSession;
 import com.boa.apid.mentoring.pairing.entity.MentoringSessionRating;
 import com.boa.apid.mentoring.pairing.entity.MentoringSessionStatus;
 import com.boa.apid.mentoring.pairing.repository.MentoringRelationshipMemberRepository;
+import com.boa.apid.mentoring.pairing.repository.MentoringSessionAttendeeRepository;
 import com.boa.apid.mentoring.pairing.repository.MentoringSessionRatingRepository;
 import com.boa.apid.mentoring.pairing.repository.MentoringSessionRepository;
 import com.boa.apid.mentoring.trainer.entity.TrainerAuthorizationStatus;
@@ -30,6 +31,7 @@ public class MentoringSessionRatingService {
     private final MentoringSessionRepository sessionRepository;
     private final MentoringSessionRatingRepository ratingRepository;
     private final MentoringRelationshipMemberRepository memberRepository;
+    private final MentoringSessionAttendeeRepository sessionAttendeeRepository;
     private final TrainerAuthorizationRepository authorizationRepository;
     private final UserRoleRepository userRoleRepository;
     private final UserRepository userRepository;
@@ -38,6 +40,7 @@ public class MentoringSessionRatingService {
             MentoringSessionRepository sessionRepository,
             MentoringSessionRatingRepository ratingRepository,
             MentoringRelationshipMemberRepository memberRepository,
+            MentoringSessionAttendeeRepository sessionAttendeeRepository,
             TrainerAuthorizationRepository authorizationRepository,
             UserRoleRepository userRoleRepository,
             UserRepository userRepository
@@ -45,6 +48,7 @@ public class MentoringSessionRatingService {
         this.sessionRepository = sessionRepository;
         this.ratingRepository = ratingRepository;
         this.memberRepository = memberRepository;
+        this.sessionAttendeeRepository = sessionAttendeeRepository;
         this.authorizationRepository = authorizationRepository;
         this.userRoleRepository = userRoleRepository;
         this.userRepository = userRepository;
@@ -76,7 +80,7 @@ public class MentoringSessionRatingService {
             throw new ResourceNotFoundException("Mentoring session not found.");
         }
         requireMentee(session, menteeUserId);
-        if ((session.getStatus() != MentoringSessionStatus.CONFIRMED
+        if ((session.getStatus() != MentoringSessionStatus.SCHEDULED
                 && session.getStatus() != MentoringSessionStatus.COMPLETED)
                 || Instant.now().isBefore(session.getScheduledEnd())) {
             throw new BusinessException(
@@ -127,6 +131,15 @@ public class MentoringSessionRatingService {
     }
 
     private void requireMentee(MentoringSession session, Long userId) {
+        if (session.isGroupSession()) {
+            if (session.getCreatedByUser().getId().equals(userId)
+                    || !sessionAttendeeRepository.existsBySession_IdAndMember_TraineeUser_Id(
+                            session.getId(), userId)) {
+                throw new AccessDeniedException("Only a participant in this group session can rate it.");
+            }
+            return;
+        }
+
         Long relationshipId = session.getRelationship().getId();
         if (session.getTargetTraineeMember() != null
                 && !session.getTargetTraineeMember().getTraineeUser().getId().equals(userId)) {

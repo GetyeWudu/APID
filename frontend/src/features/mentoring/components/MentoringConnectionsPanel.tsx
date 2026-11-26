@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { ArrowRight, CalendarDays, GraduationCap, HeartHandshake } from 'lucide-react';
+import { ArrowRight, CalendarDays, GraduationCap, HeartHandshake, Users } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { EmptyState, StatusPill } from '../../../shared/components/ui';
 import type { MentoringRelationshipPair } from '../api/mentoringPairingApi';
@@ -27,10 +27,22 @@ export function MentoringConnectionsPanel({
   relationships: MentoringRelationshipPair[];
 }) {
   const [selectedUserId, setSelectedUserId] = useState<number | null>(null);
+  const [selectedGroupId, setSelectedGroupId] = useState<number | null>(null);
   const isMentor = role === 'MENTOR';
   const counterpartLabel = isMentor ? 'trainee' : 'mentor';
   const counterpartPlural = isMentor ? 'Trainees' : 'Mentors';
   const roleRelationships = relationships.filter((item) => item.currentUserRole === role);
+
+  const groupMap = new Map<number, {
+    relationshipId: number;
+    title: string;
+    skillName: string | null;
+    status: string;
+    startedAt: string;
+    message: string | null;
+    members: MentoringRelationshipPair[];
+  }>();
+
   const connectionsByUser = new Map<number, {
     userId: number;
     name: string;
@@ -38,6 +50,24 @@ export function MentoringConnectionsPanel({
   }>();
 
   roleRelationships.forEach((item) => {
+    if (isMentor && item.requestType === 'GROUP') {
+      const existingGroup = groupMap.get(item.relationshipId);
+      if (existingGroup) {
+        existingGroup.members.push(item);
+      } else {
+        groupMap.set(item.relationshipId, {
+          relationshipId: item.relationshipId,
+          title: item.skillName ? `${item.skillName} Group` : 'Group Cohort',
+          skillName: item.skillName,
+          status: item.relationshipStatus,
+          startedAt: item.startedAt,
+          message: item.message,
+          members: [item],
+        });
+      }
+      return;
+    }
+
     const userId = isMentor ? item.traineeUserId : item.mentorUserId;
     const name = isMentor ? item.traineeName : item.mentorName;
     const existing = connectionsByUser.get(userId);
@@ -48,6 +78,9 @@ export function MentoringConnectionsPanel({
     }
   });
 
+  const groups = [...groupMap.values()].sort(
+    (left, right) => new Date(right.startedAt).getTime() - new Date(left.startedAt).getTime()
+  );
   const connections = [...connectionsByUser.values()]
     .map((connection) => ({
       ...connection,
@@ -57,6 +90,8 @@ export function MentoringConnectionsPanel({
     }))
     .sort((left, right) => left.name.localeCompare(right.name));
   const selectedConnection = connections.find((item) => item.userId === selectedUserId);
+  const selectedGroup = groups.find((item) => item.relationshipId === selectedGroupId);
+  const totalSidebarCount = connections.length + groups.length;
 
   return (
     <section className="mentoring-connections" aria-label={`My ${counterpartPlural.toLowerCase()}`}>
@@ -66,9 +101,9 @@ export function MentoringConnectionsPanel({
             <h2>{counterpartPlural}</h2>
             <p>Select a person to see your pairings.</p>
           </div>
-          <span className="mentoring-dashboard__count">{connections.length}</span>
+          <span className="mentoring-dashboard__count">{totalSidebarCount}</span>
         </header>
-        {connections.length === 0 ? (
+        {totalSidebarCount === 0 ? (
           <EmptyState
             title={`No ${counterpartPlural.toLowerCase()} yet`}
             description={
@@ -80,13 +115,39 @@ export function MentoringConnectionsPanel({
           />
         ) : (
           <div className="mentoring-connections__people-list" aria-label={counterpartPlural}>
+            {groups.map((group) => (
+              <button
+                key={`group-${group.relationshipId}`}
+                type="button"
+                className={`mentoring-connections__person${selectedGroupId === group.relationshipId ? ' is-selected' : ''}`}
+                aria-pressed={selectedGroupId === group.relationshipId}
+                onClick={() => {
+                  setSelectedGroupId(group.relationshipId);
+                  setSelectedUserId(null);
+                }}
+              >
+                <span className="mentoring-connections__avatar" aria-hidden="true">
+                  <Users size={16} />
+                </span>
+                <span className="mentoring-connections__person-copy">
+                  <strong>{group.title}</strong>
+                  <span>
+                    Group · {group.members.length} trainee{group.members.length === 1 ? '' : 's'}
+                  </span>
+                </span>
+                <ArrowRight size={16} aria-hidden="true" />
+              </button>
+            ))}
             {connections.map((connection) => (
               <button
                 key={connection.userId}
                 type="button"
                 className={`mentoring-connections__person${selectedUserId === connection.userId ? ' is-selected' : ''}`}
                 aria-pressed={selectedUserId === connection.userId}
-                onClick={() => setSelectedUserId(connection.userId)}
+                onClick={() => {
+                  setSelectedUserId(connection.userId);
+                  setSelectedGroupId(null);
+                }}
               >
                 <span className="mentoring-connections__avatar" aria-hidden="true">
                   {connection.name.trim().charAt(0).toUpperCase()}
@@ -105,7 +166,45 @@ export function MentoringConnectionsPanel({
       </aside>
 
       <div className="mentoring-connections__details" aria-live="polite">
-        {selectedConnection ? (
+        {selectedGroup ? (
+          <>
+            <header className="mentoring-connections__details-header">
+              <div>
+                <span>Group mentoring cohort</span>
+                <h2>{selectedGroup.title}</h2>
+                <p>
+                  1 group pairing · {selectedGroup.members.length} trainee{selectedGroup.members.length === 1 ? '' : 's'}
+                </p>
+              </div>
+            </header>
+            <div className="mentoring-connections__pairings">
+              <article className="mentoring-connections__pairing">
+                <div className="mentoring-connections__pairing-icon" aria-hidden="true">
+                  <Users size={18} />
+                </div>
+                <div className="mentoring-connections__pairing-copy">
+                  <h3>{selectedGroup.skillName || 'Group cohort'}</h3>
+                  <p>
+                    Group pairing · <CalendarDays size={14} aria-hidden="true" /> Started {formatDate(selectedGroup.startedAt)}
+                  </p>
+                  <p style={{ marginTop: '0.35rem' }}>
+                    <strong>Trainees:</strong> {selectedGroup.members.map((m) => m.traineeName).join(', ')}
+                  </p>
+                  {selectedGroup.message && <p className="mentoring-connections__message">{selectedGroup.message}</p>}
+                </div>
+                <div className="mentoring-connections__pairing-actions">
+                  <StatusPill label={selectedGroup.status} tone={statusTone(selectedGroup.status)} />
+                  <Link
+                    to={`/mentoring/pairing/${selectedGroup.relationshipId}`}
+                    className="apid-btn apid-btn-outline apid-btn-sm"
+                  >
+                    View pairing <ArrowRight size={15} />
+                  </Link>
+                </div>
+              </article>
+            </div>
+          </>
+        ) : selectedConnection ? (
           <>
             <header className="mentoring-connections__details-header">
               <div>

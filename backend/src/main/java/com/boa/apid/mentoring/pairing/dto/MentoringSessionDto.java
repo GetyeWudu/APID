@@ -4,12 +4,13 @@ import com.boa.apid.mentoring.pairing.entity.MentoringDeliveryMode;
 import com.boa.apid.mentoring.pairing.entity.MentoringSessionStatus;
 
 import java.time.Instant;
+import java.util.List;
 
 public record MentoringSessionDto(
         Long id,
         Long relationshipId,
-        Long traineeUserId,
-        String traineeName,
+        Long traineeUserId,       // non-null only for INDIVIDUAL or single-target GROUP sessions
+        String traineeName,       // non-null only for INDIVIDUAL or single-target GROUP sessions
         String title,
         String agenda,
         Instant scheduledStart,
@@ -27,6 +28,16 @@ public record MentoringSessionDto(
         Instant respondedAt,
         String cancellationReason,
         String notes,
-        Instant createdAt
-) {
-}
+        Instant createdAt,
+        /** INDIVIDUAL | GROUP_ALL | GROUP_SUBSET */
+        String sessionScope,
+        /** populated for GROUP_SUBSET sessions; null otherwise */
+        List<Long> targetTraineeUserIds,
+        boolean isGroupSession,
+        /** names for targetTraineeUserIds; null for one-to-one sessions */
+        List<MentoringSessionParticipantDto> targetTrainees,
+        Long proposedByUserId,
+        boolean currentUserAccepted,
+        int acceptedParticipantCount,
+        int participantCount
+) {}

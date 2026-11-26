@@ -79,8 +79,10 @@ export function MentoringSessionReport({
   }
 
   const reportIsDue =
-    session.status === 'CONFIRMED' && Number.isFinite(scheduledEnd) && now >= scheduledEnd;
-  if (session.status !== 'CONFIRMED') return null;
+    (session.status === 'SCHEDULED' || session.status === 'CONFIRMED')
+    && Number.isFinite(scheduledEnd)
+    && now >= scheduledEnd;
+  if (session.status !== 'SCHEDULED' && session.status !== 'CONFIRMED') return null;
   if (!isMentor) {
     if (!reportIsDue) return null;
     return (

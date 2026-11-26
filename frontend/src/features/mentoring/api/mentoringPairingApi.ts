@@ -84,6 +84,7 @@ export interface MentoringPairingDetail {
 
 export type MentoringDeliveryMode = 'ONLINE' | 'IN_PERSON' | 'HYBRID';
 export type MentoringSessionStatus =
+  | 'PENDING'
   | 'SCHEDULED'
   | 'CONFIRMED'
   | 'DECLINED'
@@ -116,6 +117,17 @@ export interface MentoringSession {
   createdByUserId: number;
   createdByName: string;
   createdAt: string;
+  /** INDIVIDUAL | GROUP_ALL | GROUP_SUBSET */
+  sessionScope?: string | null;
+  /** populated for GROUP_SUBSET sessions */
+  targetTraineeUserIds?: number[] | null;
+  isGroupSession?: boolean;
+  /** display names for targetTraineeUserIds; absent on one-to-one sessions */
+  targetTrainees?: { userId: number; name: string }[] | null;
+  proposedByUserId?: number | null;
+  currentUserAccepted?: boolean;
+  acceptedParticipantCount?: number;
+  participantCount?: number;
 }
 
 export interface MentoringChatMessage {
@@ -223,6 +235,7 @@ export const mentoringPairingApi = {
       meetingUrl?: string;
       location?: string;
       traineeUserId?: number;
+      targetTraineeUserIds?: number[];
     }
   ): Promise<MentoringSession> {
     const response = await apiClient.post<ApiResponse<MentoringSession>>(
@@ -471,6 +484,46 @@ export const mentoringPairingApi = {
       `/mentoring/pairing/relationships/${relationshipId}/status`,
       input
     );
+  },
+
+  async createGroupPairing(sourceRelationshipIds: number[]): Promise<{
+    relationshipId: number;
+    mentorName: string;
+    skillName: string | null;
+    startedAt: string;
+    members: Array<{ memberId: number; traineeUserId: number; traineeName: string; memberStatus: string }>;
+    sourceRelationshipIds: number[];
+  }> {
+    const response = await apiClient.post<ApiResponse<{
+      relationshipId: number;
+      mentorName: string;
+      skillName: string | null;
+      startedAt: string;
+      members: Array<{ memberId: number; traineeUserId: number; traineeName: string; memberStatus: string }>;
+      sourceRelationshipIds: number[];
+    }>>('/mentoring/pairing/group', { sourceRelationshipIds });
+    return response.data.data;
+  },
+
+  async disbandGroupPairing(groupRelationshipId: number): Promise<void> {
+    await apiClient.delete(`/mentoring/pairing/group/${groupRelationshipId}`);
+  },
+
+  async createGroupSession(input: {
+    participantTraineeUserIds: number[];
+    title: string;
+    agenda?: string;
+    scheduledStart: string;
+    scheduledEnd: string;
+    deliveryMode: MentoringDeliveryMode;
+    meetingUrl?: string;
+    location?: string;
+  }): Promise<MentoringSession> {
+    const response = await apiClient.post<ApiResponse<MentoringSession>>(
+      '/mentoring/pairing/sessions/group',
+      input
+    );
+    return response.data.data;
   },
 
   async requestMentor(input: {

@@ -6,6 +6,7 @@ import com.boa.apid.core.authorization.entity.User;
 import com.boa.apid.core.authorization.entity.UserStatus;
 import com.boa.apid.core.authorization.repository.UserRepository;
 import com.boa.apid.core.authorization.repository.UserRoleRepository;
+import com.boa.apid.core.scheduling.dto.AvailabilityCheckResponse;
 import com.boa.apid.core.organization.entity.Employee;
 import com.boa.apid.core.organization.entity.EmploymentStatus;
 import com.boa.apid.core.organization.repository.EmployeeRepository;
@@ -13,19 +14,25 @@ import com.boa.apid.core.skills.entity.Skill;
 import com.boa.apid.mentoring.pairing.dto.MentoringChatMessageRequest;
 import com.boa.apid.mentoring.pairing.dto.MentoringSessionReportRequest;
 import com.boa.apid.mentoring.pairing.dto.MentoringSessionRequest;
+import com.boa.apid.mentoring.pairing.dto.ProposeMentoringRescheduleRequest;
+import com.boa.apid.mentoring.pairing.dto.RespondMentoringSessionRequest;
 import com.boa.apid.mentoring.pairing.entity.MentoringDeliveryMode;
 import com.boa.apid.mentoring.pairing.entity.MentoringMessage;
 import com.boa.apid.mentoring.pairing.entity.MentoringRelationship;
+import com.boa.apid.mentoring.pairing.entity.MentoringRelationshipMember;
 import com.boa.apid.mentoring.pairing.entity.MentoringRelationshipMemberStatus;
 import com.boa.apid.mentoring.pairing.entity.MentoringRelationshipStatus;
 import com.boa.apid.mentoring.pairing.entity.MentoringRequest;
 import com.boa.apid.mentoring.pairing.entity.MentoringRequestType;
 import com.boa.apid.mentoring.pairing.entity.MentoringSession;
+import com.boa.apid.mentoring.pairing.entity.MentoringSessionAttendee;
 import com.boa.apid.mentoring.pairing.entity.MentoringSessionStatus;
 import com.boa.apid.mentoring.pairing.repository.MentoringMessageRepository;
 import com.boa.apid.mentoring.pairing.repository.MentoringRelationshipMemberRepository;
 import com.boa.apid.mentoring.pairing.repository.MentoringRelationshipRepository;
 import com.boa.apid.mentoring.pairing.repository.MentoringSessionRepository;
+import com.boa.apid.mentoring.pairing.repository.MentoringSessionAttendeeRepository;
+import com.boa.apid.mentoring.pairing.repository.MentoringSessionTargetRepository;
 import com.boa.apid.mentoring.trainer.entity.TrainerAuthorization;
 import com.boa.apid.mentoring.trainer.entity.TrainerAuthorizationStatus;
 import com.boa.apid.mentoring.trainer.entity.TrainerAuthorizationSkillStatus;
@@ -41,7 +48,10 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.test.util.ReflectionTestUtils;
 
+import java.time.DayOfWeek;
+import java.time.Duration;
 import java.time.Instant;
+import java.time.ZoneId;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
@@ -49,6 +59,7 @@ import java.util.Set;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -59,6 +70,8 @@ class MentoringCollaborationServiceTest {
     @Mock private MentoringRelationshipRepository relationshipRepository;
     @Mock private MentoringRelationshipMemberRepository memberRepository;
     @Mock private MentoringSessionRepository sessionRepository;
+    @Mock private MentoringSessionTargetRepository sessionTargetRepository;
+    @Mock private MentoringSessionAttendeeRepository sessionAttendeeRepository;
     @Mock private MentoringMessageRepository messageRepository;
     @Mock private EmployeeRepository employeeRepository;
     @Mock private UserRepository userRepository;
@@ -111,7 +124,11 @@ class MentoringCollaborationServiceTest {
         org.springframework.test.util.ReflectionTestUtils.setField(mentorEmp, "id", 50L);
         when(employeeRepository.findByUserId(1L)).thenReturn(Optional.of(mentorEmp));
         when(sessionRepository.save(any(MentoringSession.class)))
-                .thenAnswer(invocation -> invocation.getArgument(0));
+                .thenAnswer(invocation -> {
+                    MentoringSession saved = invocation.getArgument(0);
+                    ReflectionTestUtils.setField(saved, "id", 11L);
+                    return saved;
+                });
         when(employeeRepository.findDetailedByUserIdIn(any())).thenReturn(List.of());
 
         Instant start = Instant.now().plusSeconds(3600);
@@ -124,6 +141,82 @@ class MentoringCollaborationServiceTest {
         assertEquals(start, captor.getValue().getScheduledStart());
         assertEquals(MentoringDeliveryMode.ONLINE, captor.getValue().getDeliveryMode());
         assertEquals(1L, captor.getValue().getCreatedByUser().getId());
+        assertEquals(MentoringSessionStatus.PENDING, captor.getValue().getStatus());
+    }
+
+    @Test
+    void groupSessionStaysPendingUntilEveryAttendeeAcceptsTheLatestMentorCounterproposal() {
+        User mentor = user(1L, "mentor");
+        User firstTrainee = user(2L, "trainee-one");
+        User secondTrainee = user(3L, "trainee-two");
+        MentoringRelationship relationship = relationship(mentor, MentoringRelationshipStatus.ACTIVE);
+        MentoringSession session = new MentoringSession();
+        ReflectionTestUtils.setField(session, "id", 11L);
+        session.setRelationship(relationship);
+        session.setCreatedByUser(mentor);
+        session.setGroupSession(true);
+        session.setStatus(MentoringSessionStatus.PENDING);
+        session.setScheduledStart(futureWeekday());
+        session.setScheduledEnd(session.getScheduledStart().plus(Duration.ofMinutes(45)));
+
+        MentoringSessionAttendee firstAttendee = attendee(session, relationship, mentor, firstTrainee);
+        MentoringSessionAttendee secondAttendee = attendee(session, relationship, mentor, secondTrainee);
+        List<MentoringSessionAttendee> attendees = List.of(firstAttendee, secondAttendee);
+
+        when(sessionRepository.findByIdForUpdate(11L)).thenReturn(Optional.of(session));
+        when(sessionRepository.save(any(MentoringSession.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+        when(sessionAttendeeRepository.findBySession_Id(11L)).thenReturn(attendees);
+        when(sessionAttendeeRepository.findBySession_IdAndMember_TraineeUser_Id(11L, 2L))
+                .thenReturn(Optional.of(firstAttendee));
+        when(sessionAttendeeRepository.findBySession_IdAndMember_TraineeUser_Id(11L, 3L))
+                .thenReturn(Optional.of(secondAttendee));
+        when(sessionAttendeeRepository.findBySessionIdIn(anyList())).thenReturn(attendees);
+        when(sessionTargetRepository.findBySessionIdIn(anyList())).thenReturn(List.of());
+        when(employeeRepository.findDetailedByUserIdIn(any())).thenReturn(List.of());
+        when(reservationService.checkAvailability(any())).thenReturn(AvailabilityCheckResponse.free());
+
+        Instant participantProposalStart = futureWeekday().plus(Duration.ofDays(7));
+        service.proposeReschedule(
+                7L,
+                11L,
+                new ProposeMentoringRescheduleRequest(
+                        participantProposalStart,
+                        participantProposalStart.plus(Duration.ofMinutes(45)),
+                        "Participant has a schedule conflict"
+                ),
+                actor(2L, "trainee-one")
+        );
+        assertEquals(MentoringSessionStatus.PENDING, session.getStatus());
+        assertEquals(2L, session.getProposedByUserId());
+
+        Instant mentorCounterproposalStart = participantProposalStart.plus(Duration.ofDays(7));
+        service.proposeReschedule(
+                7L,
+                11L,
+                new ProposeMentoringRescheduleRequest(
+                        mentorCounterproposalStart,
+                        mentorCounterproposalStart.plus(Duration.ofMinutes(45)),
+                        "This alternate time works for the group"
+                ),
+                actor(1L, "mentor")
+        );
+        assertEquals(1L, session.getProposedByUserId());
+
+        service.respondReschedule(7L, 11L, true, actor(2L, "trainee-one"));
+        assertEquals(MentoringSessionStatus.PENDING, session.getStatus());
+        assertEquals(mentorCounterproposalStart, session.getScheduledStart());
+        assertEquals(1, attendees.stream().filter(a -> a.hasAccepted(mentorCounterproposalStart)).count());
+
+        service.respondSession(
+                7L,
+                11L,
+                new RespondMentoringSessionRequest(true, null),
+                actor(3L, "trainee-two")
+        );
+
+        assertEquals(MentoringSessionStatus.SCHEDULED, session.getStatus());
+        assertEquals(2, attendees.stream().filter(a -> a.hasAccepted(mentorCounterproposalStart)).count());
     }
 
     @Test
@@ -191,16 +284,17 @@ class MentoringCollaborationServiceTest {
     }
 
     @Test
-    void mentorReportCompletesConfirmedSessionAfterItsScheduledEnd() {
+    void mentorReportCompletesGroupSessionAfterItsScheduledEnd() {
         User mentor = user(1L, "mentor");
         MentoringRelationship relationship = relationship(mentor, MentoringRelationshipStatus.ACTIVE);
         MentoringSession session = new MentoringSession();
         ReflectionTestUtils.setField(session, "id", 11L);
         session.setRelationship(relationship);
         session.setCreatedByUser(mentor);
+        session.setGroupSession(true);
         session.setScheduledStart(Instant.now().minusSeconds(7200));
         session.setScheduledEnd(Instant.now().minusSeconds(3600));
-        session.setStatus(MentoringSessionStatus.CONFIRMED);
+        session.setStatus(MentoringSessionStatus.SCHEDULED);
         when(relationshipRepository.findDetailedById(7L)).thenReturn(Optional.of(relationship));
         when(sessionRepository.findByIdForUpdate(11L)).thenReturn(Optional.of(session));
         when(sessionRepository.save(any(MentoringSession.class)))
@@ -230,7 +324,7 @@ class MentoringCollaborationServiceTest {
         session.setCreatedByUser(mentor);
         session.setScheduledStart(Instant.now());
         session.setScheduledEnd(Instant.now().plusSeconds(3600));
-        session.setStatus(MentoringSessionStatus.CONFIRMED);
+        session.setStatus(MentoringSessionStatus.SCHEDULED);
         when(relationshipRepository.findDetailedById(7L)).thenReturn(Optional.of(relationship));
         when(sessionRepository.findByIdForUpdate(11L)).thenReturn(Optional.of(session));
 
@@ -276,6 +370,31 @@ class MentoringCollaborationServiceTest {
                 MentoringDeliveryMode.ONLINE,
                 "https://meet.example.com/room"
         );
+    }
+
+    private static MentoringSessionAttendee attendee(
+            MentoringSession session,
+            MentoringRelationship relationship,
+            User mentor,
+            User trainee
+    ) {
+        MentoringRelationshipMember member = new MentoringRelationshipMember();
+        member.setRelationship(relationship);
+        member.setMentorUser(mentor);
+        member.setTraineeUser(trainee);
+
+        MentoringSessionAttendee attendee = new MentoringSessionAttendee();
+        attendee.setSession(session);
+        attendee.setMember(member);
+        return attendee;
+    }
+
+    private static Instant futureWeekday() {
+        Instant start = Instant.now().plus(Duration.ofDays(2));
+        while (start.atZone(ZoneId.of("Africa/Addis_Ababa")).getDayOfWeek() == DayOfWeek.SUNDAY) {
+            start = start.plus(Duration.ofDays(1));
+        }
+        return start;
     }
 
     private static MentoringRelationship relationship(User mentor, MentoringRelationshipStatus status) {

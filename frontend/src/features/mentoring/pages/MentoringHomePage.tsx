@@ -27,6 +27,7 @@ type MentoringViewKey =
   | 'directory'
   | 'trainee'
   | 'requests'
+  | 'sessions'
   | 'trainee-sessions'
   | 'trainer'
   | 'trainer-profile'
@@ -52,6 +53,7 @@ export function MentoringHomePage() {
     requestedView === 'directory' ||
     requestedView === 'trainee' ||
     requestedView === 'requests' ||
+    requestedView === 'sessions' ||
     requestedView === 'trainee-sessions' ||
     requestedView === 'trainer' ||
     requestedView === 'trainer-profile' ||
@@ -364,6 +366,13 @@ export function MentoringHomePage() {
     );
   }
 
-  return <MentoringSessionsPage view={activeView === 'trainer-sessions' ? 'mentor' : 'trainee'} />;
+  const sessionView = activeView === 'trainer-sessions'
+    ? 'mentor'
+    : activeView === 'trainee-sessions'
+      ? 'trainee'
+      : isMentor
+        ? 'mentor'
+        : 'trainee';
+  return <MentoringSessionsPage view={sessionView} />;
 }
 

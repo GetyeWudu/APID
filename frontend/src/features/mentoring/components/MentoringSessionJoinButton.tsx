@@ -7,13 +7,6 @@ interface MentoringSessionJoinButtonProps {
   onJoin: () => void;
 }
 
-function formatTime(value: string) {
-  const date = new Date(value);
-  return Number.isNaN(date.getTime())
-    ? 'the scheduled time'
-    : new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' }).format(date);
-}
-
 export function MentoringSessionJoinButton({ session, onJoin }: MentoringSessionJoinButtonProps) {
   const start = new Date(session.scheduledStart).getTime();
   const end = new Date(session.scheduledEnd).getTime();
@@ -32,18 +25,15 @@ export function MentoringSessionJoinButton({ session, onJoin }: MentoringSession
     return () => clearTimeout(timeout);
   }, [start, end, now]);
 
-  if (!isVideoSession || session.status === 'CANCELLED' || session.status === 'DECLINED') {
+  const isScheduled = session.status === 'SCHEDULED' || session.status === 'CONFIRMED';
+  const canJoin = isScheduled && Number.isFinite(start) && Number.isFinite(end) && now >= start && now < end;
+  if (
+    !isVideoSession ||
+    session.status === 'CANCELLED' ||
+    session.status === 'DECLINED'
+  ) {
     return null;
   }
-
-  const isConfirmed = session.status === 'CONFIRMED';
-  const canJoin = isConfirmed && Number.isFinite(start) && Number.isFinite(end) && now >= start && now < end;
-  let label = 'Join after the session is confirmed';
-  if (isConfirmed && now < start) label = `Available ${formatTime(session.scheduledStart)}`;
-  else if (isConfirmed && now >= end) label = 'Session time has ended';
-  else if (isConfirmed && canJoin) label = 'Join video session';
-  else if (session.status === 'RESCHEDULE_PROPOSED') label = 'Unavailable while reschedule is pending';
-  else if (session.status === 'COMPLETED' || session.status === 'MISSED') label = 'Session is finished';
 
   return (
     <button
@@ -53,7 +43,7 @@ export function MentoringSessionJoinButton({ session, onJoin }: MentoringSession
       className={`apid-btn apid-btn-sm ${canJoin ? 'apid-btn-primary' : 'apid-btn-outline'}`}
       aria-disabled={!canJoin}
     >
-      <Video size={14} /> {label}
+      <Video size={14} /> Join LiveKit Video
     </button>
   );
 }

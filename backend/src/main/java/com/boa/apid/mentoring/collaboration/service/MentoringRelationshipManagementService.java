@@ -35,6 +35,7 @@ import com.boa.apid.mentoring.pairing.entity.MentoringSession;
 import com.boa.apid.mentoring.pairing.repository.MentoringRelationshipMemberRepository;
 import com.boa.apid.mentoring.pairing.repository.MentoringRelationshipRepository;
 import com.boa.apid.mentoring.pairing.entity.MentoringSessionStatus;
+import com.boa.apid.mentoring.pairing.repository.MentoringSessionAttendeeRepository;
 import com.boa.apid.mentoring.pairing.repository.MentoringSessionRepository;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.access.AccessDeniedException;
@@ -54,6 +55,7 @@ public class MentoringRelationshipManagementService {
     private final MentoringRelationshipRepository relationshipRepository;
     private final MentoringRelationshipMemberRepository memberRepository;
     private final MentoringSessionRepository sessionRepository;
+    private final MentoringSessionAttendeeRepository sessionAttendeeRepository;
     private final MentoringResourceRepository resourceRepository;
     private final MentoringProgressNoteRepository progressNoteRepository;
     private final MentoringRelationshipFeedbackRepository feedbackRepository;
@@ -68,6 +70,7 @@ public class MentoringRelationshipManagementService {
             MentoringRelationshipRepository relationshipRepository,
             MentoringRelationshipMemberRepository memberRepository,
             MentoringSessionRepository sessionRepository,
+            MentoringSessionAttendeeRepository sessionAttendeeRepository,
             MentoringResourceRepository resourceRepository,
             MentoringProgressNoteRepository progressNoteRepository,
             MentoringRelationshipFeedbackRepository feedbackRepository,
@@ -81,6 +84,7 @@ public class MentoringRelationshipManagementService {
         this.relationshipRepository = relationshipRepository;
         this.memberRepository = memberRepository;
         this.sessionRepository = sessionRepository;
+        this.sessionAttendeeRepository = sessionAttendeeRepository;
         this.resourceRepository = resourceRepository;
         this.progressNoteRepository = progressNoteRepository;
         this.feedbackRepository = feedbackRepository;
@@ -106,9 +110,8 @@ public class MentoringRelationshipManagementService {
             Long sessionId,
             ApidUserPrincipal actor
     ) {
-        requireRelationshipAccess(relationshipId, actor.getUserId());
         MentoringSession session = requireSession(relationshipId, sessionId);
-        ensureSessionVisibleTo(session, actor.getUserId());
+        ensureSessionParticipantAccess(session, actor.getUserId());
         return resourceRepository.findByRelationship_IdAndSession_IdOrderByCreatedAtDesc(
                         relationshipId, sessionId)
                 .stream()
@@ -138,12 +141,12 @@ public class MentoringRelationshipManagementService {
             MultipartFile file,
             ApidUserPrincipal actor
     ) {
-        MentoringRelationship relationship = requireRelationshipAccess(relationshipId, actor.getUserId());
-        if (!relationship.getMentorUser().getId().equals(actor.getUserId())) {
+        MentoringSession session = requireSession(relationshipId, sessionId);
+        MentoringRelationship relationship = session.getRelationship();
+        if (!session.getCreatedByUser().getId().equals(actor.getUserId())) {
             throw new AccessDeniedException("Only the mentor can share resources for a session.");
         }
         ensureWritableParticipant(relationship, actor.getUserId());
-        MentoringSession session = requireSession(relationshipId, sessionId);
         return MentoringResourceDto.from(saveResource(relationship, session, title, externalUrl, file, actor));
     }
 
@@ -177,8 +180,7 @@ public class MentoringRelationshipManagementService {
                 || !resource.getSession().getRelationship().getId().equals(relationshipId)) {
             throw new ResourceNotFoundException("Mentoring resource not found");
         }
-        requireRelationshipAccess(relationshipId, actor.getUserId());
-        ensureSessionVisibleTo(resource.getSession(), actor.getUserId());
+        ensureSessionParticipantAccess(resource.getSession(), actor.getUserId());
         return loadResourceFile(resource);
     }
 
@@ -340,11 +342,11 @@ public class MentoringRelationshipManagementService {
         if (nextStatus == MentoringRelationshipStatus.COMPLETED
                 && sessionRepository.countByRelationship_IdAndStatus(
                         relationshipId,
-                        MentoringSessionStatus.CONFIRMED
+                        MentoringSessionStatus.SCHEDULED
                 ) > 0) {
             throw new BusinessException(
                     "MENTORING_SESSIONS_UNFINISHED",
-                    "Submit a report for every confirmed session before completing the relationship.",
+                    "Submit a report for every scheduled session before completing the relationship.",
                     HttpStatus.CONFLICT
             );
         }
@@ -422,6 +424,21 @@ public class MentoringRelationshipManagementService {
                 && !targetTrainee.getTraineeUser().getId().equals(userId)) {
             throw new ResourceNotFoundException("Mentoring session not found");
         }
+    }
+
+    private void ensureSessionParticipantAccess(MentoringSession session, Long userId) {
+        if (session.isGroupSession()) {
+            boolean isMentor = session.getCreatedByUser().getId().equals(userId);
+            boolean isAttendee = sessionAttendeeRepository.existsBySession_IdAndMember_TraineeUser_Id(
+                    session.getId(), userId);
+            if (!isMentor && !isAttendee) {
+                throw new ResourceNotFoundException("Mentoring session not found");
+            }
+            return;
+        }
+
+        requireRelationshipAccess(session.getRelationship().getId(), userId);
+        ensureSessionVisibleTo(session, userId);
     }
 
     private void ensureWritableParticipant(MentoringRelationship relationship, Long userId) {

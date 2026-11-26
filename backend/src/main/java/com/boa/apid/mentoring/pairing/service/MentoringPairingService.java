@@ -30,6 +30,7 @@ import com.boa.apid.mentoring.pairing.repository.MentoringRelationshipRepository
 import com.boa.apid.mentoring.pairing.repository.MentoringRelationshipMemberRepository;
 import com.boa.apid.mentoring.pairing.repository.MentoringRequestRecipientRepository;
 import com.boa.apid.mentoring.pairing.repository.MentoringRequestRepository;
+import com.boa.apid.mentoring.pairing.repository.MentoringGroupPairingSourceRepository;
 import com.boa.apid.mentoring.trainer.entity.TrainerAuthorization;
 import com.boa.apid.mentoring.trainer.entity.TrainerAuthorizationStatus;
 import com.boa.apid.mentoring.trainer.repository.TrainerAuthorizationRepository;
@@ -42,9 +43,11 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
 import java.util.Collection;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 @Service
 public class MentoringPairingService {
@@ -53,6 +56,7 @@ public class MentoringPairingService {
     private final MentoringRequestRecipientRepository recipientRepository;
     private final MentoringRelationshipRepository relationshipRepository;
     private final MentoringRelationshipMemberRepository relationshipMemberRepository;
+    private final MentoringGroupPairingSourceRepository groupPairingSourceRepository;
     private final UserRepository userRepository;
     private final UserRoleRepository userRoleRepository;
     private final EmployeeRepository employeeRepository;
@@ -66,6 +70,7 @@ public class MentoringPairingService {
             MentoringRequestRecipientRepository recipientRepository,
             MentoringRelationshipRepository relationshipRepository,
             MentoringRelationshipMemberRepository relationshipMemberRepository,
+            MentoringGroupPairingSourceRepository groupPairingSourceRepository,
             UserRepository userRepository,
             UserRoleRepository userRoleRepository,
             EmployeeRepository employeeRepository,
@@ -78,6 +83,7 @@ public class MentoringPairingService {
         this.recipientRepository = recipientRepository;
         this.relationshipRepository = relationshipRepository;
         this.relationshipMemberRepository = relationshipMemberRepository;
+        this.groupPairingSourceRepository = groupPairingSourceRepository;
         this.userRepository = userRepository;
         this.userRoleRepository = userRoleRepository;
         this.employeeRepository = employeeRepository;
@@ -104,8 +110,15 @@ public class MentoringPairingService {
 
     @Transactional(readOnly = true)
     public List<MentoringRelationshipPairDto> listMyRelationships(ApidUserPrincipal actor) {
+        // Relationships absorbed into a group must never appear in the list,
+        // regardless of their status (REASSIGNED for new ones, COMPLETED for old dirty data).
+        Set<Long> absorbedIds = new HashSet<>(groupPairingSourceRepository.findAllSourceRelationshipIds());
+
         List<MentoringRelationshipMember> members =
-                relationshipMemberRepository.findVisibleToUser(actor.getUserId());
+                relationshipMemberRepository.findVisibleToUser(actor.getUserId()).stream()
+                        .filter(member -> member.getRelationship().getStatus() != MentoringRelationshipStatus.REASSIGNED)
+                        .filter(member -> !absorbedIds.contains(member.getRelationship().getId()))
+                        .toList();
         Map<Long, Employee> employeesByUserId = loadEmployees(members.stream()
                 .flatMap(member -> List.of(
                         member.getMentorUser().getId(),

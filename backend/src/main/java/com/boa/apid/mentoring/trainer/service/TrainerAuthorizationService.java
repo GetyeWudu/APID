@@ -1069,7 +1069,8 @@ public class TrainerAuthorizationService {
         List<MentoringSession> sessions =
                 sessionRepository.findByRelationship_IdInOrderByScheduledStartDesc(relationshipIds);
         for (MentoringSession session : sessions) {
-            if ((session.getStatus() == MentoringSessionStatus.SCHEDULED
+            if ((session.getStatus() == MentoringSessionStatus.PENDING
+                    || session.getStatus() == MentoringSessionStatus.SCHEDULED
                     || session.getStatus() == MentoringSessionStatus.RESCHEDULED)
                     && session.getScheduledStart().isAfter(now)) {
                 session.setStatus(MentoringSessionStatus.CANCELLED);

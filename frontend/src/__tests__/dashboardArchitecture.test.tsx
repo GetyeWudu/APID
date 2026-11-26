@@ -362,7 +362,10 @@ describe('Portal Home module cards & scoped sidebar isolation', () => {
     expect(screen.queryByText('As a Mentor')).not.toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'My Mentors' })).toBeInTheDocument();
     expect(screen.queryByText('My Mentor')).not.toBeInTheDocument();
-    expect(screen.getByText('My Sessions')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'My Sessions' })).toHaveAttribute(
+      'href',
+      '/mentoring?view=sessions'
+    );
     expect(screen.getByText('Find a Mentor')).toBeInTheDocument();
     expect(await screen.findByRole('link', { name: 'My Trainees' })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'My Requests' })).toHaveAttribute(
@@ -370,7 +373,7 @@ describe('Portal Home module cards & scoped sidebar isolation', () => {
       '/mentoring?view=requests'
     );
     expect(screen.getByText('Mentor Profile')).toBeInTheDocument();
-    expect(screen.getByText('Mentor Sessions')).toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: 'Mentor Sessions' })).not.toBeInTheDocument();
 
     const navigation = within(screen.getByRole('navigation', { name: 'Module navigation' }));
     const linkLabels = navigation.getAllByRole('link').map((link) => link.textContent?.trim() ?? '');
@@ -383,7 +386,6 @@ describe('Portal Home module cards & scoped sidebar isolation', () => {
       'My Pairing',
       'My Sessions',
       'Apply to Become a Mentor',
-      'Mentor Sessions',
       'Mentor Profile',
       'Chat',
       'Resources',

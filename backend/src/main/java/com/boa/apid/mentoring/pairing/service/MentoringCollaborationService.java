@@ -27,11 +27,15 @@ import com.boa.apid.mentoring.pairing.entity.MentoringRelationshipMemberStatus;
 import com.boa.apid.mentoring.pairing.entity.MentoringRelationshipStatus;
 import com.boa.apid.mentoring.pairing.entity.MentoringRequestType;
 import com.boa.apid.mentoring.pairing.entity.MentoringSession;
+import com.boa.apid.mentoring.pairing.entity.MentoringSessionAttendee;
 import com.boa.apid.mentoring.pairing.entity.MentoringSessionStatus;
+import com.boa.apid.mentoring.pairing.entity.MentoringSessionTarget;
 import com.boa.apid.mentoring.pairing.repository.MentoringMessageRepository;
 import com.boa.apid.mentoring.pairing.repository.MentoringRelationshipMemberRepository;
 import com.boa.apid.mentoring.pairing.repository.MentoringRelationshipRepository;
 import com.boa.apid.mentoring.pairing.repository.MentoringSessionRepository;
+import com.boa.apid.mentoring.pairing.repository.MentoringSessionAttendeeRepository;
+import com.boa.apid.mentoring.pairing.repository.MentoringSessionTargetRepository;
 import com.boa.apid.mentoring.trainer.repository.TrainerAuthorizationRepository;
 import com.boa.apid.mentoring.trainer.entity.TrainerAuthorizationStatus;
 import com.boa.apid.mentoring.trainer.repository.TrainerAuthorizationSkillStatusRepository;
@@ -50,11 +54,13 @@ import java.time.Instant;
 import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 @Service
 public class MentoringCollaborationService {
@@ -68,6 +74,8 @@ public class MentoringCollaborationService {
     private final MentoringRelationshipRepository relationshipRepository;
     private final MentoringRelationshipMemberRepository memberRepository;
     private final MentoringSessionRepository sessionRepository;
+    private final MentoringSessionTargetRepository sessionTargetRepository;
+    private final MentoringSessionAttendeeRepository sessionAttendeeRepository;
     private final MentoringMessageRepository messageRepository;
     private final EmployeeRepository employeeRepository;
     private final UserRepository userRepository;
@@ -81,6 +89,8 @@ public class MentoringCollaborationService {
             MentoringRelationshipRepository relationshipRepository,
             MentoringRelationshipMemberRepository memberRepository,
             MentoringSessionRepository sessionRepository,
+            MentoringSessionTargetRepository sessionTargetRepository,
+            MentoringSessionAttendeeRepository sessionAttendeeRepository,
             MentoringMessageRepository messageRepository,
             EmployeeRepository employeeRepository,
             UserRepository userRepository,
@@ -93,6 +103,8 @@ public class MentoringCollaborationService {
         this.relationshipRepository = relationshipRepository;
         this.memberRepository = memberRepository;
         this.sessionRepository = sessionRepository;
+        this.sessionTargetRepository = sessionTargetRepository;
+        this.sessionAttendeeRepository = sessionAttendeeRepository;
         this.messageRepository = messageRepository;
         this.employeeRepository = employeeRepository;
         this.userRepository = userRepository;
@@ -151,12 +163,20 @@ public class MentoringCollaborationService {
         requireRelationshipAccess(relationshipId, actor.getUserId());
         List<MentoringSession> sessions =
                 sessionRepository.findByRelationship_IdOrderByScheduledStartDesc(relationshipId);
+        Map<Long, List<Long>> targetsBySession = loadSessionTargetUserIds(
+                sessions.stream().map(MentoringSession::getId).toList());
         List<MentoringSession> visibleSessions = sessions.stream()
-                .filter(session -> isSessionVisibleTo(session, actor.getUserId()))
+                .filter(session -> isSessionVisibleTo(session, actor.getUserId(), targetsBySession))
                 .toList();
-        Map<Long, Employee> employeesByUserId = loadSessionEmployees(visibleSessions);
+        Map<Long, Employee> employeesByUserId = employeesIncludingTargets(
+                loadSessionEmployees(visibleSessions),
+                targetsBySession
+        );
+        Map<Long, List<MentoringSessionAttendee>> attendeesBySession = loadSessionAttendees(
+                visibleSessions.stream().map(MentoringSession::getId).toList());
         return visibleSessions.stream()
-                .map(session -> toSessionDto(session, employeesByUserId))
+                .map(session -> toSessionDto(
+                        session, employeesByUserId, targetsBySession, attendeesBySession, actor.getUserId()))
                 .toList();
     }
 
@@ -166,18 +186,48 @@ public class MentoringCollaborationService {
                 .map(member -> member.getRelationship().getId())
                 .distinct()
                 .toList();
-        if (relationshipIds.isEmpty()) {
-            return List.of();
-        }
 
-        List<MentoringSession> sessions =
-                sessionRepository.findByRelationship_IdInOrderByScheduledStartDesc(relationshipIds);
-        List<MentoringSession> visibleSessions = sessions.stream()
-                .filter(session -> isSessionVisibleTo(session, actor.getUserId()))
+        // Regular pairing sessions
+        List<MentoringSession> sessions = relationshipIds.isEmpty()
+                ? new java.util.ArrayList<>()
+                : new java.util.ArrayList<>(
+                        sessionRepository.findByRelationship_IdInOrderByScheduledStartDesc(relationshipIds));
+
+        // Group sessions where this user is a targeted participant
+        List<MentoringSession> groupSessions =
+                sessionRepository.findGroupSessionsByTraineeUserId(actor.getUserId());
+        // Also include group sessions created by this user (mentor view)
+        List<MentoringSession> mentorGroupSessions =
+                sessionRepository.findGroupSessionsByMentorUserId(actor.getUserId());
+
+        // Merge, deduplicate by id
+        java.util.Set<Long> seen = new java.util.HashSet<>();
+        List<MentoringSession> allSessions = new java.util.ArrayList<>();
+        for (MentoringSession s : sessions) {
+            if (seen.add(s.getId())) allSessions.add(s);
+        }
+        for (MentoringSession s : groupSessions) {
+            if (seen.add(s.getId())) allSessions.add(s);
+        }
+        for (MentoringSession s : mentorGroupSessions) {
+            if (seen.add(s.getId())) allSessions.add(s);
+        }
+        allSessions.sort(java.util.Comparator.comparing(MentoringSession::getScheduledStart).reversed());
+
+        Map<Long, List<Long>> targetsBySession = loadSessionTargetUserIds(
+                allSessions.stream().map(MentoringSession::getId).toList());
+        List<MentoringSession> visibleSessions = allSessions.stream()
+                .filter(session -> isSessionVisibleTo(session, actor.getUserId(), targetsBySession))
                 .toList();
-        Map<Long, Employee> employeesByUserId = loadSessionEmployees(visibleSessions);
+        Map<Long, Employee> employeesByUserId = employeesIncludingTargets(
+                loadSessionEmployees(visibleSessions),
+                targetsBySession
+        );
+        Map<Long, List<MentoringSessionAttendee>> attendeesBySession = loadSessionAttendees(
+                visibleSessions.stream().map(MentoringSession::getId).toList());
         return visibleSessions.stream()
-                .map(session -> toSessionDto(session, employeesByUserId))
+                .map(session -> toSessionDto(
+                        session, employeesByUserId, targetsBySession, attendeesBySession, actor.getUserId()))
                 .toList();
     }
 
@@ -198,10 +248,10 @@ public class MentoringCollaborationService {
         if (!session.getRelationship().getId().equals(relationshipId)) {
             throw new BusinessException("SESSION_MISMATCH", "Session does not belong to this relationship.", HttpStatus.BAD_REQUEST);
         }
-        if (session.getStatus() != MentoringSessionStatus.CONFIRMED) {
+        if (session.getStatus() != MentoringSessionStatus.SCHEDULED) {
             throw new BusinessException(
                     "INVALID_SESSION_REPORT_STATE",
-                    "Only a confirmed session without a report can be completed.",
+                    "Only a scheduled session without a report can be completed.",
                     HttpStatus.CONFLICT
             );
         }
@@ -225,7 +275,13 @@ public class MentoringCollaborationService {
         MentoringSession saved = sessionRepository.save(session);
         reservationService.release("MENTORING", sessionId, "Session report submitted.");
         Map<Long, Employee> employeesByUserId = loadSessionEmployees(saved, actor.getUserId());
-        return toSessionDto(saved, employeesByUserId);
+        return toSessionDto(
+                saved,
+                employeesByUserId,
+                loadSessionTargetUserIds(List.of(saved.getId())),
+                loadSessionAttendees(List.of(saved.getId())),
+                actor.getUserId()
+        );
     }
 
     @Transactional
@@ -265,7 +321,11 @@ public class MentoringCollaborationService {
             );
         }
         validateSession(body);
-        MentoringRelationshipMember targetTrainee = resolveTargetTrainee(relationship, body.traineeUserId());
+        MentoringRelationshipMember targetTrainee = resolveTargetTrainee(relationship, body.traineeUserId(), body.targetTraineeUserIds());
+
+        // Determine effective target list for multi-target subset sessions
+        List<MentoringRelationshipMember> subsetTargetMembers = resolveSubsetTargetMembers(
+                relationship, body.targetTraineeUserIds(), body.traineeUserId());
 
         String meetingUrl = normalizeMeetingUrl(body.meetingUrl());
         String roomName = null;
@@ -291,14 +351,27 @@ public class MentoringCollaborationService {
         session.setMeetingRoomUrl(meetingUrl);
         session.setMeetingProvider(videoMeetingProvider.getProviderName());
         session.setLocation(normalizeOptionalText(body.location()));
-        session.setStatus(MentoringSessionStatus.SCHEDULED);
+        session.setStatus(MentoringSessionStatus.PENDING);
         session.setCreatedByUser(relationship.getMentorUser());
 
         MentoringSession saved = sessionRepository.save(session);
 
+        // Insert subset target rows when targeting multiple (but not all) group members
+        if (!subsetTargetMembers.isEmpty()) {
+            for (MentoringRelationshipMember subsetMember : subsetTargetMembers) {
+                MentoringSessionTarget target = new MentoringSessionTarget();
+                target.setSession(saved);
+                target.setMember(subsetMember);
+                sessionTargetRepository.save(target);
+            }
+        }
+        List<MentoringRelationshipMember> sessionAttendees = resolveSessionAttendees(
+                relationship, targetTrainee, subsetTargetMembers);
+        saveSessionAttendees(saved, sessionAttendees);
+
         // Register central reservation & enforce cross-module conflict check
         List<CreateReservationCommand.ParticipantReservationInput> participants =
-                getReservationParticipants(relationship, targetTrainee);
+                getReservationParticipants(relationship, targetTrainee, subsetTargetMembers);
         if (participants.isEmpty()) {
             throw new BusinessException("NO_PARTICIPANTS", "No valid employee participants found for this mentoring relationship.", HttpStatus.BAD_REQUEST);
         }
@@ -316,7 +389,14 @@ public class MentoringCollaborationService {
         ));
 
         Map<Long, Employee> employeesByUserId = loadSessionEmployees(saved, actor.getUserId());
-        return toSessionDto(saved, employeesByUserId);
+        Map<Long, List<Long>> targetsBySession = loadSessionTargetUserIds(List.of(saved.getId()));
+        return toSessionDto(
+                saved,
+                employeesByUserId,
+                targetsBySession,
+                loadSessionAttendees(List.of(saved.getId())),
+                actor.getUserId()
+        );
     }
 
     @Transactional
@@ -326,40 +406,44 @@ public class MentoringCollaborationService {
             RespondMentoringSessionRequest request,
             ApidUserPrincipal actor
     ) {
-        MentoringRelationship relationship = requireRelationshipAccess(relationshipId, actor.getUserId());
-        if (!isRelationshipTrainee(relationship, actor.getUserId())) {
-            throw new AccessDeniedException("Only the assigned trainee can accept or decline this session invitation.");
+        MentoringSession session = requireSessionParticipantAccess(relationshipId, sessionId, actor.getUserId());
+        if (isSessionMentor(session, actor.getUserId())) {
+            throw new AccessDeniedException("Only an invited mentee can accept or decline this session.");
         }
-
-        MentoringSession session = sessionRepository.findById(sessionId)
-                .orElseThrow(() -> new ResourceNotFoundException("Mentoring session not found."));
-
-        if (!session.getRelationship().getId().equals(relationshipId)) {
-            throw new BusinessException("SESSION_MISMATCH", "Session does not belong to this relationship.", HttpStatus.BAD_REQUEST);
+        if (request == null) {
+            throw new BusinessException("INVALID_SESSION_RESPONSE", "Choose whether to accept or decline the session.");
         }
-
-        ensureSessionVisibleTo(session, actor.getUserId());
-
-        if (session.getStatus() != MentoringSessionStatus.SCHEDULED) {
-            throw new BusinessException("INVALID_STATE", "This session is currently " + session.getStatus() + " and cannot be answered.", HttpStatus.BAD_REQUEST);
+        if (session.getStatus() != MentoringSessionStatus.PENDING || session.getProposedStart() != null) {
+            throw new BusinessException(
+                    "INVALID_STATE",
+                    "This session is waiting on a schedule proposal or is no longer pending.",
+                    HttpStatus.BAD_REQUEST
+            );
         }
-
+        MentoringSessionAttendee attendee = getSessionAttendee(session, actor.getUserId());
         session.setRespondedAt(Instant.now());
         if (request.accept()) {
-            session.setStatus(MentoringSessionStatus.CONFIRMED);
+            attendee.setAcceptedScheduledStart(session.getScheduledStart());
+            sessionAttendeeRepository.save(attendee);
+            updateStatusWhenAllAttendeesAccepted(session);
         } else {
             if (request.declineReason() == null || request.declineReason().isBlank()) {
-                throw new BusinessException("DECLINE_REASON_REQUIRED", "Bank policy requires an explanatory reason when declining a scheduled session.", HttpStatus.BAD_REQUEST);
+                throw new BusinessException("DECLINE_REASON_REQUIRED", "Bank policy requires an explanatory reason when declining a session.", HttpStatus.BAD_REQUEST);
             }
             session.setStatus(MentoringSessionStatus.DECLINED);
             session.setDeclineReason(request.declineReason().trim());
-            // Release central reservation
             reservationService.release("MENTORING", session.getId(), "Trainee declined: " + request.declineReason().trim());
         }
 
         MentoringSession saved = sessionRepository.save(session);
         Map<Long, Employee> employeesByUserId = loadSessionEmployees(saved, actor.getUserId());
-        return toSessionDto(saved, employeesByUserId);
+        return toSessionDto(
+                saved,
+                employeesByUserId,
+                loadSessionTargetUserIds(List.of(saved.getId())),
+                loadSessionAttendees(List.of(saved.getId())),
+                actor.getUserId()
+        );
     }
 
     @Transactional
@@ -369,27 +453,14 @@ public class MentoringCollaborationService {
             ProposeMentoringRescheduleRequest request,
             ApidUserPrincipal actor
     ) {
-        MentoringRelationship relationship = requireRelationshipAccess(relationshipId, actor.getUserId());
-        boolean isMentor = relationship.getMentorUser().getId().equals(actor.getUserId());
-        boolean isTrainee = isRelationshipTrainee(relationship, actor.getUserId());
-        if (!isMentor && !isTrainee) {
-            throw new AccessDeniedException("Only relationship participants can propose rescheduling.");
-        }
-
-        MentoringSession session = sessionRepository.findById(sessionId)
-                .orElseThrow(() -> new ResourceNotFoundException("Mentoring session not found."));
-
-        if (!session.getRelationship().getId().equals(relationshipId)) {
-            throw new BusinessException("SESSION_MISMATCH", "Session does not belong to this relationship.", HttpStatus.BAD_REQUEST);
-        }
-
-        ensureSessionVisibleTo(session, actor.getUserId());
-
-        if (session.getStatus() == MentoringSessionStatus.COMPLETED || session.getStatus() == MentoringSessionStatus.CANCELLED) {
+        MentoringSession session = requireSessionParticipantAccess(relationshipId, sessionId, actor.getUserId());
+        if (session.getStatus() == MentoringSessionStatus.COMPLETED
+                || session.getStatus() == MentoringSessionStatus.CANCELLED
+                || session.getStatus() == MentoringSessionStatus.DECLINED) {
             throw new BusinessException("INVALID_STATE", "Cannot reschedule a completed or cancelled session.", HttpStatus.BAD_REQUEST);
         }
 
-        if (request.proposedStart() == null || request.proposedEnd() == null
+        if (request == null || request.proposedStart() == null || request.proposedEnd() == null
                 || !request.proposedStart().isAfter(Instant.now())
                 || !request.proposedEnd().isAfter(request.proposedStart())) {
             throw new BusinessException("INVALID_MENTORING_SESSION_TIME", "Choose a future proposed start time and end time.", HttpStatus.BAD_REQUEST);
@@ -404,8 +475,7 @@ public class MentoringCollaborationService {
             throw new BusinessException("REASON_REQUIRED", "Bank policy requires an explanatory reason when proposing a new time.", HttpStatus.BAD_REQUEST);
         }
 
-        // Check availability across mentor and trainees
-        List<Long> employeeIds = getSessionEmployeeIds(relationship, session.getTargetTraineeMember());
+        List<Long> employeeIds = getSessionEmployeeIds(session);
         AvailabilityCheckResponse check = reservationService.checkAvailability(
                 new AvailabilityCheckRequest(employeeIds, request.proposedStart(), request.proposedEnd(), "MENTORING", session.getId())
         );
@@ -417,15 +487,23 @@ public class MentoringCollaborationService {
                     HttpStatus.CONFLICT);
         }
 
-        session.setStatus(MentoringSessionStatus.RESCHEDULE_PROPOSED);
+        resetSessionAttendeeAcceptances(session);
+        session.setStatus(MentoringSessionStatus.PENDING);
         session.setProposedStart(request.proposedStart());
         session.setProposedEnd(request.proposedEnd());
         session.setRescheduleReason(request.reason().trim());
+        session.setProposedByUserId(actor.getUserId());
         session.setRespondedAt(Instant.now());
 
         MentoringSession saved = sessionRepository.save(session);
         Map<Long, Employee> employeesByUserId = loadSessionEmployees(saved, actor.getUserId());
-        return toSessionDto(saved, employeesByUserId);
+        return toSessionDto(
+                saved,
+                employeesByUserId,
+                loadSessionTargetUserIds(List.of(saved.getId())),
+                loadSessionAttendees(List.of(saved.getId())),
+                actor.getUserId()
+        );
     }
 
     @Transactional
@@ -435,39 +513,56 @@ public class MentoringCollaborationService {
             boolean accept,
             ApidUserPrincipal actor
     ) {
-        MentoringRelationship relationship = requireRelationshipAccess(relationshipId, actor.getUserId());
-        boolean isMentor = relationship.getMentorUser().getId().equals(actor.getUserId());
-        if (!isMentor) {
-            throw new AccessDeniedException("Only the designated mentor can accept or reject proposed reschedules.");
+        MentoringSession session = requireSessionParticipantAccess(relationshipId, sessionId, actor.getUserId());
+        Long proposedByUserId = session.getProposedByUserId();
+        boolean isMentor = isSessionMentor(session, actor.getUserId());
+        boolean isProposalPending = session.getProposedStart() != null
+                && session.getProposedEnd() != null
+                && (session.getStatus() == MentoringSessionStatus.PENDING
+                    || session.getStatus() == MentoringSessionStatus.RESCHEDULE_PROPOSED);
+        if (!isProposalPending) {
+            throw new BusinessException("INVALID_STATE", "There is no pending schedule proposal for this session.", HttpStatus.BAD_REQUEST);
         }
 
-        MentoringSession session = sessionRepository.findById(sessionId)
-                .orElseThrow(() -> new ResourceNotFoundException("Mentoring session not found."));
-
-        if (!session.getRelationship().getId().equals(relationshipId)) {
-            throw new BusinessException("SESSION_MISMATCH", "Session does not belong to this relationship.", HttpStatus.BAD_REQUEST);
-        }
-
-        if (session.getStatus() != MentoringSessionStatus.RESCHEDULE_PROPOSED) {
-            throw new BusinessException("INVALID_STATE", "There is no pending reschedule request for this session.", HttpStatus.BAD_REQUEST);
-        }
-
-        if (accept) {
-            session.setScheduledStart(session.getProposedStart());
-            session.setScheduledEnd(session.getProposedEnd());
-            session.setStatus(MentoringSessionStatus.CONFIRMED);
-            session.setProposedStart(null);
-            session.setProposedEnd(null);
-            reservationService.reschedule("MENTORING", session.getId(), session.getScheduledStart(), session.getScheduledEnd());
+        if (isMentor) {
+            if (proposedByUserId != null && proposedByUserId.equals(actor.getUserId())) {
+                throw new BusinessException("INVALID_STATE", "You cannot accept your own schedule proposal.", HttpStatus.BAD_REQUEST);
+            }
+            if (!accept) {
+                session.setProposedStart(null);
+                session.setProposedEnd(null);
+                session.setProposedByUserId(null);
+                session.setRescheduleReason(null);
+                session.setStatus(MentoringSessionStatus.PENDING);
+            } else {
+                commitProposedSchedule(session, proposedByUserId);
+            }
         } else {
-            session.setStatus(MentoringSessionStatus.SCHEDULED);
-            session.setProposedStart(null);
-            session.setProposedEnd(null);
+            if (!actor.getUserId().equals(proposedByUserId) && !session.getCreatedByUser().getId().equals(proposedByUserId)) {
+                throw new AccessDeniedException("Only the mentor can respond to a participant's schedule proposal.");
+            }
+            if (!accept) {
+                throw new BusinessException(
+                        "ALTERNATE_TIME_REQUIRED",
+                        "Propose another time or decline the session instead of rejecting the mentor's proposed time.",
+                        HttpStatus.BAD_REQUEST
+                );
+            }
+            if (!session.getCreatedByUser().getId().equals(proposedByUserId)) {
+                throw new AccessDeniedException("The mentor must respond to a participant's schedule proposal.");
+            }
+            commitProposedSchedule(session, actor.getUserId());
         }
-
+        session.setRespondedAt(Instant.now());
         MentoringSession saved = sessionRepository.save(session);
         Map<Long, Employee> employeesByUserId = loadSessionEmployees(saved, actor.getUserId());
-        return toSessionDto(saved, employeesByUserId);
+        return toSessionDto(
+                saved,
+                employeesByUserId,
+                loadSessionTargetUserIds(List.of(saved.getId())),
+                loadSessionAttendees(List.of(saved.getId())),
+                actor.getUserId()
+        );
     }
 
     @Transactional
@@ -500,7 +595,13 @@ public class MentoringCollaborationService {
 
         MentoringSession saved = sessionRepository.save(session);
         Map<Long, Employee> employeesByUserId = loadSessionEmployees(saved, actor.getUserId());
-        return toSessionDto(saved, employeesByUserId);
+        return toSessionDto(
+                saved,
+                employeesByUserId,
+                loadSessionTargetUserIds(List.of(saved.getId())),
+                loadSessionAttendees(List.of(saved.getId())),
+                actor.getUserId()
+        );
     }
 
     @Transactional(readOnly = true)
@@ -603,20 +704,32 @@ public class MentoringCollaborationService {
 
     private MentoringRelationshipMember resolveTargetTrainee(
             MentoringRelationship relationship,
-            Long traineeUserId
+            Long traineeUserId,
+            List<Long> targetTraineeUserIds
     ) {
-        if (relationship.getRequest().getRequestType() == MentoringRequestType.GROUP && traineeUserId == null) {
-            throw new BusinessException(
-                    "MENTORING_SESSION_TRAINEE_REQUIRED",
-                    "Select the trainee who should receive this group-pairing session."
-            );
+        // Priority: targetTraineeUserIds over traineeUserId
+        List<Long> effectiveIds = (targetTraineeUserIds != null && !targetTraineeUserIds.isEmpty())
+                ? targetTraineeUserIds
+                : (traineeUserId != null ? List.of(traineeUserId) : null);
+
+        if (effectiveIds == null || effectiveIds.isEmpty()) {
+            // No specific target — means ALL (valid for GROUP, or INDIVIDUAL with one implicit trainee)
+            if (relationship.getRequest().getRequestType() == MentoringRequestType.GROUP) {
+                return null; // targeting all group members
+            }
+            return null; // INDIVIDUAL: single-member, targetTraineeMember remains null
         }
-        if (traineeUserId == null) {
+
+        if (effectiveIds.size() >= 2) {
+            // Multi-target subset — targetTraineeMember is null, targets stored separately
             return null;
         }
+
+        // Single target
+        Long singleTraineeUserId = effectiveIds.get(0);
         return memberRepository.findByRelationship_IdAndTraineeUser_IdAndStatus(
                         relationship.getId(),
-                        traineeUserId,
+                        singleTraineeUserId,
                         MentoringRelationshipMemberStatus.ACTIVE
                 )
                 .orElseThrow(() -> new BusinessException(
@@ -625,11 +738,73 @@ public class MentoringCollaborationService {
                 ));
     }
 
+    /**
+     * Returns the list of members to store in mentoring_session_targets when the session
+     * targets a subset of a group (2+ trainee IDs). Returns empty list otherwise.
+     */
+    private List<MentoringRelationshipMember> resolveSubsetTargetMembers(
+            MentoringRelationship relationship,
+            List<Long> targetTraineeUserIds,
+            Long legacyTraineeUserId
+    ) {
+        List<Long> effectiveIds = (targetTraineeUserIds != null && !targetTraineeUserIds.isEmpty())
+                ? targetTraineeUserIds
+                : (legacyTraineeUserId != null ? List.of(legacyTraineeUserId) : null);
+
+        if (effectiveIds == null || effectiveIds.size() < 2) {
+            return List.of();
+        }
+
+        // GROUP subset: resolve each member
+        List<MentoringRelationshipMember> result = new ArrayList<>();
+        for (Long traineeId : effectiveIds) {
+            MentoringRelationshipMember member = memberRepository
+                    .findByRelationship_IdAndTraineeUser_IdAndStatus(
+                            relationship.getId(), traineeId, MentoringRelationshipMemberStatus.ACTIVE)
+                    .orElseThrow(() -> new BusinessException(
+                            "INVALID_MENTORING_SESSION_TRAINEE",
+                            "Trainee " + traineeId + " is not an active member of this relationship."
+                    ));
+            result.add(member);
+        }
+        return result;
+    }
+
     private boolean isSessionVisibleTo(MentoringSession session, Long userId) {
+        // Mentor always sees all sessions
+        if (session.getRelationship().getMentorUser().getId().equals(userId)) {
+            return true;
+        }
         MentoringRelationshipMember targetTrainee = session.getTargetTraineeMember();
-        return targetTrainee == null
-                || session.getRelationship().getMentorUser().getId().equals(userId)
-                || targetTrainee.getTraineeUser().getId().equals(userId);
+        if (targetTrainee != null) {
+            return targetTrainee.getTraineeUser().getId().equals(userId);
+        }
+        // Check subset targets
+        List<MentoringSessionTarget> targets = sessionTargetRepository.findBySessionId(session.getId());
+        if (targets.isEmpty()) {
+            return true; // GROUP_ALL
+        }
+        return targets.stream()
+                .anyMatch(t -> t.getMember().getTraineeUser().getId().equals(userId));
+    }
+
+    private boolean isSessionVisibleTo(
+            MentoringSession session,
+            Long userId,
+            Map<Long, List<Long>> targetsBySession
+    ) {
+        if (session.getRelationship().getMentorUser().getId().equals(userId)) {
+            return true;
+        }
+        MentoringRelationshipMember targetTrainee = session.getTargetTraineeMember();
+        if (targetTrainee != null) {
+            return targetTrainee.getTraineeUser().getId().equals(userId);
+        }
+        List<Long> subsetUserIds = targetsBySession.get(session.getId());
+        if (subsetUserIds == null || subsetUserIds.isEmpty()) {
+            return true; // GROUP_ALL
+        }
+        return subsetUserIds.contains(userId);
     }
 
     private void ensureSessionVisibleTo(MentoringSession session, Long userId) {
@@ -638,27 +813,23 @@ public class MentoringCollaborationService {
         }
     }
 
-    private List<Long> getSessionEmployeeIds(
-            MentoringRelationship relationship,
-            MentoringRelationshipMember targetTrainee
-    ) {
+    private List<Long> getSessionEmployeeIds(MentoringSession session) {
         List<Long> employeeIds = new ArrayList<>();
-        employeeRepository.findByUserId(relationship.getMentorUser().getId())
+        employeeRepository.findByUserId(session.getCreatedByUser().getId())
                 .ifPresent(e -> employeeIds.add(e.getId()));
 
-        List<MentoringRelationshipMember> members = targetTrainee == null
-                ? memberRepository.findByRelationship_IdOrderByJoinedAtAsc(relationship.getId())
-                : List.of(targetTrainee);
-        for (MentoringRelationshipMember m : members) {
+        for (MentoringSessionAttendee attendee : sessionAttendeeRepository.findBySession_Id(session.getId())) {
+            MentoringRelationshipMember m = attendee.getMember();
             employeeRepository.findByUserId(m.getTraineeUser().getId())
                     .ifPresent(e -> employeeIds.add(e.getId()));
         }
-        return employeeIds;
+        return employeeIds.stream().distinct().toList();
     }
 
     private List<CreateReservationCommand.ParticipantReservationInput> getReservationParticipants(
             MentoringRelationship relationship,
-            MentoringRelationshipMember targetTrainee
+            MentoringRelationshipMember targetTrainee,
+            List<MentoringRelationshipMember> subsetMembers
     ) {
         List<CreateReservationCommand.ParticipantReservationInput> commands = new ArrayList<>();
         Employee mentorEmp = employeeRepository.findByUserId(relationship.getMentorUser().getId()).orElse(null);
@@ -666,9 +837,14 @@ public class MentoringCollaborationService {
             commands.add(new CreateReservationCommand.ParticipantReservationInput(mentorEmp.getId(), ParticipationRole.MENTOR));
         }
 
-        List<MentoringRelationshipMember> members = targetTrainee == null
-                ? memberRepository.findByRelationship_IdOrderByJoinedAtAsc(relationship.getId())
-                : List.of(targetTrainee);
+        List<MentoringRelationshipMember> members;
+        if (!subsetMembers.isEmpty()) {
+            members = subsetMembers;
+        } else if (targetTrainee != null) {
+            members = List.of(targetTrainee);
+        } else {
+            members = memberRepository.findByRelationship_IdOrderByJoinedAtAsc(relationship.getId());
+        }
         for (MentoringRelationshipMember m : members) {
             Employee traineeEmp = employeeRepository.findByUserId(m.getTraineeUser().getId()).orElse(null);
             if (traineeEmp != null) {
@@ -676,6 +852,23 @@ public class MentoringCollaborationService {
             }
         }
         return commands;
+    }
+
+    /**
+     * Batch-loads session target trainee user IDs for a list of sessions.
+     * Returns map: sessionId → list of trainee user IDs (empty list = GROUP_ALL).
+     */
+    private Map<Long, List<Long>> loadSessionTargetUserIds(List<Long> sessionIds) {
+        if (sessionIds.isEmpty()) {
+            return Map.of();
+        }
+        Map<Long, List<Long>> result = new HashMap<>();
+        List<MentoringSessionTarget> targets = sessionTargetRepository.findBySessionIdIn(sessionIds);
+        for (MentoringSessionTarget target : targets) {
+            result.computeIfAbsent(target.getSession().getId(), k -> new ArrayList<>())
+                    .add(target.getMember().getTraineeUser().getId());
+        }
+        return result;
     }
 
     private void validateSession(MentoringSessionRequest body) {
@@ -770,6 +963,55 @@ public class MentoringCollaborationService {
         return loadEmployees(userIds);
     }
 
+    private Map<Long, Employee> employeesIncludingTargets(
+            Map<Long, Employee> employeesByUserId,
+            Map<Long, List<Long>> targetsBySession
+    ) {
+        Set<Long> missing = new LinkedHashSet<>();
+        for (List<Long> userIds : targetsBySession.values()) {
+            for (Long userId : userIds) {
+                if (userId != null && !employeesByUserId.containsKey(userId)) {
+                    missing.add(userId);
+                }
+            }
+        }
+        if (missing.isEmpty()) {
+            return employeesByUserId;
+        }
+        Map<Long, Employee> merged = new LinkedHashMap<>(employeesByUserId);
+        merged.putAll(loadEmployees(missing));
+        return merged;
+    }
+
+    private List<MentoringSessionParticipantDto> namedParticipants(
+            List<Long> userIds,
+            Map<Long, Employee> employeesByUserId
+    ) {
+        if (userIds == null || userIds.isEmpty()) {
+            return null;
+        }
+        Map<Long, Employee> names = employeesByUserId;
+        List<Long> missing = userIds.stream()
+                .filter(userId -> userId != null && !employeesByUserId.containsKey(userId))
+                .toList();
+        if (!missing.isEmpty()) {
+            names = new LinkedHashMap<>(employeesByUserId);
+            names.putAll(loadEmployees(missing));
+        }
+        List<MentoringSessionParticipantDto> participants = new ArrayList<>();
+        for (Long userId : userIds) {
+            if (userId == null) {
+                continue;
+            }
+            Employee employee = names.get(userId);
+            participants.add(new MentoringSessionParticipantDto(
+                    userId,
+                    employee == null ? "Trainee #" + userId : employee.getFullName()
+            ));
+        }
+        return participants;
+    }
+
     private String employeeName(Long userId, String username, Map<Long, Employee> employeesByUserId) {
         Employee employee = employeesByUserId.get(userId);
         return employee == null ? username : employee.getFullName();
@@ -791,12 +1033,12 @@ public class MentoringCollaborationService {
             throw new BusinessException("NOT_A_VIDEO_SESSION", "This mentoring session is configured for in-person delivery.", HttpStatus.BAD_REQUEST);
         }
         Instant now = Instant.now();
-        if (session.getStatus() != MentoringSessionStatus.CONFIRMED
+        if (session.getStatus() != MentoringSessionStatus.SCHEDULED
                 || now.isBefore(session.getScheduledStart())
                 || !now.isBefore(session.getScheduledEnd())) {
             throw new BusinessException(
                     "MENTORING_SESSION_NOT_JOINABLE",
-                    "Video access is available only during the confirmed session time.",
+                    "Video access is available only during the scheduled session time.",
                     HttpStatus.CONFLICT
             );
         }
@@ -837,7 +1079,10 @@ public class MentoringCollaborationService {
 
     private MentoringSessionDto toSessionDto(
             MentoringSession session,
-            Map<Long, Employee> employeesByUserId
+            Map<Long, Employee> employeesByUserId,
+            Map<Long, List<Long>> targetsBySession,
+            Map<Long, List<MentoringSessionAttendee>> attendeesBySession,
+            Long currentUserId
     ) {
         User creator = session.getCreatedByUser();
         MentoringRelationshipMember targetTrainee = session.getTargetTraineeMember();
@@ -846,6 +1091,34 @@ public class MentoringCollaborationService {
                 && (meetingUrl == null || meetingUrl.isBlank())) {
             meetingUrl = "wss://apid-livekit.home.arpa/boa-mentoring-rel" + session.getRelationship().getId() + "-s" + session.getId();
         }
+
+        // Determine sessionScope and targetTraineeUserIds
+        List<Long> subsetUserIds = targetsBySession.getOrDefault(session.getId(), List.of());
+        String sessionScope;
+        List<Long> targetUserIdsForDto;
+        if (targetTrainee != null) {
+            sessionScope = "INDIVIDUAL";
+            targetUserIdsForDto = null;
+        } else if (!subsetUserIds.isEmpty()) {
+            sessionScope = "GROUP_SUBSET";
+            targetUserIdsForDto = subsetUserIds;
+        } else {
+            sessionScope = "GROUP_ALL";
+            targetUserIdsForDto = null;
+        }
+
+        List<MentoringSessionParticipantDto> targetTrainees = namedParticipants(
+                targetUserIdsForDto,
+                employeesByUserId
+        );
+        List<MentoringSessionAttendee> attendees =
+                attendeesBySession.getOrDefault(session.getId(), List.of());
+        int acceptedParticipantCount = (int) attendees.stream()
+                .filter(attendee -> attendee.hasAccepted(session.getScheduledStart()))
+                .count();
+        boolean currentUserAccepted = attendees.stream()
+                .anyMatch(attendee -> attendee.getMember().getTraineeUser().getId().equals(currentUserId)
+                        && attendee.hasAccepted(session.getScheduledStart()));
 
         return new MentoringSessionDto(
                 session.getId(),
@@ -875,8 +1148,126 @@ public class MentoringCollaborationService {
                 session.getRespondedAt(),
                 session.getCancellationReason(),
                 session.getNotes(),
-                session.getCreatedAt()
+                session.getCreatedAt(),
+                sessionScope,
+                targetUserIdsForDto,
+                session.isGroupSession(),
+                targetTrainees,
+                session.getProposedByUserId(),
+                currentUserAccepted,
+                acceptedParticipantCount,
+                attendees.size()
         );
+    }
+
+    private Map<Long, List<MentoringSessionAttendee>> loadSessionAttendees(List<Long> sessionIds) {
+        if (sessionIds.isEmpty()) {
+            return Map.of();
+        }
+        return sessionAttendeeRepository.findBySessionIdIn(sessionIds).stream()
+                .collect(Collectors.groupingBy(attendee -> attendee.getSession().getId()));
+    }
+
+    private List<MentoringRelationshipMember> resolveSessionAttendees(
+            MentoringRelationship relationship,
+            MentoringRelationshipMember targetTrainee,
+            List<MentoringRelationshipMember> subsetTargetMembers
+    ) {
+        if (!subsetTargetMembers.isEmpty()) {
+            return subsetTargetMembers;
+        }
+        if (targetTrainee != null) {
+            return List.of(targetTrainee);
+        }
+        return memberRepository.findByRelationship_IdOrderByJoinedAtAsc(relationship.getId()).stream()
+                .filter(member -> member.getStatus() == MentoringRelationshipMemberStatus.ACTIVE)
+                .toList();
+    }
+
+    private void saveSessionAttendees(
+            MentoringSession session,
+            List<MentoringRelationshipMember> members
+    ) {
+        List<MentoringSessionAttendee> attendees = members.stream()
+                .map(member -> {
+                    MentoringSessionAttendee attendee = new MentoringSessionAttendee();
+                    attendee.setSession(session);
+                    attendee.setMember(member);
+                    return attendee;
+                })
+                .toList();
+        sessionAttendeeRepository.saveAll(attendees);
+    }
+
+    private MentoringSession requireSessionParticipantAccess(
+            Long relationshipId,
+            Long sessionId,
+            Long userId
+    ) {
+        MentoringSession session = sessionRepository.findByIdForUpdate(sessionId)
+                .orElseThrow(() -> new ResourceNotFoundException("Mentoring session not found."));
+        if (!session.isGroupSession() && !session.getRelationship().getId().equals(relationshipId)) {
+            throw new BusinessException("SESSION_MISMATCH", "Session does not belong to this relationship.", HttpStatus.BAD_REQUEST);
+        }
+        if (!isSessionMentor(session, userId)
+                && sessionAttendeeRepository.findBySession_IdAndMember_TraineeUser_Id(sessionId, userId).isEmpty()) {
+            throw new AccessDeniedException("Only an invited mentee or the session mentor can respond.");
+        }
+        return session;
+    }
+
+    private boolean isSessionMentor(MentoringSession session, Long userId) {
+        return session.getCreatedByUser().getId().equals(userId);
+    }
+
+    private MentoringSessionAttendee getSessionAttendee(MentoringSession session, Long traineeUserId) {
+        return sessionAttendeeRepository.findBySession_IdAndMember_TraineeUser_Id(
+                        session.getId(), traineeUserId)
+                .orElseThrow(() -> new AccessDeniedException("You are not invited to this mentoring session."));
+    }
+
+    private void resetSessionAttendeeAcceptances(MentoringSession session) {
+        List<MentoringSessionAttendee> attendees = sessionAttendeeRepository.findBySession_Id(session.getId());
+        attendees.forEach(attendee -> attendee.setAcceptedScheduledStart(null));
+        sessionAttendeeRepository.saveAll(attendees);
+    }
+
+    private void updateStatusWhenAllAttendeesAccepted(MentoringSession session) {
+        List<MentoringSessionAttendee> attendees = sessionAttendeeRepository.findBySession_Id(session.getId());
+        if (!attendees.isEmpty()
+                && attendees.stream().allMatch(attendee -> attendee.hasAccepted(session.getScheduledStart()))) {
+            session.setStatus(MentoringSessionStatus.SCHEDULED);
+        }
+    }
+
+    private void commitProposedSchedule(MentoringSession session, Long acceptedByUserId) {
+        Instant proposedStart = session.getProposedStart();
+        Instant proposedEnd = session.getProposedEnd();
+        if (proposedStart == null || proposedEnd == null) {
+            throw new BusinessException("INVALID_STATE", "There is no proposed time to accept.", HttpStatus.BAD_REQUEST);
+        }
+
+        Long proposalAuthorId = session.getProposedByUserId();
+        session.setScheduledStart(proposedStart);
+        session.setScheduledEnd(proposedEnd);
+        session.setProposedStart(null);
+        session.setProposedEnd(null);
+        session.setProposedByUserId(null);
+        session.setRescheduleReason(null);
+        session.setStatus(MentoringSessionStatus.PENDING);
+        resetSessionAttendeeAcceptances(session);
+
+        Long attendeeToAccept = acceptedByUserId;
+        if (isSessionMentor(session, acceptedByUserId)) {
+            attendeeToAccept = proposalAuthorId;
+        }
+        if (attendeeToAccept != null) {
+            sessionAttendeeRepository.findBySession_IdAndMember_TraineeUser_Id(
+                    session.getId(), attendeeToAccept)
+                    .ifPresent(attendee -> attendee.setAcceptedScheduledStart(proposedStart));
+        }
+        updateStatusWhenAllAttendeesAccepted(session);
+        reservationService.reschedule("MENTORING", session.getId(), proposedStart, proposedEnd);
     }
 
     private MentoringChatMessageDto toMessageDto(

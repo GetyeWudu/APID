@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   ArrowDownRight,
   ArrowRight,
@@ -8,8 +8,10 @@ import {
   GraduationCap,
   HeartHandshake,
   UsersRound,
+  Users,
+  CheckSquare,
 } from 'lucide-react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../../app/AuthContext';
 import { EMPLOYEE_WORKSPACE_PERMISSIONS } from '../../../shared/auth/workspaceResolver';
 import {
@@ -18,7 +20,9 @@ import {
   LoadingSkeleton,
   PageHeader,
   StatusPill,
+  useToast,
 } from '../../../shared/components/ui';
+import { extractApiErrorMessage } from '../../../shared/api/apiClient';
 import { mentoringPairingApi } from '../api/mentoringPairingApi';
 import './MentoringDashboard.css';
 
@@ -40,11 +44,58 @@ function statusTone(status: string) {
 
 export function MyPairingPage() {
   const { user, hasAnyPermission } = useAuth();
+  const navigate = useNavigate();
+  const queryClient = useQueryClient();
+  const { pushToast } = useToast();
   const [filter, setFilter] = useState<PairingFilter>('ALL');
+  const [selectedForGroup, setSelectedForGroup] = useState<Set<number>>(new Set());
+
   const relationshipsQuery = useQuery({
     queryKey: ['mentoring', 'pairing', 'relationships', user?.id],
     queryFn: mentoringPairingApi.listMyRelationships,
     enabled: hasAnyPermission(EMPLOYEE_WORKSPACE_PERMISSIONS),
+  });
+
+  const createGroupMutation = useMutation({
+    mutationFn: (sourceRelationshipIds: number[]) =>
+      mentoringPairingApi.createGroupPairing(sourceRelationshipIds),
+    onSuccess: (data) => {
+      pushToast({
+        title: 'Group Cohort Created',
+        message: `A new group mentoring cohort with ${data.members.length} trainees has been created.`,
+        tone: 'ok',
+      });
+      setSelectedForGroup(new Set());
+      void queryClient.invalidateQueries({ queryKey: ['mentoring', 'pairing', 'relationships'] });
+      navigate(`/mentoring/pairing/${data.relationshipId}`);
+    },
+    onError: (err: unknown) => {
+      pushToast({
+        title: 'Group Creation Failed',
+        message: extractApiErrorMessage(err, 'Could not create the group cohort.'),
+        tone: 'err',
+      });
+    },
+  });
+
+  const disbandGroupMutation = useMutation({
+    mutationFn: (groupRelationshipId: number) =>
+      mentoringPairingApi.disbandGroupPairing(groupRelationshipId),
+    onSuccess: () => {
+      pushToast({
+        title: 'Group Disbanded',
+        message: 'The group has been disbanded and original 1-on-1 pairings have been restored.',
+        tone: 'ok',
+      });
+      void queryClient.invalidateQueries({ queryKey: ['mentoring', 'pairing', 'relationships'] });
+    },
+    onError: (err: unknown) => {
+      pushToast({
+        title: 'Disband Failed',
+        message: extractApiErrorMessage(err, 'Could not disband this group.'),
+        tone: 'err',
+      });
+    },
   });
 
   if (relationshipsQuery.isLoading) {
@@ -60,16 +111,55 @@ export function MyPairingPage() {
     );
   }
 
-  const relationships = relationshipsQuery.data ?? [];
-  const mentorCount = relationships.filter((item) => item.currentUserRole === 'MENTOR').length;
-  const traineeCount = relationships.filter((item) => item.currentUserRole === 'TRAINEE').length;
+  const rawRelationships = relationshipsQuery.data ?? [];
+  // Group rows by relationshipId so a group cohort is counted and displayed as one pairing
+  const groupedByRelId = new Map<
+    number,
+    { primary: (typeof rawRelationships)[number]; members: typeof rawRelationships }
+  >();
+  rawRelationships.forEach((item) => {
+    const existing = groupedByRelId.get(item.relationshipId);
+    if (existing) {
+      existing.members.push(item);
+    } else {
+      groupedByRelId.set(item.relationshipId, { primary: item, members: [item] });
+    }
+  });
+  const relationships = Array.from(groupedByRelId.values());
+
+  const mentorCount = relationships.filter((entry) => entry.primary.currentUserRole === 'MENTOR').length;
+  const traineeCount = relationships.filter((entry) => entry.primary.currentUserRole === 'TRAINEE').length;
   const activeCount = relationships.filter(
-    (item) => item.relationshipStatus === 'ACTIVE' && item.memberStatus === 'ACTIVE'
+    (entry) =>
+      entry.primary.relationshipStatus === 'ACTIVE' &&
+      entry.members.some((m) => m.memberStatus === 'ACTIVE')
   ).length;
   const visibleRelationships =
     filter === 'ALL'
       ? relationships
-      : relationships.filter((item) => item.currentUserRole === filter);
+      : relationships.filter((entry) => entry.primary.currentUserRole === filter);
+
+  // Only INDIVIDUAL + ACTIVE mentor relationships are eligible for grouping
+  const groupEligible = relationships.filter(
+    (entry) =>
+      entry.primary.currentUserRole === 'MENTOR' &&
+      entry.primary.relationshipStatus === 'ACTIVE' &&
+      entry.primary.memberStatus === 'ACTIVE' &&
+      entry.primary.requestType === 'INDIVIDUAL'
+  );
+  const showGroupCheckboxes = filter === 'MENTOR' && groupEligible.length >= 2;
+
+  const toggleGroupSelect = (relationshipId: number) => {
+    setSelectedForGroup((prev) => {
+      const next = new Set(prev);
+      if (next.has(relationshipId)) {
+        next.delete(relationshipId);
+      } else {
+        next.add(relationshipId);
+      }
+      return next;
+    });
+  };
 
   const filters: { value: PairingFilter; label: string; count: number }[] = [
     { value: 'ALL', label: 'All pairings', count: relationships.length },
@@ -108,18 +198,41 @@ export function MyPairingPage() {
             <h2 className="mentoring-dashboard__section-title">Your relationships</h2>
             <p className="mentoring-dashboard__section-description">A live view of your mentoring connections.</p>
           </div>
-          <div role="group" aria-label="Filter pairings" style={{ display: 'flex', gap: '0.45rem', flexWrap: 'wrap' }}>
-            {filters.map((option) => (
+          <div style={{ display: 'flex', gap: '0.6rem', flexWrap: 'wrap', alignItems: 'center' }}>
+            <div role="group" aria-label="Filter pairings" style={{ display: 'flex', gap: '0.45rem', flexWrap: 'wrap' }}>
+              {filters.map((option) => (
+                <button
+                  key={option.value}
+                  type="button"
+                  className={`apid-btn apid-btn-sm ${filter === option.value ? 'apid-btn-primary' : 'apid-btn-outline'}`}
+                  aria-pressed={filter === option.value}
+                  onClick={() => {
+                    setFilter(option.value);
+                    setSelectedForGroup(new Set());
+                  }}
+                >
+                  {option.label} <span style={{ opacity: 0.8 }}>({option.count})</span>
+                </button>
+              ))}
+            </div>
+            {showGroupCheckboxes && selectedForGroup.size >= 2 && (
               <button
-                key={option.value}
                 type="button"
-                className={`apid-btn apid-btn-sm ${filter === option.value ? 'apid-btn-primary' : 'apid-btn-outline'}`}
-                aria-pressed={filter === option.value}
-                onClick={() => setFilter(option.value)}
+                className="apid-btn apid-btn-primary apid-btn-sm"
+                disabled={createGroupMutation.isPending}
+                onClick={() => createGroupMutation.mutate(Array.from(selectedForGroup))}
               >
-                {option.label} <span style={{ opacity: 0.8 }}>({option.count})</span>
+                <Users size={14} />
+                {createGroupMutation.isPending
+                  ? 'Creating Cohort…'
+                  : `Create Group Cohort (${selectedForGroup.size})`}
               </button>
-            ))}
+            )}
+            {showGroupCheckboxes && selectedForGroup.size < 2 && (
+              <span style={{ fontSize: '0.8rem', color: 'var(--text-subtle)', display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
+                <CheckSquare size={13} /> Select 2+ individual pairings to group
+              </span>
+            )}
           </div>
         </div>
 
@@ -135,21 +248,50 @@ export function MyPairingPage() {
           />
         ) : (
           <div className="mentoring-pairing-list">
-            {visibleRelationships.map((item) => {
+            {visibleRelationships.map(({ primary: item, members }) => {
               const isMentor = item.currentUserRole === 'MENTOR';
-              const counterpartName = isMentor ? item.traineeName : item.mentorName;
+              const isGroup = item.requestType === 'GROUP';
+              const traineeNames = members.map((m) => m.traineeName).join(', ');
+              const counterpartName = isGroup
+                ? isMentor
+                  ? `Group Cohort (${members.length} trainees): ${traineeNames}`
+                  : `${item.mentorName} (Group Cohort)`
+                : isMentor
+                  ? item.traineeName
+                  : item.mentorName;
               const displayStatus =
-                item.relationshipStatus === 'ACTIVE' ? item.memberStatus : item.relationshipStatus;
+                item.relationshipStatus === 'ACTIVE'
+                  ? isGroup
+                    ? members.some((m) => m.memberStatus === 'ACTIVE')
+                      ? 'ACTIVE'
+                      : item.memberStatus
+                    : item.memberStatus
+                  : item.relationshipStatus;
+              const isGroupEligible =
+                isMentor &&
+                item.requestType === 'INDIVIDUAL' &&
+                item.relationshipStatus === 'ACTIVE' &&
+                item.memberStatus === 'ACTIVE';
+              const isChecked = selectedForGroup.has(item.relationshipId);
               return (
-                <article key={item.memberId} className="mentoring-pairing-row">
+                <article key={item.relationshipId} className="mentoring-pairing-row">
                   <div className="mentoring-pairing-row__main">
+                    {showGroupCheckboxes && isGroupEligible && (
+                      <input
+                        type="checkbox"
+                        aria-label={`Select ${counterpartName} for group cohort`}
+                        checked={isChecked}
+                        onChange={() => toggleGroupSelect(item.relationshipId)}
+                        style={{ width: '16px', height: '16px', flexShrink: 0, cursor: 'pointer' }}
+                      />
+                    )}
                     <span className="mentoring-dashboard__icon" aria-hidden="true">
-                      {isMentor ? <GraduationCap size={20} /> : <HeartHandshake size={20} />}
+                      {isGroup ? <Users size={20} /> : isMentor ? <GraduationCap size={20} /> : <HeartHandshake size={20} />}
                     </span>
                     <div className="mentoring-pairing-row__details">
                       <h3 style={{ margin: 0, overflowWrap: 'anywhere' }}>{counterpartName}</h3>
                       <p className="mentoring-pairing-row__meta">
-                        {isMentor ? 'You are the mentor' : 'Your mentor'} · {item.requestType === 'GROUP' ? 'Class pairing' : 'One-to-one'}
+                        {isMentor ? 'You are the mentor' : 'Your mentor'} · {isGroup ? 'Group pairing' : 'One-to-one'}
                         {item.skillName ? ` · ${item.skillName}` : ''}
                       </p>
                     </div>
@@ -173,6 +315,21 @@ export function MyPairingPage() {
                       >
                         <CalendarDays size={14} /> Schedule Session
                       </Link>
+                    )}
+                    {item.currentUserRole === 'MENTOR' && item.requestType === 'GROUP' && item.relationshipStatus === 'ACTIVE' && (
+                      <button
+                        type="button"
+                        className="apid-btn apid-btn-outline apid-btn-sm"
+                        style={{ color: 'var(--color-err, #dc2626)', borderColor: 'var(--color-err, #dc2626)' }}
+                        disabled={disbandGroupMutation.isPending}
+                        onClick={() => {
+                          if (window.confirm('Disband this group? All original 1-on-1 pairings will be restored.')) {
+                            disbandGroupMutation.mutate(item.relationshipId);
+                          }
+                        }}
+                      >
+                        Disband Group
+                      </button>
                     )}
                   </div>
                 </article>

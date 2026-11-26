@@ -43,6 +43,9 @@ public class MentoringSession {
     @Column(name = "meeting_provider", length = 30)
     private String meetingProvider = "LIVEKIT";
 
+    @Column(name = "is_group_session", nullable = false)
+    private boolean isGroupSession = false;
+
     @Column(name = "meeting_room_name", length = 120)
     private String meetingRoomName;
 
@@ -54,7 +57,7 @@ public class MentoringSession {
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 20)
-    private MentoringSessionStatus status = MentoringSessionStatus.SCHEDULED;
+    private MentoringSessionStatus status = MentoringSessionStatus.PENDING;
 
     @Column(name = "decline_reason", columnDefinition = "TEXT")
     private String declineReason;
@@ -67,6 +70,9 @@ public class MentoringSession {
 
     @Column(name = "proposed_end")
     private Instant proposedEnd;
+
+    @Column(name = "proposed_by_user_id")
+    private Long proposedByUserId;
 
     @Column(name = "responded_at")
     private Instant respondedAt;
@@ -125,6 +131,8 @@ public class MentoringSession {
     }
     public String getMeetingProvider() { return meetingProvider; }
     public void setMeetingProvider(String meetingProvider) { this.meetingProvider = meetingProvider; }
+    public boolean isGroupSession() { return isGroupSession; }
+    public void setGroupSession(boolean groupSession) { isGroupSession = groupSession; }
     public String getMeetingRoomName() { return meetingRoomName; }
     public void setMeetingRoomName(String meetingRoomName) { this.meetingRoomName = meetingRoomName; }
     public String getMeetingRoomUrl() { return meetingRoomUrl != null ? meetingRoomUrl : meetingUrl; }
@@ -144,6 +152,8 @@ public class MentoringSession {
     public void setProposedStart(Instant proposedStart) { this.proposedStart = proposedStart; }
     public Instant getProposedEnd() { return proposedEnd; }
     public void setProposedEnd(Instant proposedEnd) { this.proposedEnd = proposedEnd; }
+    public Long getProposedByUserId() { return proposedByUserId; }
+    public void setProposedByUserId(Long proposedByUserId) { this.proposedByUserId = proposedByUserId; }
     public Instant getRespondedAt() { return respondedAt; }
     public void setRespondedAt(Instant respondedAt) { this.respondedAt = respondedAt; }
     public String getCancellationReason() { return cancellationReason; }

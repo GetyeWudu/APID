@@ -347,11 +347,11 @@ export function AppLayout({ children }: { children: ReactNode }) {
               requiredAnyPermissions: EMPLOYEE_WORKSPACE_PERMISSIONS,
             },
             {
-              to: '/mentoring?view=trainee-sessions',
+              to: '/mentoring?view=sessions',
               label: 'My Sessions',
               icon: <MessageSquare size={17} />,
               requiredAnyPermissions: EMPLOYEE_WORKSPACE_PERMISSIONS,
-              matchSearch: '?view=trainee-sessions',
+              matchSearch: '?view=sessions',
             },
             {
               to: '/mentoring?view=apply',
@@ -362,13 +362,6 @@ export function AppLayout({ children }: { children: ReactNode }) {
             },
             ...(isMentor
               ? [
-                  {
-                    to: '/mentoring?view=trainer-sessions',
-                    label: 'Mentor Sessions',
-                    icon: <Clock size={17} />,
-                    requiredAnyPermissions: EMPLOYEE_WORKSPACE_PERMISSIONS,
-                    matchSearch: '?view=trainer-sessions',
-                  },
                   {
                     to: '/mentoring?view=trainer-profile',
                     label: 'Mentor Profile',

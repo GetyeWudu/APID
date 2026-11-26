@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import * as AuthContextModule from '../app/AuthContext';
@@ -95,10 +95,13 @@ describe('MentoringSessionsPage', () => {
 
     expect(await screen.findByText('Core Banking Fundamentals')).toBeInTheDocument();
     expect(screen.getByText(/Trainee One/i)).toBeInTheDocument();
-    expect(screen.getByText('AWAITING TRAINEE RSVP')).toBeInTheDocument();
+    expect(screen.getByText('SCHEDULED')).toBeInTheDocument();
   });
 
   it('lets trainees view sessions and provides RSVP actions (Accept, Propose New Time, Decline)', async () => {
+    vi.spyOn(mentoringPairingApi, 'listMySessions').mockResolvedValue([
+      { ...mockScheduledSession, status: 'PENDING' },
+    ]);
     vi.spyOn(AuthContextModule, 'useAuth').mockReturnValue(
       buildAuthMock({
         id: 8,
@@ -117,7 +120,7 @@ describe('MentoringSessionsPage', () => {
 
     const respondSpy = vi.spyOn(mentoringPairingApi, 'respondSession').mockResolvedValue({
       ...mockScheduledSession,
-      status: 'CONFIRMED',
+      status: 'SCHEDULED',
     });
 
     const queryClient = new QueryClient({
@@ -135,6 +138,7 @@ describe('MentoringSessionsPage', () => {
     );
 
     expect(await screen.findByText('Core Banking Fundamentals')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: /View details for Core Banking Fundamentals/i }));
     const acceptBtn = screen.getByRole('button', { name: /Accept Session/i });
     expect(acceptBtn).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Propose New Time/i })).toBeInTheDocument();
@@ -187,9 +191,8 @@ describe('MentoringSessionsPage', () => {
     });
   });
 
-  it('renders "Join LiveKit Video" on the scheduled day and launches the video room modal', async () => {
-    const sessionStart = new Date();
-    sessionStart.setHours(12, 0, 0, 0);
+  it('renders "Join LiveKit Video" during the scheduled session and launches the video room modal', async () => {
+    const sessionStart = new Date(Date.now() - 5 * 60 * 1000);
     vi.spyOn(mentoringPairingApi, 'listMySessions').mockResolvedValue([
       {
         ...mockScheduledSession,
@@ -219,6 +222,8 @@ describe('MentoringSessionsPage', () => {
       </QueryClientProvider>
     );
 
+    expect(await screen.findByText('Core Banking Fundamentals')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: /View details for Core Banking Fundamentals/i }));
     const joinBtn = await screen.findByRole('button', { name: /Join LiveKit Video/i });
     expect(joinBtn).toBeInTheDocument();
 
@@ -231,5 +236,177 @@ describe('MentoringSessionsPage', () => {
     expect(await screen.findByText(/LiveKit Mentoring Video Session Active/i)).toBeInTheDocument();
     expect(screen.getByText('apid-mentoring-77-101')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Leave Meeting/i })).toBeInTheDocument();
+  });
+
+  it('separates mentor-created and mentee-targeted group sessions in My Sessions tabs', async () => {
+    const groupSession: MentoringSession = {
+      ...mockScheduledSession,
+      id: 202,
+      relationshipId: 900,
+      title: 'Cohort Workshop',
+      createdByName: 'Mentor One',
+      isGroupSession: true,
+      sessionScope: 'GROUP_SUBSET',
+      targetTraineeUserIds: [8, 60],
+      targetTrainees: [
+        { userId: 8, name: 'Trainee One' },
+        { userId: 60, name: 'Trainee Sixty' },
+      ],
+    };
+    vi.spyOn(mentoringPairingApi, 'listMySessions').mockResolvedValue([
+      mockScheduledSession,
+      groupSession,
+    ]);
+    vi.spyOn(mentoringPairingApi, 'listMyRelationships').mockResolvedValue([
+      ...mockRelationships,
+      {
+        ...mockRelationships[0],
+        memberId: 2,
+        relationshipId: 78,
+        requestId: 202,
+        traineeUserId: 9,
+        traineeName: 'Trainee Two',
+      },
+    ]);
+
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+
+    const mentorView = render(
+      <QueryClientProvider client={queryClient}>
+        <ToastProvider>
+          <MemoryRouter>
+            <MentoringSessionsPage view="mentor" />
+          </MemoryRouter>
+        </ToastProvider>
+      </QueryClientProvider>
+    );
+
+    expect(await screen.findByText('Core Banking Fundamentals')).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'My Sessions' })).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: 'As Mentor' })).toHaveAttribute('aria-selected', 'true');
+    expect(screen.getByText('Cohort Workshop')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Schedule Single Session' })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Schedule Single Session' }));
+    expect(screen.getByRole('heading', { name: 'Schedule Single Mentoring Session' })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Close Scheduler' }));
+    expect(screen.getByRole('button', { name: 'Schedule Group Session' })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Schedule Group Session' }));
+    expect(screen.getByRole('heading', { name: 'Schedule Group Session' })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('tab', { name: 'As Mentee' }));
+    expect(screen.getByRole('tab', { name: 'As Mentee' })).toHaveAttribute('aria-selected', 'true');
+    expect(screen.queryByText('Cohort Workshop')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Schedule Single Session' })).not.toBeInTheDocument();
+    mentorView.unmount();
+
+    vi.spyOn(AuthContextModule, 'useAuth').mockReturnValue(
+      buildAuthMock({
+        id: 8,
+        username: 'trainee',
+        mustChangePassword: false,
+        roles: ['Employee'],
+        permissions: ['EMPLOYEE_PORTAL_ACCESS'],
+      })
+    );
+    vi.spyOn(mentoringPairingApi, 'listMyRelationships').mockResolvedValue([
+      {
+        ...mockRelationships[0],
+        currentUserRole: 'TRAINEE',
+        traineeUserId: 8,
+        traineeName: 'Trainee One',
+      },
+    ]);
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <ToastProvider>
+          <MemoryRouter>
+            <MentoringSessionsPage view="trainee" />
+          </MemoryRouter>
+        </ToastProvider>
+      </QueryClientProvider>
+    );
+
+    expect(await screen.findByText('Cohort Workshop')).toBeInTheDocument();
+    expect(screen.getByText('Group Session · Mentor One')).toBeInTheDocument();
+    expect(screen.queryByText('Trainee Sixty')).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: /View details for Cohort Workshop/i }));
+
+    expect(await screen.findByText(/Trainee Sixty/)).toBeInTheDocument();
+    expect(
+      within(screen.getByRole('listitem', { name: /Cohort Workshop/ })).getByText(/Trainee One/)
+    ).toBeInTheDocument();
+  });
+
+  it('shows group-session reports, participant ratings, and session resources', async () => {
+    const groupSession: MentoringSession = {
+      ...mockScheduledSession,
+      id: 303,
+      title: 'Cohort Workshop',
+      isGroupSession: true,
+      sessionScope: 'GROUP_SUBSET',
+      targetTraineeUserIds: [8, 60],
+      targetTrainees: [
+        { userId: 8, name: 'Trainee One' },
+        { userId: 60, name: 'Trainee Sixty' },
+      ],
+    };
+    vi.spyOn(mentoringPairingApi, 'listMySessions').mockResolvedValue([groupSession]);
+    vi.spyOn(mentoringPairingApi, 'listSessionResources').mockResolvedValue([]);
+    vi.spyOn(mentoringPairingApi, 'getMySessionRating').mockResolvedValue(null);
+
+    const mentorQueryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    const mentorView = render(
+      <QueryClientProvider client={mentorQueryClient}>
+        <ToastProvider>
+          <MemoryRouter>
+            <MentoringSessionsPage view="mentor" />
+          </MemoryRouter>
+        </ToastProvider>
+      </QueryClientProvider>
+    );
+
+    expect(await screen.findByText('Cohort Workshop')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: /View details for Cohort Workshop/i }));
+    expect(await screen.findByText('Session report due')).toBeInTheDocument();
+    expect(await screen.findByText('Share a session resource')).toBeInTheDocument();
+    mentorView.unmount();
+
+    vi.spyOn(AuthContextModule, 'useAuth').mockReturnValue(
+      buildAuthMock({
+        id: 8,
+        username: 'trainee',
+        mustChangePassword: false,
+        roles: ['Employee'],
+        permissions: ['EMPLOYEE_PORTAL_ACCESS'],
+      })
+    );
+    vi.spyOn(mentoringPairingApi, 'listMyRelationships').mockResolvedValue([
+      { ...mockRelationships[0], currentUserRole: 'TRAINEE' },
+    ]);
+
+    const menteeQueryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    render(
+      <QueryClientProvider client={menteeQueryClient}>
+        <ToastProvider>
+          <MemoryRouter>
+            <MentoringSessionsPage view="trainee" />
+          </MemoryRouter>
+        </ToastProvider>
+      </QueryClientProvider>
+    );
+
+    expect(await screen.findByText('Cohort Workshop')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: /View details for Cohort Workshop/i }));
+    expect(await screen.findByText('Rate this session')).toBeInTheDocument();
+    expect(await screen.findByText(/Resources shared by the mentor for this session/)).toBeInTheDocument();
+    expect(screen.queryByText('Share a session resource')).not.toBeInTheDocument();
   });
 });

@@ -49,6 +49,7 @@ function getErrorMessage(error: unknown, fallback: string) {
 
 function sessionStatusTone(status: MentoringSession['status'] | 'IN PROGRESS') {
   if (status === 'COMPLETED' || status === 'CONFIRMED') return 'ok';
+  if (status === 'PENDING') return 'warn';
   if (status === 'SCHEDULED' || status === 'RESCHEDULE_PROPOSED' || status === 'IN PROGRESS') return 'info';
   if (status === 'MISSED' || status === 'DECLINED' || status === 'CANCELLED') return 'err';
   return 'neutral';
@@ -107,10 +108,12 @@ export function MentoringPairingDetailPage() {
   const acceptSessionMutation = useMutation({
     mutationFn: (sessionId: number) =>
       mentoringPairingApi.respondSession(relationshipId, sessionId, { accept: true }),
-    onSuccess: () => {
+    onSuccess: (session) => {
       pushToast({
-        title: 'Session accepted',
-        message: 'The confirmed session is now visible to both participants.',
+        title: session.status === 'SCHEDULED' ? 'Session scheduled' : 'Acceptance recorded',
+        message: session.status === 'SCHEDULED'
+          ? 'All participants accepted the proposed schedule.'
+          : 'Your acceptance is recorded; the session will be scheduled when all participants agree.',
         tone: 'ok',
       });
       invalidateSessionData();
@@ -126,12 +129,16 @@ export function MentoringPairingDetailPage() {
   const respondRescheduleMutation = useMutation({
     mutationFn: (variables: { sessionId: number; accept: boolean }) =>
       mentoringPairingApi.respondReschedule(relationshipId, variables.sessionId, variables.accept),
-    onSuccess: (_, variables) => {
+    onSuccess: (session, variables) => {
       pushToast({
-        title: variables.accept ? 'Reschedule accepted' : 'Original time kept',
+        title: variables.accept
+          ? session.status === 'SCHEDULED' ? 'Session scheduled' : 'Acceptance recorded'
+          : 'Proposal rejected',
         message: variables.accept
-          ? 'The session now uses the proposed time.'
-          : 'The session remains scheduled at its original time.',
+          ? session.status === 'SCHEDULED'
+            ? 'All participants accepted the proposed schedule.'
+            : 'Your acceptance is recorded; the remaining participants must also agree.'
+          : 'The mentor rejected the proposed time. The current schedule is pending agreement.',
         tone: variables.accept ? 'ok' : 'info',
       });
       invalidateSessionData();
@@ -173,9 +180,9 @@ export function MentoringPairingDetailPage() {
   const messages = chatMessagesQuery.data ?? [];
   const sessions = sessionsQuery.data ?? [];
   const sessionPriority = (session: MentoringSession) =>
-    session.status === 'SCHEDULED' || session.status === 'RESCHEDULE_PROPOSED'
+    session.status === 'PENDING' || session.status === 'RESCHEDULE_PROPOSED'
       ? 0
-      : session.status === 'CONFIRMED'
+      : session.status === 'SCHEDULED' || session.status === 'CONFIRMED'
         ? 1
         : 2;
   const pairingSessions = [...sessions].sort(
@@ -183,13 +190,15 @@ export function MentoringPairingDetailPage() {
       sessionPriority(a) - sessionPriority(b) ||
       new Date(b.scheduledStart).getTime() - new Date(a.scheduledStart).getTime()
   );
-  const hasUnfinishedConfirmedSessions = pairingSessions.some((session) => session.status === 'CONFIRMED');
+  const hasUnfinishedScheduledSessions = pairingSessions.some(
+    (session) => session.status === 'SCHEDULED' || session.status === 'CONFIRMED'
+  );
   const completionBlockedReason = sessionsQuery.isLoading
     ? 'Checking session status before completing the pairing.'
     : sessionsQuery.isError
       ? 'Session status could not be checked. Try again before completing the pairing.'
-      : hasUnfinishedConfirmedSessions
-        ? 'Submit the report for every confirmed session before completing the pairing.'
+      : hasUnfinishedScheduledSessions
+        ? 'Submit the report for every scheduled session before completing the pairing.'
         : null;
   const sessionView = detail.currentUserRole === 'MENTOR' ? 'trainer-sessions' : 'trainee-sessions';
   const sessionsPath = `/mentoring?view=${sessionView}&relationshipId=${relationshipId}`;
@@ -269,16 +278,27 @@ export function MentoringPairingDetailPage() {
                 Declined{session.declineReason ? `: ${session.declineReason}` : '.'}
               </p>
             )}
-            {session.status === 'RESCHEDULE_PROPOSED' && (
+            {session.proposedStart && (
               <div className="boa-card" style={{ border: '1px solid var(--border)' }}>
-                <strong>Reschedule requested</strong>
+                <strong>
+                  {detail.currentUserRole === 'MENTOR'
+                    ? session.proposedByUserId === session.createdByUserId
+                      ? 'Your proposed time is awaiting participant agreement'
+                      : 'A participant proposed a different time'
+                    : session.proposedByUserId === session.createdByUserId
+                      ? 'The mentor proposed a different time'
+                      : session.proposedByUserId === user?.id
+                        ? 'Your proposal is awaiting the mentor'
+                        : 'A participant proposed a different time; awaiting the mentor'}
+                </strong>
                 {session.proposedStart && session.proposedEnd && (
                   <p className="boa-muted" style={{ margin: '0.35rem 0' }}>
                     Proposed: {formatDateTime(session.proposedStart)} to {formatDateTime(session.proposedEnd)}
                   </p>
                 )}
                 {session.rescheduleReason && <p className="boa-muted" style={{ margin: '0.35rem 0' }}>{session.rescheduleReason}</p>}
-                {detail.currentUserRole === 'MENTOR' ? (
+                {detail.currentUserRole === 'MENTOR'
+                  && session.proposedByUserId !== session.createdByUserId ? (
                   <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', marginTop: '0.65rem' }}>
                     <button
                       type="button"
@@ -288,23 +308,41 @@ export function MentoringPairingDetailPage() {
                     >
                       <Check size={14} /> Accept new time
                     </button>
+                    <Link to={sessionsPath} className="apid-btn apid-btn-outline apid-btn-sm">
+                      Propose another time
+                    </Link>
+                  </div>
+                ) : detail.currentUserRole === 'TRAINEE'
+                  && session.proposedByUserId === session.createdByUserId
+                  && !session.currentUserAccepted ? (
+                  <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', marginTop: '0.65rem' }}>
                     <button
                       type="button"
-                      className="apid-btn apid-btn-outline apid-btn-sm"
-                      onClick={() => respondRescheduleMutation.mutate({ sessionId: session.id, accept: false })}
+                      className="apid-btn apid-btn-primary apid-btn-sm"
+                      onClick={() => respondRescheduleMutation.mutate({ sessionId: session.id, accept: true })}
                       disabled={respondRescheduleMutation.isPending}
                     >
-                      <X size={14} /> Keep original time
+                      <Check size={14} /> Accept proposed time
                     </button>
+                    <Link to={sessionsPath} className="apid-btn apid-btn-outline apid-btn-sm">
+                      Propose another time
+                    </Link>
                   </div>
                 ) : (
                   <p className="boa-muted" style={{ margin: '0.35rem 0 0' }}>
-                    Waiting for the mentor to respond to this proposal.
+                    {detail.currentUserRole === 'MENTOR'
+                      ? 'Waiting for participants to accept this schedule.'
+                      : session.proposedByUserId === user?.id
+                        ? 'Waiting for the mentor to respond to your proposal.'
+                        : 'Waiting for the mentor to respond to this proposal.'}
                   </p>
                 )}
               </div>
             )}
-            {detail.currentUserRole === 'TRAINEE' && session.status === 'SCHEDULED' && (
+            {detail.currentUserRole === 'TRAINEE'
+              && session.status === 'PENDING'
+              && !session.proposedStart
+              && !session.currentUserAccepted && (
               <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
                 <button
                   type="button"

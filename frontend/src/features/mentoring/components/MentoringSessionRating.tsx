@@ -29,7 +29,7 @@ export function MentoringSessionRating({
   const endTime = new Date(scheduledEnd).getTime();
   const canRate = Number.isFinite(endTime)
     && now >= endTime
-    && (sessionStatus === 'CONFIRMED' || sessionStatus === 'COMPLETED');
+    && (sessionStatus === 'SCHEDULED' || sessionStatus === 'CONFIRMED' || sessionStatus === 'COMPLETED');
   const ratingQueryKey = ['mentoring', 'session-rating', user?.id, relationshipId, sessionId];
 
   useEffect(() => {
@@ -67,7 +67,11 @@ export function MentoringSessionRating({
     }),
   });
 
-  if (!isMentee || (sessionStatus !== 'CONFIRMED' && sessionStatus !== 'COMPLETED')) return null;
+  if (!isMentee || (
+    sessionStatus !== 'SCHEDULED'
+    && sessionStatus !== 'CONFIRMED'
+    && sessionStatus !== 'COMPLETED'
+  )) return null;
   if (!canRate) {
     return (
       <section className="apid-card" aria-label="Session rating">

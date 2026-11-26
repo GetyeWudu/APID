@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Clock, Video, X } from 'lucide-react';
 import { extractApiErrorMessage } from '../../../shared/api/apiClient';
@@ -17,6 +17,14 @@ function isVideoSession(session: MentoringSession) {
   return session.deliveryMode === 'ONLINE' || session.deliveryMode === 'HYBRID';
 }
 
+function getReminderKey(session: MentoringSession) {
+  return `${session.id}:${new Date(session.scheduledStart).getTime()}`;
+}
+
+function getDismissalStorageKey(userId: number, session: MentoringSession) {
+  return `mentoring-video-session-reminder-dismissed:${userId}:${getReminderKey(session)}`;
+}
+
 function formatStartTime(value: string) {
   const date = new Date(value);
   return Number.isNaN(date.getTime())
@@ -26,12 +34,15 @@ function formatStartTime(value: string) {
 
 export function MentoringVideoSessionReminder({ userId }: { userId: number }) {
   const [now, setNow] = useState(() => Date.now());
-  const [dismissedSessionIds, setDismissedSessionIds] = useState<Set<number>>(() => new Set());
+  const [dismissedReminderKeys, setDismissedReminderKeys] = useState<Set<string>>(
+    () => new Set()
+  );
   const [reminderSessions, setReminderSessions] = useState<Map<number, MentoringSession>>(
     () => new Map()
   );
   const [selectedSession, setSelectedSession] = useState<MentoringSession | null>(null);
   const [errorReported, setErrorReported] = useState(false);
+  const storageErrorReported = useRef(false);
   const { pushToast } = useToast();
   const sessionsQuery = useQuery({
     queryKey: ['mentoring', 'pairing', 'my-sessions', userId],
@@ -58,7 +69,7 @@ export function MentoringVideoSessionReminder({ userId }: { userId: number }) {
     const sessions = sessionsQuery.data;
     const upcomingStarts = (sessions ?? [])
       .filter((session) =>
-        session.status === 'CONFIRMED'
+        (session.status === 'SCHEDULED' || session.status === 'CONFIRMED')
         && isVideoSession(session)
         && Number.isFinite(new Date(session.scheduledStart).getTime())
         && new Date(session.scheduledStart).getTime() > now
@@ -82,47 +93,86 @@ export function MentoringVideoSessionReminder({ userId }: { userId: number }) {
     const sessions = sessionsQuery.data;
     if (!sessions) return;
 
+    const reminderCandidates = new Map<number, MentoringSession>();
+    let storageReadFailed = false;
+    sessions.forEach((session) => {
+      const start = new Date(session.scheduledStart).getTime();
+      if (
+        (session.status !== 'SCHEDULED' && session.status !== 'CONFIRMED')
+        || !isVideoSession(session)
+        || !Number.isFinite(start)
+        || start > now
+      ) {
+        return;
+      }
+
+      const reminderKey = getReminderKey(session);
+      let dismissed = dismissedReminderKeys.has(reminderKey);
+      if (!dismissed) {
+        try {
+          dismissed = window.localStorage.getItem(
+            getDismissalStorageKey(userId, session)
+          ) === 'true';
+        } catch {
+          storageReadFailed = true;
+        }
+      }
+
+      if (!dismissed) reminderCandidates.set(session.id, session);
+    });
+
     setReminderSessions((current) => {
       let changed = false;
       const next = new Map(current);
-
       sessions.forEach((session) => {
         if (current.has(session.id)) {
           if (current.get(session.id) !== session) {
             next.set(session.id, session);
             changed = true;
           }
-          return;
-        }
-
-        const start = new Date(session.scheduledStart).getTime();
-        if (
-          !dismissedSessionIds.has(session.id)
-          && session.status === 'CONFIRMED'
-          && isVideoSession(session)
-          && Number.isFinite(start)
-          && start <= now
-        ) {
+        } else if (reminderCandidates.has(session.id)) {
           next.set(session.id, session);
           changed = true;
         }
       });
-
       return changed ? next : current;
     });
-  }, [dismissedSessionIds, now, sessionsQuery.data]);
+
+    if (storageReadFailed && !storageErrorReported.current) {
+      storageErrorReported.current = true;
+      pushToast({
+        title: 'Unable to load video reminder preferences',
+        message: 'A dismissed reminder may appear again after reloading.',
+        tone: 'err',
+      });
+    }
+  }, [dismissedReminderKeys, now, pushToast, sessionsQuery.data, userId]);
 
   const reminders = [...reminderSessions.values()]
-    .filter((session) => !dismissedSessionIds.has(session.id))
+    .filter((session) => !dismissedReminderKeys.has(getReminderKey(session)))
     .sort((left, right) =>
       new Date(left.scheduledStart).getTime() - new Date(right.scheduledStart).getTime()
     );
 
-  const dismiss = (sessionId: number) => {
-    setDismissedSessionIds((current) => new Set(current).add(sessionId));
+  const dismiss = (session: MentoringSession) => {
+    const reminderKey = getReminderKey(session);
+    setDismissedReminderKeys((current) => new Set(current).add(reminderKey));
+    try {
+      window.localStorage.setItem(getDismissalStorageKey(userId, session), 'true');
+    } catch {
+      if (!storageErrorReported.current) {
+        storageErrorReported.current = true;
+        pushToast({
+          title: 'Unable to save reminder dismissal',
+          message: 'This reminder may appear again after reloading.',
+          tone: 'err',
+        });
+      }
+    }
+
     setReminderSessions((current) => {
       const next = new Map(current);
-      next.delete(sessionId);
+      next.delete(session.id);
       return next;
     });
   };
@@ -150,7 +200,7 @@ export function MentoringVideoSessionReminder({ userId }: { userId: number }) {
                   <p className="mentoring-video-reminder-time">
                     <Clock size={14} /> {formatStartTime(session.scheduledStart)}
                   </p>
-                  {session.status === 'CONFIRMED' && (
+                  {(session.status === 'SCHEDULED' || session.status === 'CONFIRMED') && (
                     <MentoringSessionJoinButton
                       session={session}
                       onJoin={() => setSelectedSession(session)}
@@ -160,7 +210,7 @@ export function MentoringVideoSessionReminder({ userId }: { userId: number }) {
                 <button
                   type="button"
                   className="mentoring-video-reminder-dismiss"
-                  onClick={() => dismiss(session.id)}
+                  onClick={() => dismiss(session)}
                   aria-label={`Dismiss reminder for ${session.title}`}
                   title="Dismiss reminder"
                 >

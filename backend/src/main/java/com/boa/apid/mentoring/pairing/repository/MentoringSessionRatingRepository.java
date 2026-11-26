@@ -16,7 +16,7 @@ public interface MentoringSessionRatingRepository extends JpaRepository<Mentorin
             FROM MentoringSessionRating rating
             WHERE rating.session.relationship.mentorUser.id = :mentorUserId
               AND rating.session.status IN (
-                com.boa.apid.mentoring.pairing.entity.MentoringSessionStatus.CONFIRMED,
+                com.boa.apid.mentoring.pairing.entity.MentoringSessionStatus.SCHEDULED,
                 com.boa.apid.mentoring.pairing.entity.MentoringSessionStatus.COMPLETED
               )
               AND rating.session.scheduledEnd <= CURRENT_TIMESTAMP
@@ -28,7 +28,7 @@ public interface MentoringSessionRatingRepository extends JpaRepository<Mentorin
             FROM MentoringSessionRating rating
             WHERE rating.session.relationship.mentorUser.id = :mentorUserId
               AND rating.session.status IN (
-                com.boa.apid.mentoring.pairing.entity.MentoringSessionStatus.CONFIRMED,
+                com.boa.apid.mentoring.pairing.entity.MentoringSessionStatus.SCHEDULED,
                 com.boa.apid.mentoring.pairing.entity.MentoringSessionStatus.COMPLETED
               )
               AND rating.session.scheduledEnd <= CURRENT_TIMESTAMP

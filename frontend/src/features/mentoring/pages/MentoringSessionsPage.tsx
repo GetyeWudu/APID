@@ -1,16 +1,16 @@
-import { useState, type FormEvent } from 'react';
+import { useEffect, useState, type FormEvent } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   CalendarDays,
   Clock,
   Check,
   X,
+  Users,
   RefreshCw,
   AlertCircle,
   MapPin,
   Ban,
   Calendar,
-  Video,
 } from 'lucide-react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../../../app/AuthContext';
@@ -41,10 +41,7 @@ import {
   BANK_OPERATING_TIME_OPTIONS,
   toEthiopianTime,
 } from '../../coaching/utils/ethiopianTimeUtils';
-import {
-  getMentoringDeliveryModeLabel,
-  isMentoringSessionDay,
-} from '../utils/mentoringSessionUtils';
+import { getMentoringDeliveryModeLabel } from '../utils/mentoringSessionUtils';
 import './MentoringDashboard.css';
 
 type SessionView = 'mentor' | 'trainee';
@@ -93,16 +90,22 @@ function formatDualTimeRange(startIso: string, endIso: string) {
   }
 }
 
-export function MentoringSessionsPage({ view }: { view: SessionView }) {
+export function MentoringSessionsPage({ view: initialView }: { view: SessionView }) {
   const { user } = useAuth();
   const queryClient = useQueryClient();
   const [searchParams, setSearchParams] = useSearchParams();
   const { pushToast } = useToast();
+  const [sessionView, setSessionView] = useState(initialView);
+
+  useEffect(() => {
+    setSessionView(initialView);
+  }, [initialView]);
 
   const [selectedRelationshipId, setSelectedRelationshipId] = useState(
     searchParams.get('relationshipId') ?? ''
   );
   const [isCreateFormOpen, setCreateFormOpen] = useState(Boolean(searchParams.get('relationshipId')));
+  const [isGroupSessionFormOpen, setGroupSessionFormOpen] = useState(false);
 
   // Create Form State
   const [createDate, setCreateDate] = useState('');
@@ -115,6 +118,10 @@ export function MentoringSessionsPage({ view }: { view: SessionView }) {
   const [createMeetingUrl, setCreateMeetingUrl] = useState('');
   const [createLocation, setCreateLocation] = useState('');
 
+  // Group session targeting mode
+  type SessionTargetMode = 'ALL' | 'ONE' | 'SUBSET';
+  const [sessionTargetMode, setSessionTargetMode] = useState<SessionTargetMode>('ALL');
+  const [selectedSubsetTraineeIds, setSelectedSubsetTraineeIds] = useState<Set<number>>(new Set());
   // Modals state
   const [declineSessionTarget, setDeclineSessionTarget] = useState<MentoringSession | null>(null);
   const [declineReason, setDeclineReason] = useState('');
@@ -159,12 +166,13 @@ export function MentoringSessionsPage({ view }: { view: SessionView }) {
         meetingUrl?: string;
         location?: string;
         traineeUserId?: number;
+        targetTraineeUserIds?: number[];
       };
     }) => mentoringPairingApi.createSession(variables.relationshipId, variables.input),
     onSuccess: () => {
       pushToast({
-        title: 'Session Scheduled',
-        message: 'The mentoring session has been booked and invitation sent to the trainee.',
+        title: 'Session Invitation Sent',
+        message: 'The session is pending until the trainee accepts the proposed schedule.',
         tone: 'ok',
       });
       setCreateFormOpen(false);
@@ -173,6 +181,8 @@ export function MentoringSessionsPage({ view }: { view: SessionView }) {
       setCreateAgenda('');
       setCreateMeetingUrl('');
       setCreateLocation('');
+      setSessionTargetMode('ALL');
+      setSelectedSubsetTraineeIds(new Set());
       invalidateData();
     },
     onError: (err) => {
@@ -190,11 +200,16 @@ export function MentoringSessionsPage({ view }: { view: SessionView }) {
       sessionId: number;
       input: { accept: boolean; declineReason?: string };
     }) => mentoringPairingApi.respondSession(variables.relationshipId, variables.sessionId, variables.input),
-    onSuccess: (_, variables) => {
+    onSuccess: (session, variables) => {
+      const allAccepted = session.status === 'SCHEDULED';
       pushToast({
-        title: variables.input.accept ? 'Session Confirmed' : 'Session Declined',
+        title: variables.input.accept
+          ? allAccepted ? 'Session Scheduled' : 'Acceptance Recorded'
+          : 'Session Declined',
         message: variables.input.accept
-          ? 'You have accepted the session. It is locked into your calendar.'
+          ? allAccepted
+            ? 'All participants accepted the proposed schedule.'
+            : 'Your acceptance is recorded; the session will be scheduled when all participants agree.'
           : 'You declined the session invitation. Your mentor has been notified.',
         tone: variables.input.accept ? 'ok' : 'info',
       });
@@ -219,8 +234,10 @@ export function MentoringSessionsPage({ view }: { view: SessionView }) {
     }) => mentoringPairingApi.proposeReschedule(variables.relationshipId, variables.sessionId, variables.input),
     onSuccess: () => {
       pushToast({
-        title: 'Reschedule Proposed',
-        message: 'Your proposed time has been submitted to your mentor for confirmation.',
+        title: 'Alternative Time Proposed',
+        message: sessionView === 'mentor'
+          ? 'Your alternative schedule has been sent to the participants for agreement.'
+          : 'Your proposed time has been sent to the mentor.',
         tone: 'ok',
       });
       setRescheduleSessionTarget(null);
@@ -239,12 +256,16 @@ export function MentoringSessionsPage({ view }: { view: SessionView }) {
   const respondRescheduleMutation = useMutation({
     mutationFn: (variables: { relationshipId: number; sessionId: number; accept: boolean }) =>
       mentoringPairingApi.respondReschedule(variables.relationshipId, variables.sessionId, variables.accept),
-    onSuccess: (_, variables) => {
+    onSuccess: (session, variables) => {
       pushToast({
-        title: variables.accept ? 'Reschedule Accepted' : 'Reschedule Declined',
+        title: variables.accept
+          ? session.status === 'SCHEDULED' ? 'Session Scheduled' : 'Acceptance Recorded'
+          : 'Proposal Rejected',
         message: variables.accept
-          ? 'The session has been updated to the trainee’s proposed time.'
-          : 'The proposed reschedule was declined. The original session time remains.',
+          ? session.status === 'SCHEDULED'
+            ? 'All participants accepted the proposed schedule.'
+            : 'Your acceptance is recorded; the remaining participants must also agree.'
+          : 'The mentor rejected the proposed time. The current schedule is pending agreement.',
         tone: variables.accept ? 'ok' : 'info',
       });
       invalidateData();
@@ -280,6 +301,39 @@ export function MentoringSessionsPage({ view }: { view: SessionView }) {
     },
   });
 
+  // Group session state
+  const [groupSessionDate, setGroupSessionDate] = useState('');
+  const [groupSessionTime, setGroupSessionTime] = useState('09:00');
+  const [groupSessionDuration, setGroupSessionDuration] = useState(45);
+  const [groupSessionTitle, setGroupSessionTitle] = useState('');
+  const [groupSessionAgenda, setGroupSessionAgenda] = useState('');
+  const [groupSessionDeliveryMode, setGroupSessionDeliveryMode] = useState<MentoringDeliveryMode>('ONLINE');
+  const [groupSessionMeetingUrl, setGroupSessionMeetingUrl] = useState('');
+  const [groupSessionLocation, setGroupSessionLocation] = useState('');
+  const [selectedGroupParticipants, setSelectedGroupParticipants] = useState<Set<number>>(new Set());
+
+  const createGroupSessionMutation = useMutation({
+    mutationFn: (input: Parameters<typeof mentoringPairingApi.createGroupSession>[0]) =>
+      mentoringPairingApi.createGroupSession(input),
+    onSuccess: () => {
+      pushToast({
+        title: 'Group Session Invitations Sent',
+        message: 'The group session is pending until every invited trainee accepts the schedule.',
+        tone: 'ok',
+      });
+      setGroupSessionFormOpen(false);
+      setGroupSessionTitle('');
+      setGroupSessionAgenda('');
+      setGroupSessionMeetingUrl('');
+      setGroupSessionLocation('');
+      setSelectedGroupParticipants(new Set());
+      invalidateData();
+    },
+    onError: (err) => {
+      pushToast({ title: 'Group Session Failed', message: getErrorMessage(err, 'Could not schedule the group session.'), tone: 'err' });
+    },
+  });
+
   if (relationshipsQuery.isLoading || sessionsQuery.isLoading) {
     return <LoadingSkeleton rows={6} height={28} />;
   }
@@ -298,23 +352,45 @@ export function MentoringSessionsPage({ view }: { view: SessionView }) {
 
   const allRelationships = relationshipsQuery.data ?? [];
   const roleRelationships = allRelationships.filter((pair) =>
-    view === 'mentor' ? pair.currentUserRole === 'MENTOR' : pair.currentUserRole === 'TRAINEE'
+    sessionView === 'mentor' ? pair.currentUserRole === 'MENTOR' : pair.currentUserRole === 'TRAINEE'
   );
 
   const relationshipsById = new Map<number, (typeof allRelationships)[number]>();
   allRelationships.forEach((pair) => relationshipsById.set(pair.relationshipId, pair));
 
   const roleRelationshipIds = new Set(roleRelationships.map((r) => r.relationshipId));
-  const sessions = (sessionsQuery.data ?? []).filter((session) =>
-    roleRelationshipIds.has(session.relationshipId)
-  );
+  const sessions = (sessionsQuery.data ?? []).filter((session) => {
+    if (session.isGroupSession === true) {
+      if (sessionView === 'mentor') {
+        return session.createdByUserId === user?.id;
+      }
+      return user != null && (
+        session.targetTraineeUserIds?.includes(user.id) === true
+        || session.targetTrainees?.some((participant) => participant.userId === user.id) === true
+      );
+    }
+    return roleRelationshipIds.has(session.relationshipId);
+  });
 
   const traineesByRelationship = new Map<number, string[]>();
+  // userId → trainee name, from every relationship the user can see, plus
+  // names the session payload carries for co-trainees outside those rows.
+  const traineeNameByUserId = new Map<number, string>();
   for (const pair of allRelationships) {
     const names = traineesByRelationship.get(pair.relationshipId) ?? [];
     if (!names.includes(pair.traineeName)) {
       names.push(pair.traineeName);
       traineesByRelationship.set(pair.relationshipId, names);
+    }
+    if (pair.traineeUserId != null && pair.traineeName) {
+      traineeNameByUserId.set(pair.traineeUserId, pair.traineeName);
+    }
+  }
+  for (const session of sessionsQuery.data ?? []) {
+    for (const participant of session.targetTrainees ?? []) {
+      if (participant?.userId != null && participant.name) {
+        traineeNameByUserId.set(participant.userId, participant.name);
+      }
     }
   }
 
@@ -345,20 +421,39 @@ export function MentoringSessionsPage({ view }: { view: SessionView }) {
       return;
     }
 
+    const isGroup = selectedMentoringRelationship?.requestType === 'GROUP';
+
     let traineeUserId: number | undefined;
-    if (selectedMentoringRelationship?.requestType === 'GROUP') {
-      traineeUserId = Number(selectedTraineeUserId);
-      const selectedTraineeIsActive = selectedGroupTrainees.some(
-        (pair) => pair.traineeUserId === traineeUserId
-      );
-      if (!Number.isSafeInteger(traineeUserId) || !selectedTraineeIsActive) {
-        pushToast({
-          title: 'Select a trainee',
-          message: 'Choose the active trainee who should receive this group-pairing session.',
-          tone: 'err',
-        });
-        return;
+    let targetTraineeUserIds: number[] | undefined;
+
+    if (isGroup) {
+      if (sessionTargetMode === 'ONE') {
+        traineeUserId = Number(selectedTraineeUserId);
+        const selectedTraineeIsActive = selectedGroupTrainees.some(
+          (pair) => pair.traineeUserId === traineeUserId
+        );
+        if (!Number.isSafeInteger(traineeUserId) || !selectedTraineeIsActive) {
+          pushToast({
+            title: 'Select a trainee',
+            message: 'Choose the active trainee who should receive this session.',
+            tone: 'err',
+          });
+          return;
+        }
+        targetTraineeUserIds = [traineeUserId];
+        traineeUserId = undefined;
+      } else if (sessionTargetMode === 'SUBSET') {
+        if (selectedSubsetTraineeIds.size < 2) {
+          pushToast({
+            title: 'Select trainees',
+            message: 'Select at least 2 trainees for a subset session.',
+            tone: 'err',
+          });
+          return;
+        }
+        targetTraineeUserIds = Array.from(selectedSubsetTraineeIds);
       }
+      // 'ALL': no traineeUserId, no targetTraineeUserIds — backend defaults to all group members
     }
 
     const checkDate = new Date(`${createDate}T12:00:00`);
@@ -394,6 +489,7 @@ export function MentoringSessionsPage({ view }: { view: SessionView }) {
         meetingUrl: createDeliveryMode === 'ONLINE' ? createMeetingUrl.trim() || undefined : undefined,
         location: createDeliveryMode === 'IN_PERSON' ? createLocation.trim() || undefined : undefined,
         traineeUserId,
+        targetTraineeUserIds,
       },
     });
   };
@@ -442,34 +538,65 @@ export function MentoringSessionsPage({ view }: { view: SessionView }) {
     });
   };
 
-  const title = view === 'mentor' ? 'Mentoring Sessions (Trainer)' : 'My Mentoring Sessions (Trainee)';
-
   return (
     <div className="boa-stack mentoring-dashboard">
       <PageHeader
-        title={title}
+        title="My Sessions"
         subtitle={
-          view === 'mentor'
-            ? 'Flexible ad-hoc scheduling for your trainees and cohorts with automated cross-module conflict prevention.'
-            : 'Accept, decline, or propose new times for sessions scheduled by your mentor.'
+          sessionView === 'mentor'
+            ? 'Sessions you created for your trainees and cohorts.'
+            : 'Sessions scheduled for you by your mentor.'
         }
         source="live"
         actions={
-          view === 'mentor' && activeMentorRelationships.length > 0 ? (
-            <button
-              type="button"
-              className="apid-btn apid-btn-primary apid-btn-sm"
-              onClick={() => setCreateFormOpen((open) => !open)}
-            >
-              <CalendarDays size={15} />
-              {isCreateFormOpen ? 'Close Scheduler' : 'Schedule Single Session'}
-            </button>
+          sessionView === 'mentor' && activeMentorRelationships.length > 0 ? (
+            <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+              <button
+                type="button"
+                className="apid-btn apid-btn-primary apid-btn-sm"
+                onClick={() => { setCreateFormOpen((open) => !open); setGroupSessionFormOpen(false); }}
+              >
+                <CalendarDays size={15} />
+                {isCreateFormOpen ? 'Close Scheduler' : 'Schedule Single Session'}
+              </button>
+              {activeMentorRelationships.length >= 2 && (
+                <button
+                  type="button"
+                  className="apid-btn apid-btn-outline apid-btn-sm"
+                  onClick={() => { setGroupSessionFormOpen((open) => !open); setCreateFormOpen(false); }}
+                >
+                  <Users size={15} />
+                  {isGroupSessionFormOpen ? 'Close Group Scheduler' : 'Schedule Group Session'}
+                </button>
+              )}
+            </div>
           ) : undefined
         }
       />
 
+      <div role="tablist" aria-label="View sessions as" style={{ display: 'flex', gap: '0.5rem' }}>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={sessionView === 'mentor'}
+          className={`apid-btn apid-btn-sm ${sessionView === 'mentor' ? 'apid-btn-primary' : 'apid-btn-outline'}`}
+          onClick={() => setSessionView('mentor')}
+        >
+          As Mentor
+        </button>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={sessionView === 'trainee'}
+          className={`apid-btn apid-btn-sm ${sessionView === 'trainee' ? 'apid-btn-primary' : 'apid-btn-outline'}`}
+          onClick={() => setSessionView('trainee')}
+        >
+          As Mentee
+        </button>
+      </div>
+
       {/* Inline Session Creation Form */}
-      {view === 'mentor' && isCreateFormOpen && (
+      {sessionView === 'mentor' && isCreateFormOpen && (
         <form className="apid-card boa-stack" onSubmit={handleCreateSessionSubmit}>
           <div style={{ borderBottom: '1px solid var(--border)', paddingBottom: '0.75rem' }}>
             <h2 className="boa-card-title" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
@@ -491,6 +618,8 @@ export function MentoringSessionsPage({ view }: { view: SessionView }) {
                   if (createSessionMutation.isError) createSessionMutation.reset();
                   setSelectedRelationshipId(e.target.value);
                   setSelectedTraineeUserId('');
+                  setSessionTargetMode('ALL');
+                  setSelectedSubsetTraineeIds(new Set());
                   const nextParams = new URLSearchParams(searchParams);
                   if (e.target.value) nextParams.set('relationshipId', e.target.value);
                   else nextParams.delete('relationshipId');
@@ -510,30 +639,93 @@ export function MentoringSessionsPage({ view }: { view: SessionView }) {
             </div>
 
             {selectedMentoringRelationship?.requestType === 'GROUP' && (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
-                <label style={{ fontSize: '0.85rem', fontWeight: 600 }} htmlFor="mentoring-session-trainee">
-                  Session for trainee *
-                </label>
-                <select
-                  id="mentoring-session-trainee"
-                  className="apid-input"
-                  value={selectedTraineeUserId}
-                  onChange={(event) => {
-                    if (createSessionMutation.isError) createSessionMutation.reset();
-                    setSelectedTraineeUserId(event.target.value);
-                  }}
-                  required
-                >
-                  <option value="">Select one trainee</option>
-                  {selectedGroupTrainees.map((trainee) => (
-                    <option key={trainee.memberId} value={trainee.traineeUserId}>
-                      {trainee.traineeName}
-                    </option>
+              <div style={{ gridColumn: '1 / -1', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                <label style={{ fontSize: '0.85rem', fontWeight: 600 }}>Session Audience</label>
+                <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap' }}>
+                  {(['ALL', 'ONE', 'SUBSET'] as const).map((mode) => (
+                    <label key={mode} style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', cursor: 'pointer', fontSize: '0.87rem' }}>
+                      <input
+                        type="radio"
+                        name="sessionTargetMode"
+                        value={mode}
+                        checked={sessionTargetMode === mode}
+                        onChange={() => {
+                          setSessionTargetMode(mode);
+                          setSelectedTraineeUserId('');
+                          setSelectedSubsetTraineeIds(new Set());
+                          if (createSessionMutation.isError) createSessionMutation.reset();
+                        }}
+                      />
+                      {mode === 'ALL' && 'All trainees in cohort'}
+                      {mode === 'ONE' && 'One specific trainee'}
+                      {mode === 'SUBSET' && 'Select a subset'}
+                    </label>
                   ))}
-                </select>
-                <span className="boa-muted" style={{ fontSize: '0.78rem' }}>
-                  Only this trainee will receive and see the session.
-                </span>
+                </div>
+
+                {sessionTargetMode === 'ONE' && (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
+                    <select
+                      id="mentoring-session-trainee"
+                      className="apid-input"
+                      value={selectedTraineeUserId}
+                      onChange={(event) => {
+                        if (createSessionMutation.isError) createSessionMutation.reset();
+                        setSelectedTraineeUserId(event.target.value);
+                      }}
+                      required
+                    >
+                      <option value="">Select one trainee</option>
+                      {selectedGroupTrainees.map((trainee) => (
+                        <option key={trainee.memberId} value={trainee.traineeUserId}>
+                          {trainee.traineeName}
+                        </option>
+                      ))}
+                    </select>
+                    <span className="boa-muted" style={{ fontSize: '0.78rem' }}>
+                      Only this trainee will receive and see the session.
+                    </span>
+                  </div>
+                )}
+
+                {sessionTargetMode === 'SUBSET' && (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
+                    <span style={{ fontSize: '0.82rem', color: 'var(--text-subtle)' }}>Select 2 or more trainees:</span>
+                    {selectedGroupTrainees.map((trainee) => (
+                      <label
+                        key={trainee.memberId}
+                        style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', fontSize: '0.87rem' }}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={selectedSubsetTraineeIds.has(trainee.traineeUserId)}
+                          onChange={() => {
+                            if (createSessionMutation.isError) createSessionMutation.reset();
+                            setSelectedSubsetTraineeIds((prev) => {
+                              const next = new Set(prev);
+                              if (next.has(trainee.traineeUserId)) {
+                                next.delete(trainee.traineeUserId);
+                              } else {
+                                next.add(trainee.traineeUserId);
+                              }
+                              return next;
+                            });
+                          }}
+                        />
+                        {trainee.traineeName}
+                      </label>
+                    ))}
+                    <span className="boa-muted" style={{ fontSize: '0.78rem' }}>
+                      Selected: {selectedSubsetTraineeIds.size} trainee(s).
+                    </span>
+                  </div>
+                )}
+
+                {sessionTargetMode === 'ALL' && (
+                  <span className="boa-muted" style={{ fontSize: '0.78rem' }}>
+                    The session invitation will be sent to all {selectedGroupTrainees.length} active trainees in this cohort.
+                  </span>
+                )}
               </div>
             )}
 
@@ -702,13 +894,147 @@ export function MentoringSessionsPage({ view }: { view: SessionView }) {
         </form>
       )}
 
+      {/* Group Session Creation Form */}
+      {sessionView === 'mentor' && isGroupSessionFormOpen && (() => {
+        // All active trainees across all individual pairings
+        const allActiveIndividualTrainees = allRelationships.filter(
+          (pair) =>
+            pair.currentUserRole === 'MENTOR' &&
+            pair.requestType === 'INDIVIDUAL' &&
+            pair.relationshipStatus === 'ACTIVE' &&
+            pair.memberStatus === 'ACTIVE'
+        );
+        const handleGroupSessionSubmit = (e: FormEvent) => {
+          e.preventDefault();
+          const participants = Array.from(selectedGroupParticipants);
+          if (participants.length < 2) {
+            pushToast({ title: 'Select Participants', message: 'Choose at least 2 trainees for a group session.', tone: 'err' });
+            return;
+          }
+          if (!groupSessionDate || !groupSessionTitle.trim()) {
+            pushToast({ title: 'Required Fields Missing', message: 'Enter a title and select a date.', tone: 'err' });
+            return;
+          }
+          const checkDate = new Date(`${groupSessionDate}T12:00:00`);
+          if (checkDate.getDay() === 0) {
+            pushToast({ title: 'Sunday Lockout', message: 'Sessions cannot be scheduled on Sundays.', tone: 'err' });
+            return;
+          }
+          const scheduledStart = buildEatIsoString(groupSessionDate, groupSessionTime, 0);
+          const scheduledEnd = buildEatIsoString(groupSessionDate, groupSessionTime, groupSessionDuration);
+          if (new Date(scheduledStart).getTime() <= Date.now()) {
+            pushToast({ title: 'Invalid Time', message: 'Session must be scheduled for a future time.', tone: 'err' });
+            return;
+          }
+          createGroupSessionMutation.mutate({
+            participantTraineeUserIds: participants,
+            title: groupSessionTitle.trim(),
+            agenda: groupSessionAgenda.trim() || undefined,
+            scheduledStart,
+            scheduledEnd,
+            deliveryMode: groupSessionDeliveryMode,
+            meetingUrl: groupSessionDeliveryMode === 'IN_PERSON' ? undefined : groupSessionMeetingUrl.trim() || undefined,
+            location: groupSessionDeliveryMode === 'IN_PERSON' ? groupSessionLocation.trim() || undefined : undefined,
+          });
+        };
+        return (
+          <form className="apid-card boa-stack" onSubmit={handleGroupSessionSubmit}>
+            <div style={{ borderBottom: '1px solid var(--border)', paddingBottom: '0.75rem' }}>
+              <h2 className="boa-card-title" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                <Users size={18} /> Schedule Group Session
+              </h2>
+              <p className="boa-card-subtitle">
+                Invite 2 or more of your active 1-on-1 trainees to a shared session. Each trainee will see it in their individual pairing.
+              </p>
+            </div>
+            <div>
+              <label style={{ fontSize: '0.85rem', fontWeight: 600 }}>Select Participants (≥2 required) *</label>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem', marginTop: '0.4rem' }}>
+                {allActiveIndividualTrainees.length === 0 ? (
+                  <p className="boa-muted">You have no active 1-on-1 trainees available for a group session.</p>
+                ) : (
+                  allActiveIndividualTrainees.map((pair) => (
+                    <label key={pair.memberId} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer' }}>
+                      <input
+                        type="checkbox"
+                        checked={selectedGroupParticipants.has(pair.traineeUserId)}
+                        onChange={() => {
+                          setSelectedGroupParticipants((prev) => {
+                            const next = new Set(prev);
+                            if (next.has(pair.traineeUserId)) next.delete(pair.traineeUserId);
+                            else next.add(pair.traineeUserId);
+                            return next;
+                          });
+                        }}
+                      />
+                      <span>{pair.traineeName}{pair.skillName ? ` · ${pair.skillName}` : ''}</span>
+                    </label>
+                  ))
+                )}
+              </div>
+              {selectedGroupParticipants.size > 0 && selectedGroupParticipants.size < 2 && (
+                <p style={{ color: '#dc2626', fontSize: '0.8rem', marginTop: '0.3rem' }}>Select at least 2 trainees.</p>
+              )}
+            </div>
+            <div className="boa-grid-2">
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
+                <label style={{ fontSize: '0.85rem', fontWeight: 600 }}>Session Title *</label>
+                <input className="apid-input" value={groupSessionTitle} onChange={(e) => setGroupSessionTitle(e.target.value)} maxLength={180} required />
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
+                <label style={{ fontSize: '0.85rem', fontWeight: 600 }}>Date (Mon–Sat) *</label>
+                <input type="date" className="apid-input" value={groupSessionDate} min={new Date().toISOString().split('T')[0]} onChange={(e) => setGroupSessionDate(e.target.value)} required />
+              </div>
+            </div>
+            <div className="boa-grid-3">
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
+                <label style={{ fontSize: '0.85rem', fontWeight: 600 }}>Start Time (EAT) *</label>
+                <select className="apid-input" value={groupSessionTime} onChange={(e) => setGroupSessionTime(e.target.value)} required>
+                  {BANK_OPERATING_TIME_OPTIONS.map((opt) => (
+                    <option key={opt.timeValue24} value={opt.timeValue24}>{opt.labelDual}</option>
+                  ))}
+                </select>
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
+                <label style={{ fontSize: '0.85rem', fontWeight: 600 }}>Duration *</label>
+                <select className="apid-input" value={groupSessionDuration} onChange={(e) => setGroupSessionDuration(Number(e.target.value))}>
+                  <option value={30}>30 Minutes</option>
+                  <option value={45}>45 Minutes (Recommended)</option>
+                  <option value={60}>60 Minutes</option>
+                  <option value={90}>90 Minutes</option>
+                </select>
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
+                <label style={{ fontSize: '0.85rem', fontWeight: 600 }}>Delivery Mode *</label>
+                <select className="apid-input" value={groupSessionDeliveryMode} onChange={(e) => setGroupSessionDeliveryMode(e.target.value as MentoringDeliveryMode)}>
+                  <option value="ONLINE">Online (LiveKit)</option>
+                  <option value="IN_PERSON">In-Person</option>
+                  <option value="HYBRID">Hybrid</option>
+                </select>
+              </div>
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
+              <label style={{ fontSize: '0.85rem', fontWeight: 600 }}>Agenda</label>
+              <textarea className="apid-input" rows={2} value={groupSessionAgenda} onChange={(e) => setGroupSessionAgenda(e.target.value)} maxLength={2000} />
+            </div>
+            <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'flex-end' }}>
+              <button type="button" className="apid-btn apid-btn-outline apid-btn-sm" onClick={() => setGroupSessionFormOpen(false)}>Cancel</button>
+              <button type="submit" className="apid-btn apid-btn-primary apid-btn-sm" disabled={createGroupSessionMutation.isPending || selectedGroupParticipants.size < 2}>
+                <Users size={15} />
+                {createGroupSessionMutation.isPending ? 'Scheduling…' : `Schedule Group Session (${selectedGroupParticipants.size} trainees)`}
+              </button>
+            </div>
+          </form>
+        );
+      })()}
+
       {/* Sessions List */}
       {sessions.length === 0 ? (
         <section className="apid-card">
           <EmptyState
             title="No mentoring sessions found"
             description={
-              view === 'mentor'
+              sessionView === 'mentor'
                 ? 'Click "Schedule Single Session" above to invite your mentee or class cohort to an ad-hoc session.'
                 : 'Sessions scheduled by your mentor will appear here with options to accept, decline, or propose a new time.'
             }
@@ -719,29 +1045,46 @@ export function MentoringSessionsPage({ view }: { view: SessionView }) {
           <MentoringSessionListHeader />
           {sessions.map((session) => {
             const pair = relationshipsById.get(session.relationshipId);
-            const partnerLabel = pair
-              ? view === 'mentor'
-                ? session.traineeName ?? (traineesByRelationship.get(pair.relationshipId) ?? [pair.traineeName]).join(', ')
-                : pair.mentorName
-              : 'Mentoring pairing';
-            const pairLabel = pair
-              ? `${pair.mentorName} → ${session.traineeName
-                ?? (traineesByRelationship.get(pair.relationshipId) ?? [pair.traineeName]).join(', ')}`
-              : 'Mentoring pairing';
+
+            const groupParticipantNames = session.isGroupSession
+              ? (session.targetTrainees?.map((participant) => participant.name).filter(Boolean)
+                  ?? session.targetTraineeUserIds?.map((uid) => traineeNameByUserId.get(uid) ?? `Trainee #${uid}`)
+                  ?? [])
+              : null;
+
+            const mentorLabel = pair?.mentorName || session.createdByName || 'Mentor';
+            const individualTraineeLabel = session.traineeName
+              ?? (pair ? (traineesByRelationship.get(pair.relationshipId) ?? [pair.traineeName]).join(', ') : 'Trainee');
+
+            const partnerLabel = session.isGroupSession
+              ? (groupParticipantNames && groupParticipantNames.length > 0
+                  ? groupParticipantNames.join(', ')
+                  : 'Group session')
+              : pair
+                ? sessionView === 'mentor'
+                  ? individualTraineeLabel
+                  : pair.mentorName
+                : 'Mentoring pairing';
+
+            const pairLabel = session.isGroupSession
+              ? `Group Session · ${mentorLabel}`
+              : pair
+                ? `${pair.mentorName} → ${individualTraineeLabel}`
+                : 'Mentoring pairing';
 
             const timeDetails = formatDualTimeRange(session.scheduledStart, session.scheduledEnd);
-            const isMentor = view === 'mentor';
-            const isTrainee = view === 'trainee';
+            const isMentor = sessionView === 'mentor';
+            const isTrainee = sessionView === 'trainee';
 
             let statusTone: 'ok' | 'err' | 'warn' | 'info' | 'neutral' = 'neutral';
             let statusText = session.status as string;
 
-            if (session.status === 'CONFIRMED') {
+            if (session.status === 'SCHEDULED' || session.status === 'CONFIRMED') {
               statusTone = 'ok';
-              statusText = 'CONFIRMED';
-            } else if (session.status === 'SCHEDULED') {
+              statusText = 'SCHEDULED';
+            } else if (session.status === 'PENDING') {
               statusTone = 'warn';
-              statusText = 'AWAITING TRAINEE RSVP';
+              statusText = 'PENDING PARTICIPANT AGREEMENT';
             } else if (session.status === 'RESCHEDULE_PROPOSED') {
               statusTone = 'info';
               statusText = 'RESCHEDULE REQUESTED';
@@ -774,10 +1117,29 @@ export function MentoringSessionsPage({ view }: { view: SessionView }) {
                       <span className="boa-pill mentoring-session-approach">
                         {session.deliveryMode.replace('_', ' ')}
                       </span>
+                      {session.isGroupSession && (
+                        <span className="boa-pill" style={{ background: '#7c3aed', color: '#fff', fontSize: '0.72rem', fontWeight: 700 }}>
+                          GROUP SESSION
+                        </span>
+                      )}
                     </div>
 
                     <p className="boa-muted mentoring-session-participants">
-                      <strong>{isMentor ? 'Trainee(s):' : 'Mentor:'}</strong> {partnerLabel}
+                      {session.isGroupSession ? (
+                        <>
+                          <strong>Mentor:</strong> {mentorLabel}
+                          {groupParticipantNames && groupParticipantNames.length > 0 && (
+                            <>
+                              {' · '}
+                              <strong>Trainees:</strong> {groupParticipantNames.join(', ')}
+                            </>
+                          )}
+                        </>
+                      ) : (
+                        <>
+                          <strong>{isMentor ? 'Trainee(s):' : 'Mentor:'}</strong> {partnerLabel}
+                        </>
+                      )}
                       {pair?.skillName ? ` · Skill: ${pair.skillName}` : ''}
                     </p>
                   </div>
@@ -789,29 +1151,6 @@ export function MentoringSessionsPage({ view }: { view: SessionView }) {
                     >
                       View Pairing
                     </Link>
-                    {(session.deliveryMode === 'ONLINE' || session.deliveryMode === 'HYBRID') &&
-                      isMentoringSessionDay(session.scheduledStart) &&
-                      session.status !== 'CANCELLED' &&
-                      session.status !== 'DECLINED' && (
-                        <button
-                          type="button"
-                          onClick={() => setSelectedForVideo(session)}
-                          className="apid-btn apid-btn-sm"
-                          style={{
-                            background: 'linear-gradient(135deg, #0284c7, #0369a1)',
-                            color: '#ffffff',
-                            border: 'none',
-                            fontWeight: 600,
-                            boxShadow: '0 2px 4px rgba(2, 132, 199, 0.25)',
-                            display: 'inline-flex',
-                            alignItems: 'center',
-                            gap: '0.35rem',
-                            cursor: 'pointer',
-                          }}
-                        >
-                          <Video size={14} /> Join LiveKit Video
-                        </button>
-                    )}
                     <MentoringSessionJoinButton
                       session={session}
                       onJoin={() => setSelectedForVideo(session)}
@@ -850,7 +1189,10 @@ export function MentoringSessionsPage({ view }: { view: SessionView }) {
                   </p>
                 )}
 
-                <MentoringSessionReport session={session} isMentor={isMentor} />
+                <MentoringSessionReport
+                  session={session}
+                  isMentor={isMentor}
+                />
                 <MentoringSessionRating
                   relationshipId={session.relationshipId}
                   sessionId={session.id}
@@ -862,14 +1204,22 @@ export function MentoringSessionsPage({ view }: { view: SessionView }) {
                   relationshipId={session.relationshipId}
                   sessionId={session.id}
                   canAdd={
-                    view === 'mentor'
-                    && pair?.currentUserRole === 'MENTOR'
-                    && pair?.relationshipStatus === 'ACTIVE'
+                    sessionView === 'mentor'
+                    && session.createdByUserId === user?.id
                   }
                 />
 
-                {/* Reschedule Proposal Banner (when RESCHEDULE_PROPOSED) */}
-                {session.status === 'RESCHEDULE_PROPOSED' && session.proposedStart && session.proposedEnd && (
+                {session.status === 'PENDING' && session.participantCount != null && (
+                  <p className="boa-muted" role="status">
+                    {session.acceptedParticipantCount ?? 0} of {session.participantCount} mentees accepted this schedule.
+                    {session.currentUserAccepted && session.acceptedParticipantCount !== session.participantCount
+                      ? ' You accepted; waiting for the other participants.'
+                      : ''}
+                  </p>
+                )}
+
+                {/* Schedule proposal awaiting mentor or participant agreement */}
+                {session.proposedStart && session.proposedEnd && (
                   <div
                     style={{
                       background: 'rgba(59, 130, 246, 0.08)',
@@ -880,7 +1230,15 @@ export function MentoringSessionsPage({ view }: { view: SessionView }) {
                   >
                     <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontWeight: 700, color: '#1d4ed8' }}>
                       <RefreshCw size={16} />
-                      Reschedule Proposal Pending Mentor Approval
+                      {isMentor
+                        ? session.proposedByUserId === session.createdByUserId
+                          ? 'Your proposed time is awaiting participant agreement'
+                          : 'A participant proposed a different time'
+                        : session.proposedByUserId === session.createdByUserId
+                          ? 'The mentor proposed a different time'
+                          : session.proposedByUserId === user?.id
+                            ? 'Your proposal is awaiting the mentor'
+                            : 'A participant proposed a different time; awaiting the mentor'}
                     </div>
                     {(() => {
                       const propTime = formatDualTimeRange(session.proposedStart, session.proposedEnd);
@@ -896,8 +1254,8 @@ export function MentoringSessionsPage({ view }: { view: SessionView }) {
                       </p>
                     )}
 
-                    {isMentor && (
-                      <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.75rem' }}>
+                    {isMentor && session.proposedByUserId !== session.createdByUserId && (
+                      <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.75rem', flexWrap: 'wrap' }}>
                         <button
                           type="button"
                           className="apid-btn apid-btn-primary apid-btn-sm"
@@ -915,6 +1273,16 @@ export function MentoringSessionsPage({ view }: { view: SessionView }) {
                         <button
                           type="button"
                           className="apid-btn apid-btn-outline apid-btn-sm"
+                          onClick={() => {
+                            setRescheduleSessionTarget(session);
+                            setRescheduleDate(session.proposedStart!.split('T')[0]);
+                          }}
+                        >
+                          <RefreshCw size={14} /> Propose Another Time
+                        </button>
+                        <button
+                          type="button"
+                          className="apid-btn apid-btn-outline apid-btn-sm"
                           onClick={() =>
                             respondRescheduleMutation.mutate({
                               relationshipId: session.relationshipId,
@@ -924,7 +1292,35 @@ export function MentoringSessionsPage({ view }: { view: SessionView }) {
                           }
                           disabled={respondRescheduleMutation.isPending}
                         >
-                          <X size={14} /> Keep Original Time
+                          <X size={14} /> Keep Current Time
+                        </button>
+                      </div>
+                    )}
+                    {!isMentor && session.proposedByUserId === session.createdByUserId && !session.currentUserAccepted && (
+                      <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.75rem', flexWrap: 'wrap' }}>
+                        <button
+                          type="button"
+                          className="apid-btn apid-btn-primary apid-btn-sm"
+                          onClick={() =>
+                            respondRescheduleMutation.mutate({
+                              relationshipId: session.relationshipId,
+                              sessionId: session.id,
+                              accept: true,
+                            })
+                          }
+                          disabled={respondRescheduleMutation.isPending}
+                        >
+                          <Check size={14} /> Accept Proposed Time
+                        </button>
+                        <button
+                          type="button"
+                          className="apid-btn apid-btn-outline apid-btn-sm"
+                          onClick={() => {
+                            setRescheduleSessionTarget(session);
+                            setRescheduleDate(session.proposedStart!.split('T')[0]);
+                          }}
+                        >
+                          <RefreshCw size={14} /> Propose Another Time
                         </button>
                       </div>
                     )}
@@ -964,7 +1360,7 @@ export function MentoringSessionsPage({ view }: { view: SessionView }) {
                 )}
 
                 {/* Trainee RSVP Action Buttons */}
-                {isTrainee && session.status === 'SCHEDULED' && (
+                {isTrainee && session.status === 'PENDING' && !session.proposedStart && !session.currentUserAccepted && (
                   <div
                     style={{
                       display: 'flex',
@@ -1012,7 +1408,11 @@ export function MentoringSessionsPage({ view }: { view: SessionView }) {
                 )}
 
                 {/* Mentor Cancel Button */}
-                {isMentor && (session.status === 'SCHEDULED' || session.status === 'CONFIRMED') && (
+                {isMentor && (
+                  session.status === 'PENDING'
+                  || session.status === 'SCHEDULED'
+                  || session.status === 'CONFIRMED'
+                ) && (
                   <div
                     style={{
                       display: 'flex',
