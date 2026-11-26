@@ -29,6 +29,7 @@ interface AskApidCopilotDrawerProps {
   isOpen: boolean;
   onClose: () => void;
   quarterId?: number;
+  initialQuery?: string;
   onOpenDossier?: (assignmentId: number) => void;
   onFilterBranch?: (district: string, branch: string) => void;
   onFilterDistrict?: (district: string) => void;
@@ -367,6 +368,7 @@ export const AskApidCopilotDrawer: React.FC<AskApidCopilotDrawerProps> = ({
   isOpen,
   onClose,
   quarterId,
+  initialQuery,
   onOpenDossier,
   onFilterBranch,
   onFilterDistrict,
@@ -374,6 +376,12 @@ export const AskApidCopilotDrawer: React.FC<AskApidCopilotDrawerProps> = ({
 }) => {
   const [query, setQuery] = useState('');
   const [isGenerating, setIsGenerating] = useState(false);
+
+  useEffect(() => {
+    if (initialQuery) {
+      setQuery(initialQuery);
+    }
+  }, [initialQuery]);
   const [showPromptsMenu, setShowPromptsMenu] = useState(false);
   const [selectedPromptCategory, setSelectedPromptCategory] = useState<string>('All');
   const [promptSearchQuery, setPromptSearchQuery] = useState('');
@@ -401,7 +409,7 @@ export const AskApidCopilotDrawer: React.FC<AskApidCopilotDrawerProps> = ({
   const { pushToast } = useToast();
 
   const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    messagesEndRef.current?.scrollIntoView?.({ behavior: 'smooth' });
   };
 
   useEffect(() => {

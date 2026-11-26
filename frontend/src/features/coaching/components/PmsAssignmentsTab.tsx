@@ -27,7 +27,7 @@ import { SharedCascadingFilterBar, type SharedFilterValues } from './reports/Sha
 import { TalentDossierDrawer } from './reports/TalentDossierDrawer';
 import { TablePagination } from './reports/TablePagination';
 import { AiExecutiveBriefingBanner } from './ai/AiExecutiveBriefingBanner';
-import { AskApidCopilotDrawer } from './ai/AskApidCopilotDrawer';
+import { useApidCopilot } from './ai/ApidCopilotContext';
 
 export function PmsAssignmentsTab() {
   const { pushToast } = useToast();
@@ -57,8 +57,8 @@ export function PmsAssignmentsTab() {
     }
   };
 
-  // Copilot Drawer State
-  const [isCopilotOpen, setIsCopilotOpen] = useState<boolean>(false);
+  // Global APID Copilot
+  const { openCopilot } = useApidCopilot();
 
   // Pagination State
   const [currentPage, setCurrentPage] = useState<number>(1);
@@ -213,7 +213,7 @@ export function PmsAssignmentsTab() {
       {/* 1.5. AI Executive Intelligence Briefing */}
       <AiExecutiveBriefingBanner
         quarterId={activeQuarterId}
-        onOpenCopilot={() => setIsCopilotOpen(true)}
+        onOpenCopilot={() => openCopilot()}
       />
 
       {/* 2. Clickable Executive Macro KPI Ribbon */}
@@ -608,16 +608,6 @@ export function PmsAssignmentsTab() {
         isOpen={selectedDossierAssignmentId !== null}
         onClose={() => setSelectedDossierAssignmentId(null)}
         loading={dossierQuery.isLoading}
-      />
-
-      {/* Ask APID Decision Copilot Drawer */}
-      <AskApidCopilotDrawer
-        isOpen={isCopilotOpen}
-        onClose={() => setIsCopilotOpen(false)}
-        quarterId={activeQuarterId}
-        onOpenDossier={(assignmentId) => setSelectedDossierAssignmentId(assignmentId)}
-        onFilterBranch={(district, branch) => setFilterValues((prev) => ({ ...prev, district, branch }))}
-        onFilterDistrict={(district) => setFilterValues((prev) => ({ ...prev, district, branch: 'ALL' }))}
       />
     </div>
   );

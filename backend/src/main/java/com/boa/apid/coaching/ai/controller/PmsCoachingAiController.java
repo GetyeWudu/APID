@@ -14,7 +14,7 @@ import java.util.Map;
 
 @RestController
 @RequestMapping("/api/v1/coaching/ai")
-@PreAuthorize("hasAnyAuthority('ROLE_ADMIN', 'PMS_REPORT_UPLOAD', 'COACHING_REQUEST_APPROVE', 'COACHING_INITIATIVE_CREATE', 'COACHING_COACH_REPLACE')")
+@PreAuthorize("hasAnyAuthority('ROLE_ADMIN', 'PMS_REPORT_UPLOAD', 'COACHING_REQUEST_APPROVE', 'COACHING_INITIATIVE_CREATE', 'COACHING_COACH_REPLACE', 'COACHING_ASSIGNMENT_VIEW_ALL', 'COACHING_REPORT_VIEW_ALL', 'COACHING_REQUEST_SUBMIT', 'EMPLOYEE_PORTAL_ACCESS')")
 public class PmsCoachingAiController {
 
     private final PmsCoachingAiService aiService;

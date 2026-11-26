@@ -7,7 +7,7 @@ import { TalentDossierDrawer } from './reports/TalentDossierDrawer';
 import { DistrictComparativeMatrix } from './reports/DistrictComparativeMatrix';
 import { CompetencyGapDiagnostic } from './reports/CompetencyGapDiagnostic';
 import { AiExecutiveBriefingBanner } from './ai/AiExecutiveBriefingBanner';
-import { AskApidCopilotDrawer } from './ai/AskApidCopilotDrawer';
+import { useApidCopilot } from './ai/ApidCopilotContext';
 import { useToast } from '../../../shared/components/ui';
 
 interface PmsReportsTabProps {
@@ -17,12 +17,12 @@ interface PmsReportsTabProps {
 
 export const PmsReportsTab: React.FC<PmsReportsTabProps> = () => {
   const { pushToast } = useToast();
+  const { openCopilot } = useApidCopilot();
 
   const [selectedDirectorate, setSelectedDirectorate] = useState<string>('ALL');
   const [selectedAssignmentId, setSelectedAssignmentId] = useState<number | null>(null);
   const [isExporting, setIsExporting] = useState<boolean>(false);
   const [isExportingExcel, setIsExportingExcel] = useState<boolean>(false);
-  const [isCopilotOpen, setIsCopilotOpen] = useState<boolean>(false);
 
   // 1. Fetch Executive Summary
   const summaryQuery = useQuery({
@@ -200,7 +200,7 @@ export const PmsReportsTab: React.FC<PmsReportsTabProps> = () => {
       {/* 0.5. AI Executive Intelligence Briefing */}
       <AiExecutiveBriefingBanner
         quarterId={2}
-        onOpenCopilot={() => setIsCopilotOpen(true)}
+        onOpenCopilot={() => openCopilot()}
       />
 
       {/* 1. Macro KPI Executive Summary */}
@@ -420,16 +420,6 @@ export const PmsReportsTab: React.FC<PmsReportsTabProps> = () => {
         isOpen={!!selectedAssignmentId}
         onClose={() => setSelectedAssignmentId(null)}
         loading={dossierQuery.isLoading}
-      />
-
-      {/* 6. Ask APID Decision Copilot Drawer */}
-      <AskApidCopilotDrawer
-        isOpen={isCopilotOpen}
-        onClose={() => setIsCopilotOpen(false)}
-        quarterId={2}
-        onOpenDossier={(assignmentId) => setSelectedAssignmentId(assignmentId)}
-        onFilterDistrict={(dist) => setSelectedDirectorate(dist)}
-        onFilterBranch={(dist) => setSelectedDirectorate(dist)}
       />
     </div>
   );

@@ -28,6 +28,7 @@ import {
   ShieldAlert,
   ShieldCheck,
   SlidersHorizontal,
+  Sparkles,
   TrendingUp,
   UserCheck,
   UserPlus,
@@ -51,6 +52,7 @@ import { coreConfigApi } from '../../features/admin/config/api/coreConfigApi';
 import { workspaceLiveApi } from '../../features/workspace/api/workspaceDashboardApi';
 import { mentoringTrainerApi } from '../../features/mentoring/api/mentoringTrainerApi';
 import { AvatarBadge, BoaEmblem, NotificationBellPopover, useToast } from './ui';
+import { useApidCopilot } from '../../features/coaching/components/ai/ApidCopilotContext';
 
 interface NavEntry {
   to: string;
@@ -102,6 +104,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
   const navigate = useNavigate();
   const location = useLocation();
   const { pushToast } = useToast();
+  const { openCopilot } = useApidCopilot();
 
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -747,6 +750,20 @@ export function AppLayout({ children }: { children: ReactNode }) {
           </div>
 
           <div className="boa-topbar-right">
+            <button
+              type="button"
+              className="boa-topbar-copilot-btn"
+              onClick={() => openCopilot()}
+              title="Ask APID Intelligence Copilot (Ctrl+K / ⌘K)"
+              aria-label="Ask APID Intelligence Copilot"
+            >
+              <Sparkles className="boa-copilot-sparkle-icon" size={14} />
+              <span className="boa-copilot-label">Ask Copilot</span>
+              <kbd className="boa-copilot-kbd">
+                <span>{typeof navigator !== 'undefined' && navigator.platform?.toUpperCase().includes('MAC') ? '⌘' : 'Ctrl+'}</span>K
+              </kbd>
+            </button>
+
             <span
               className="boa-quarter-pill"
               title="Active fiscal quarter"

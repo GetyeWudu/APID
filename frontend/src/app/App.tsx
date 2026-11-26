@@ -10,6 +10,7 @@ import { PortalHomePage } from '../features/home/PortalHomePage';
 import { PublicLandingPage } from '../features/home/PublicLandingPage';
 import { mentoringRoutes } from '../features/mentoring/routes';
 import { workspaceRoutes } from '../features/workspace/routes';
+import { ApidCopilotProvider } from '../features/coaching/components/ai/ApidCopilotContext';
 import { resolveAuthorizedModules } from '../shared/auth/workspaceResolver';
 import { AppLayout } from '../shared/components/AppLayout';
 import { ErrorBoundary } from '../shared/components/ErrorBoundary';
@@ -122,9 +123,11 @@ export function App() {
         <BrowserRouter>
           <AuthProvider>
             <ErrorBoundary>
-              <AppLayout>
-                <AppRoutes />
-              </AppLayout>
+              <ApidCopilotProvider>
+                <AppLayout>
+                  <AppRoutes />
+                </AppLayout>
+              </ApidCopilotProvider>
             </ErrorBoundary>
           </AuthProvider>
         </BrowserRouter>

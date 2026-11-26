@@ -291,6 +291,78 @@ textarea:focus-visible {
   color: var(--muted);
 }
 
+/* =========================================================================
+   Omnipresent Global Topbar Copilot Trigger (Pattern 1 Industry Standard)
+   ========================================================================= */
+.boa-topbar-copilot-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0.28rem 0.65rem 0.28rem 0.55rem;
+  border-radius: 9999px;
+  background: linear-gradient(135deg, rgba(254, 243, 199, 0.75) 0%, rgba(253, 230, 138, 0.85) 100%);
+  border: 1px solid rgba(245, 158, 11, 0.45);
+  color: #78350f;
+  font-size: 0.8rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  box-shadow: 0 1px 2px rgba(245, 158, 11, 0.12), 0 0 10px rgba(245, 158, 11, 0.08);
+  position: relative;
+  user-select: none;
+}
+
+.boa-topbar-copilot-btn:hover {
+  background: linear-gradient(135deg, rgba(254, 243, 199, 0.95) 0%, rgba(252, 211, 77, 0.95) 100%);
+  border-color: rgba(217, 119, 6, 0.7);
+  box-shadow: 0 2px 6px rgba(245, 158, 11, 0.25), 0 0 16px rgba(245, 158, 11, 0.2);
+  transform: translateY(-1px);
+  color: #451a03;
+}
+
+.boa-topbar-copilot-btn:active {
+  transform: translateY(0);
+  box-shadow: 0 1px 2px rgba(245, 158, 11, 0.15);
+}
+
+.boa-copilot-sparkle-icon {
+  color: #d97706;
+  flex-shrink: 0;
+  transition: transform 0.2s ease;
+}
+
+.boa-topbar-copilot-btn:hover .boa-copilot-sparkle-icon {
+  transform: scale(1.15) rotate(5deg);
+  color: #b45309;
+}
+
+.boa-copilot-label {
+  letter-spacing: -0.01em;
+  white-space: nowrap;
+}
+
+.boa-copilot-kbd {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.1rem;
+  padding: 0.08rem 0.32rem;
+  font-size: 0.65rem;
+  font-weight: 700;
+  font-family: inherit;
+  background: rgba(255, 255, 255, 0.9);
+  border: 1px solid rgba(217, 119, 6, 0.35);
+  border-radius: 4px;
+  color: #92400e;
+  box-shadow: 0 1px 1px rgba(0, 0, 0, 0.04);
+  line-height: 1.2;
+}
+
+@media (max-width: 640px) {
+  .boa-copilot-kbd {
+    display: none;
+  }
+}
+
 .boa-user-chip {
   display: inline-flex;
   align-items: center;
