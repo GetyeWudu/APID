@@ -425,10 +425,11 @@ public class PmsCoachingAiService {
             contextBuilder.append("\n");
         }
 
-        // Targeted Context Sizing: Only inject matched talents (max 8) or compact district summaries
+        // Targeted Context Sizing: Inject matched talents (up to 50 records)
         if (!matchedTalents.isEmpty()) {
-            int cap = Math.min(8, matchedTalents.size());
-            contextBuilder.append("Relevant Remediation Staff & Assigned Coaches (").append(cap).append(" Records):\n");
+            int cap = Math.min(50, matchedTalents.size());
+            contextBuilder.append("Relevant Remediation Staff & Assigned Coaches (").append(cap).append(" of ").append(matchedTalents.size()).append(" Records):\n");
+            boolean needsSessionDetails = qLower.contains("session") || qLower.contains("minute") || qLower.contains("explanation") || qLower.contains("note") || qLower.contains("directive") || qLower.contains("item") || matchedTalents.size() <= 4;
             for (int i = 0; i < cap; i++) {
                 PmsTalentProgressItemDto t = matchedTalents.get(i);
                 contextBuilder.append("- Coachee: ").append(t.coacheeName())
@@ -443,7 +444,7 @@ public class PmsCoachingAiService {
                         .append(" | Focus Gap: ").append(t.targetWeaknessKpi())
                         .append("\n");
 
-                if (sessionRepository != null && t.assignmentId() != null) {
+                if (needsSessionDetails && sessionRepository != null && t.assignmentId() != null) {
                     try {
                         List<CoachingSession> sList = sessionRepository.findAllByAssignmentIdOrderByScheduledStartTimeDesc(t.assignmentId());
                         if (!sList.isEmpty()) {
@@ -493,9 +494,10 @@ public class PmsCoachingAiService {
                 2. If the user asks for "additional explanations", discussion minutes, or takeaways about a coachee, refer directly to their recorded session minutes, discussion notes, action items, and coaching trajectory provided in the context.
                 3. If the user asks about a coach (e.g. Worku Wolde) or asks for "all coachees", list and summarize EVERY coachee assigned to that coach with their individual ratings, completed sessions, and status. Do NOT stop after just one coachee.
                 4. If the user asks about an employee who is not in remediation, explain that in Bank of Abyssinia PMS, only staff with appraisal ratings below 3.0 are enrolled in mandatory remedial coaching.
-                5. Always format ratings to 2 decimal places (e.g. 1.45 instead of 1.4500).
-                6. Do NOT include stray markdown stars like *Coach* or unclosed asterisks in section titles. Use clean text.
-                7. Always conclude with an executive takeaway section formatted as:
+                5. If the user asks to "Show all coachees in Critical Tier" or requests a list of coachees, list EVERY single coachee provided in the database grounding context without omitting anyone. State the exact total count (e.g. 17 coachees in Critical Tier).
+                6. Always format ratings to 2 decimal places (e.g. 1.45 instead of 1.4500).
+                7. Do NOT include stray markdown stars like *Coach* or unclosed asterisks in section titles. Use clean text.
+                8. Always conclude with an executive takeaway section formatted as:
                 **Executive Takeaway:** [One or two actionable sentences summarizing leadership implications and next steps]
                 """.formatted(contextBuilder.toString(), cleanQuery);
 
@@ -539,7 +541,7 @@ public class PmsCoachingAiService {
         List<AiCopilotActionLinkDto> links = new ArrayList<>();
         int dossierCount = 0;
         for (PmsTalentProgressItemDto t : matchedTalents) {
-            if (dossierCount < 6) { // cap at 6 actionable cards
+            if (dossierCount < 18) { // cap at 18 actionable cards to accommodate full cohorts
                 links.add(AiCopilotActionLinkDto.dossier("View " + t.coacheeName() + " Dossier", t.assignmentId()));
                 dossierCount++;
             }
