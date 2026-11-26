@@ -10,8 +10,10 @@ import com.boa.apid.core.organization.entity.Employee;
 import com.boa.apid.core.organization.entity.EmploymentStatus;
 import com.boa.apid.core.organization.repository.DepartmentRepository;
 import com.boa.apid.core.organization.repository.EmployeeRepository;
+import com.boa.apid.core.organization.service.DepartmentCacheInvalidationEvent;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.ldap.core.ContextMapper;
 import org.springframework.ldap.core.DirContextAdapter;
 import org.springframework.ldap.core.LdapTemplate;
@@ -58,6 +60,7 @@ public class ActiveDirectorySyncService {
     private final UserRepository userRepository;
     private final EmployeeRepository employeeRepository;
     private final DepartmentRepository departmentRepository;
+    private final ApplicationEventPublisher eventPublisher;
     private final RoleRepository roleRepository;
     private final UserRoleRepository userRoleRepository;
 
@@ -67,6 +70,7 @@ public class ActiveDirectorySyncService {
             UserRepository userRepository,
             EmployeeRepository employeeRepository,
             DepartmentRepository departmentRepository,
+            ApplicationEventPublisher eventPublisher,
             RoleRepository roleRepository,
             UserRoleRepository userRoleRepository
     ) {
@@ -75,6 +79,7 @@ public class ActiveDirectorySyncService {
         this.userRepository = userRepository;
         this.employeeRepository = employeeRepository;
         this.departmentRepository = departmentRepository;
+        this.eventPublisher = eventPublisher;
         this.roleRepository = roleRepository;
         this.userRoleRepository = userRoleRepository;
     }
@@ -109,7 +114,12 @@ public class ActiveDirectorySyncService {
             int rolesAssigned = 0;
 
             // Pre-load lookup caches to ensure high-performance in-memory reconciliation
-            Map<String, Department> departmentCache = loadDepartmentCache();
+            List<Department> departments = new ArrayList<>(departmentRepository.findAllByOrderByNameAsc());
+            Map<String, Department> departmentCache = loadDepartmentCache(departments);
+            Map<String, Department> departmentCodeCache = loadDepartmentCodeCache(departments);
+            if (syncDepartmentsFromAd(adUsers, departments, departmentCache, departmentCodeCache)) {
+                eventPublisher.publishEvent(new DepartmentCacheInvalidationEvent());
+            }
             Map<String, Role> roleCache = loadRoleCache();
 
             // Index AD records by DN, sAMAccountName, and employeeID
@@ -165,8 +175,8 @@ public class ActiveDirectorySyncService {
                 }
                 user = userRepository.save(user);
 
-                // 2. Resolve Department
-                Department dept = resolveDepartment(adUser.department(), departmentCache);
+                // 2. Resolve the employee's AD location to the generated department hierarchy.
+                Department dept = resolveAdDepartment(adUser, departments, departmentCache, departmentCodeCache);
 
                 // 3. Resolve or create Employee
                 Optional<Employee> optEmp = employeeRepository.findByEmployeeNumberIgnoreCase(empNumber);
@@ -186,7 +196,16 @@ public class ActiveDirectorySyncService {
                 employee.setEmail(adUser.mail() != null && !adUser.mail().isBlank() ? adUser.mail().trim() : null);
                 employee.setJob(adUser.title() != null && !adUser.title().isBlank() ? adUser.title().trim() : null);
                 employee.setPosition(adUser.title() != null && !adUser.title().isBlank() ? adUser.title().trim() : null);
-                employee.setDepartment(dept);
+                if (dept != null) employee.setDepartment(dept);
+                if (adUser.districtId() != null && !adUser.districtId().isBlank()) {
+                    employee.setDistrictId(adUser.districtId().trim());
+                }
+                if (adUser.branchId() != null && !adUser.branchId().isBlank()) {
+                    employee.setBranchId(adUser.branchId().trim());
+                }
+                if (adUser.physicalDeliveryOfficeName() != null && !adUser.physicalDeliveryOfficeName().isBlank()) {
+                    employee.setOfficeLocation(adUser.physicalDeliveryOfficeName().trim());
+                }
                 employee.setUserId(user.getId());
                 employee.setEmploymentStatus(isAdDisabled ? EmploymentStatus.INACTIVE : EmploymentStatus.ACTIVE);
 
@@ -355,9 +374,287 @@ public class ActiveDirectorySyncService {
         return null;
     }
 
-    private Map<String, Department> loadDepartmentCache() {
-        return departmentRepository.findAllByOrderByNameAsc().stream()
-                .collect(Collectors.toMap(d -> d.getName().toLowerCase(Locale.ROOT), d -> d, (a, b) -> a));
+    private Map<String, Department> loadDepartmentCache(List<Department> departments) {
+        return departments.stream()
+                .collect(Collectors.toMap(
+                        department -> department.getName().trim().toLowerCase(Locale.ROOT),
+                        department -> department,
+                        (first, ignored) -> first
+                ));
+    }
+
+    private Map<String, Department> loadDepartmentCodeCache(List<Department> departments) {
+        return departments.stream()
+                .filter(department -> department.getCode() != null && !department.getCode().isBlank())
+                .collect(Collectors.toMap(
+                        department -> normalizeDirectoryValue(department.getCode()),
+                        department -> department,
+                        (first, ignored) -> first
+                ));
+    }
+
+    private boolean syncDepartmentsFromAd(
+            List<AdSyncUserRecord> adUsers,
+            List<Department> departments,
+            Map<String, Department> departmentCache,
+            Map<String, Department> departmentCodeCache
+    ) {
+        boolean changed = false;
+        Set<String> districtIds = new LinkedHashSet<>();
+        for (AdSyncUserRecord adUser : adUsers) {
+            String districtId = normalizeDirectoryValue(adUser.districtId());
+            if (districtId != null) {
+                districtIds.add(districtId);
+            }
+        }
+
+        for (String districtId : districtIds) {
+            Department existingDistrict = departmentCodeCache.get(districtId);
+            String districtName = resolveDistrictName(districtId, adUsers, existingDistrict);
+            changed |= ensureAdDepartment(
+                    districtId,
+                    districtName,
+                    null,
+                    departments,
+                    departmentCache,
+                    departmentCodeCache
+            );
+        }
+
+        for (AdSyncUserRecord adUser : adUsers) {
+            String districtId = normalizeDirectoryValue(adUser.districtId());
+            String branchId = normalizeDirectoryValue(adUser.branchId());
+            if (districtId == null && branchId == null) {
+                continue;
+            }
+
+            if (districtId == null) {
+                log.warn(
+                        "Could not map Active Directory branch {} for employee {} because DistrictID is missing",
+                        adUser.branchId(),
+                        adUser.employeeId()
+                );
+                continue;
+            }
+
+            Department district = departmentCodeCache.get(districtId);
+            if (district == null) {
+                log.warn("Could not resolve Active Directory district {} for employee {}", adUser.districtId(), adUser.employeeId());
+                continue;
+            }
+
+            if (branchId == null && isDistrictRecord(adUser, district)) {
+                continue;
+            }
+
+            String departmentName = branchId != null
+                    ? firstNonBlank(adUser.physicalDeliveryOfficeName(), adUser.department(), adUser.branchId())
+                    : firstNonBlank(adUser.department(), adUser.physicalDeliveryOfficeName());
+            if (departmentName == null) continue;
+
+            changed |= ensureAdDepartment(
+                    branchId != null ? adUser.branchId().trim() : null,
+                    departmentName,
+                    district,
+                    departments,
+                    departmentCache,
+                    departmentCodeCache
+            );
+        }
+
+        for (AdSyncUserRecord adUser : adUsers) {
+            if (normalizeDirectoryValue(adUser.districtId()) != null
+                    || normalizeDirectoryValue(adUser.branchId()) != null) {
+                continue;
+            }
+
+            String departmentName = firstNonBlank(adUser.department());
+            if (departmentName == null) {
+                continue;
+            }
+
+            changed |= ensureAdDepartment(
+                    null,
+                    departmentName,
+                    null,
+                    departments,
+                    departmentCache,
+                    departmentCodeCache
+            );
+        }
+
+        return changed;
+    }
+
+    private boolean ensureAdDepartment(
+            String code,
+            String name,
+            Department parent,
+            List<Department> departments,
+            Map<String, Department> departmentCache,
+            Map<String, Department> departmentCodeCache
+    ) {
+        String normalizedCode = normalizeDirectoryValue(code);
+        String normalizedName = normalizeDirectoryValue(name);
+        if (normalizedName == null) {
+            return false;
+        }
+
+        Department department = normalizedCode != null ? departmentCodeCache.get(normalizedCode) : null;
+        if (department == null) {
+            department = departments.stream()
+                    .filter(candidate -> candidate.getName() != null
+                            && candidate.getName().trim().equalsIgnoreCase(name.trim()))
+                    .filter(candidate -> sameDepartmentParent(candidate.getParentDepartment(), parent))
+                    .findFirst()
+                    .orElse(null);
+        }
+        if (department == null && parent != null) {
+            department = departments.stream()
+                    .filter(candidate -> candidate.getName() != null
+                            && candidate.getName().trim().equalsIgnoreCase(name.trim()))
+                    .filter(candidate -> candidate.getParentDepartment() == null)
+                    .filter(candidate -> !Objects.equals(candidate.getId(), parent.getId()))
+                    .findFirst()
+                    .orElse(null);
+        }
+
+        boolean changed = false;
+        if (department == null) {
+            department = new Department();
+            department.setCode(code == null ? null : code.trim());
+            department.setName(name.trim());
+            department.setParentDepartment(parent);
+            department.setActive(true);
+            department = departmentRepository.save(department);
+            departments.add(department);
+            changed = true;
+        } else {
+            boolean update = false;
+            if (normalizedCode != null
+                    && (department.getCode() == null || department.getCode().isBlank())) {
+                department.setCode(code.trim());
+                update = true;
+            }
+            if (!sameDepartmentParent(department.getParentDepartment(), parent)) {
+                department.setParentDepartment(parent);
+                update = true;
+            }
+            if (update) {
+                department = departmentRepository.save(department);
+                changed = true;
+            }
+        }
+
+        departmentCache.putIfAbsent(normalizedName, department);
+        if (normalizedCode != null) {
+            departmentCodeCache.putIfAbsent(normalizedCode, department);
+        }
+        return changed;
+    }
+
+    private boolean sameDepartmentParent(Department left, Department right) {
+        Long leftId = left != null ? left.getId() : null;
+        Long rightId = right != null ? right.getId() : null;
+        return Objects.equals(leftId, rightId);
+    }
+
+    private String resolveDistrictName(
+            String districtId,
+            List<AdSyncUserRecord> adUsers,
+            Department existingDistrict
+    ) {
+        if (existingDistrict != null && existingDistrict.getName() != null && !existingDistrict.getName().isBlank()) {
+            return existingDistrict.getName().trim();
+        }
+
+        for (AdSyncUserRecord adUser : adUsers) {
+            if (!districtId.equals(normalizeDirectoryValue(adUser.districtId()))) {
+                continue;
+            }
+
+            String departmentName = normalizeDisplayValue(adUser.department());
+            if (departmentName != null
+                    && departmentName.toLowerCase(Locale.ROOT).contains("district")
+                    && !departmentName.equalsIgnoreCase("district")) {
+                return departmentName;
+            }
+
+            String title = normalizeDisplayValue(adUser.title());
+            if (title != null && title.toLowerCase(Locale.ROOT).contains("district director")) {
+                return firstNonBlank(adUser.physicalDeliveryOfficeName(), departmentName, districtId);
+            }
+        }
+
+        return "District " + districtId;
+    }
+
+    private boolean isDistrictRecord(AdSyncUserRecord adUser, Department district) {
+        String title = normalizeDisplayValue(adUser.title());
+        if (title != null && title.toLowerCase(Locale.ROOT).contains("district director")) {
+            return true;
+        }
+
+        String departmentName = normalizeDisplayValue(adUser.department());
+        return departmentName != null
+                && district.getName() != null
+                && departmentName.equalsIgnoreCase(district.getName());
+    }
+
+    private String firstNonBlank(String... values) {
+        for (String value : values) {
+            if (value != null && !value.isBlank()) {
+                return value.trim();
+            }
+        }
+        return null;
+    }
+
+    private String normalizeDisplayValue(String value) {
+        return value == null || value.isBlank() ? null : value.trim();
+    }
+
+    private String normalizeDirectoryValue(String value) {
+        return value == null || value.isBlank() ? null : value.trim().toLowerCase(Locale.ROOT);
+    }
+
+    private Department resolveAdDepartment(
+            AdSyncUserRecord adUser,
+            List<Department> departments,
+            Map<String, Department> departmentCache,
+            Map<String, Department> departmentCodeCache
+    ) {
+        String branchId = normalizeDirectoryValue(adUser.branchId());
+        if (branchId != null) {
+            Department branch = departmentCodeCache.get(branchId);
+            if (branch != null && branch.getParentDepartment() != null) return branch;
+            log.warn("Active Directory branch {} was not resolved for employee {}", adUser.branchId(), adUser.employeeId());
+            return null;
+        }
+
+        String districtId = normalizeDirectoryValue(adUser.districtId());
+        if (districtId != null) {
+            Department district = departmentCodeCache.get(districtId);
+            if (district == null) {
+                log.warn("Active Directory district {} was not resolved for employee {}", adUser.districtId(), adUser.employeeId());
+                return null;
+            }
+            if (isDistrictRecord(adUser, district)) return district;
+
+            String departmentName = firstNonBlank(adUser.department(), adUser.physicalDeliveryOfficeName());
+            if (departmentName == null) return district;
+
+            return departments.stream()
+                    .filter(candidate -> candidate.getName() != null
+                            && candidate.getName().trim().equalsIgnoreCase(departmentName))
+                    .filter(candidate -> sameDepartmentParent(candidate.getParentDepartment(), district))
+                    .findFirst()
+                    .orElse(null);
+        }
+
+        return adUser.department() == null || adUser.department().isBlank()
+                ? null
+                : resolveDepartment(adUser.department(), departmentCache);
     }
 
     private Map<String, Role> loadRoleCache() {
@@ -377,7 +674,8 @@ public class ActiveDirectorySyncService {
                     .base(relativeSearchBase)
                     .attributes(
                             "distinguishedName", "sAMAccountName", "userPrincipalName",
-                            "employeeID", "mail", "displayName", "givenName", "sn", "department", "title",
+                            "employeeID", "mail", "displayName", "givenName", "sn", "department",
+                            "physicalDeliveryOfficeName", "DistrictID", "BranchID", "title",
                             "manager", "userAccountControl", "memberOf"
                     )
                     .filter("(&(objectCategory=person)(objectClass=user))");
@@ -393,6 +691,9 @@ public class ActiveDirectorySyncService {
                 String givenName = adapter.getStringAttribute("givenName");
                 String sn = adapter.getStringAttribute("sn");
                 String dept = adapter.getStringAttribute("department");
+                String office = adapter.getStringAttribute("physicalDeliveryOfficeName");
+                String districtId = adapter.getStringAttribute("DistrictID");
+                String branchId = adapter.getStringAttribute("BranchID");
                 String title = adapter.getStringAttribute("title");
                 String managerDn = adapter.getStringAttribute("manager");
 
@@ -409,7 +710,10 @@ public class ActiveDirectorySyncService {
                         ? Arrays.asList(memberOfArray)
                         : List.of();
 
-                return new AdSyncUserRecord(dn, sam, upn, empId, mail, display, givenName, sn, dept, title, managerDn, uac, memberOfList);
+                return new AdSyncUserRecord(
+                        dn, sam, upn, empId, mail, display, givenName, sn, dept,
+                        office, districtId, branchId, title, managerDn, uac, memberOfList
+                );
             });
         } catch (Exception ex) {
             log.error("Failed to fetch user list from Active Directory: {}", ex.getMessage(), ex);
@@ -470,6 +774,9 @@ public class ActiveDirectorySyncService {
             String givenName,
             String sn,
             String department,
+            String physicalDeliveryOfficeName,
+            String districtId,
+            String branchId,
             String title,
             String managerDn,
             int userAccountControl,

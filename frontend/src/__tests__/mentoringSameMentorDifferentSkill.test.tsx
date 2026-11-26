@@ -161,7 +161,7 @@ describe('same mentor requests for different skills', () => {
           skillName: 'Financial Modeling',
           careerExperience: [],
           mentorshipExperience: [],
-          mentor: { ...mentor, userId: 21, fullName: 'Mentor Two' },
+          mentor: { ...mentor, userId: 21, fullName: 'Mentor Two', averageRating: null },
         },
       ],
     });
@@ -176,6 +176,15 @@ describe('same mentor requests for different skills', () => {
     expect(screen.getByText('Mentor Two')).toBeInTheDocument();
     expect(screen.getByText('Recommendation #1')).toBeInTheDocument();
     expect(screen.getByText('Recommendation #2')).toBeInTheDocument();
+    const firstRecommendation = screen.getByText('Mentor One').closest('article');
+    if (!firstRecommendation) throw new Error('First AI recommendation card was not rendered.');
+    expect(within(firstRecommendation).getByRole('img', {
+      name: 'Profile photo for Mentor One',
+    })).toBeInTheDocument();
+    expect(within(firstRecommendation).getByText('4.5')).toBeInTheDocument();
+    const secondRecommendation = screen.getByText('Mentor Two').closest('article');
+    if (!secondRecommendation) throw new Error('Second AI recommendation card was not rendered.');
+    expect(within(secondRecommendation).getByText('Not rated')).toBeInTheDocument();
     expect(screen.getByText('These mentors have skills related to your financial modeling goal.')).toBeInTheDocument();
   });
 
@@ -284,29 +293,72 @@ describe('same mentor requests for different skills', () => {
     });
   });
 
-  describe('mentor directory pagination', () => {
-    it('shows mentors in a paginated table', () => {
-      const mentors = Array.from({ length: 12 }, (_, index) => ({
+  describe('mentor directory cards', () => {
+    it('sorts mentors by name and paginates eight per page', () => {
+      const mentors = Array.from({ length: 14 }, (_, index) => ({
         ...mentor,
         userId: 20 + index,
         username: `mentor${index + 1}`,
         employeeNumber: `EMP-${index + 1}`,
-        fullName: `Mentor ${index + 1}`,
+        fullName: `Mentor ${String.fromCharCode(65 + index)}`,
+        averageRating: 1 + index * 0.25,
       }));
 
-      renderWithProviders(<MentorDirectory mentors={mentors} currentUserId={7} />);
+      const { container } = renderWithProviders(
+        <MentorDirectory mentors={mentors} currentUserId={7} />
+      );
+      const getVisibleMentorNames = () => Array.from(
+        container.querySelectorAll('.mentor-directory-card h4'),
+        (heading) => heading.textContent ?? ''
+      );
 
-      expect(screen.getByText('Mentor 1')).toBeInTheDocument();
-      expect(screen.getByText('Mentor 10')).toBeInTheDocument();
-      expect(screen.queryByText('Mentor 11')).not.toBeInTheDocument();
-      expect(screen.getByText('Page 1 of 2 (12 mentors)')).toBeInTheDocument();
+      expect(getVisibleMentorNames()).toEqual([
+        'Mentor A',
+        'Mentor B',
+        'Mentor C',
+        'Mentor D',
+        'Mentor E',
+        'Mentor F',
+        'Mentor G',
+        'Mentor H',
+      ]);
+      expect(screen.getByRole('img', { name: 'Profile photo for Mentor A' })).toBeInTheDocument();
+      expect(screen.getByText('Showing 8 of 14 highest-rated mentors')).toBeInTheDocument();
+      expect(screen.getByText('Page 1 of 2 (14 mentors)')).toBeInTheDocument();
 
       fireEvent.click(screen.getByRole('button', { name: 'Next' }));
 
-      expect(screen.getByText('Mentor 11')).toBeInTheDocument();
-      expect(screen.getByText('Mentor 12')).toBeInTheDocument();
-      expect(screen.queryByText('Mentor 1')).not.toBeInTheDocument();
-      expect(screen.getByText('Page 2 of 2 (12 mentors)')).toBeInTheDocument();
+      expect(getVisibleMentorNames()).toEqual([
+        'Mentor I',
+        'Mentor J',
+        'Mentor K',
+        'Mentor L',
+        'Mentor M',
+        'Mentor N',
+      ]);
+      expect(screen.getByText('Page 2 of 2 (14 mentors)')).toBeInTheDocument();
+
+      fireEvent.click(screen.getByRole('button', { name: 'All mentors' }));
+      expect(getVisibleMentorNames()).toEqual([
+        'Mentor A',
+        'Mentor B',
+        'Mentor C',
+        'Mentor D',
+        'Mentor E',
+        'Mentor F',
+        'Mentor G',
+        'Mentor H',
+      ]);
+      expect(screen.getByText('Page 1 of 2 (14 mentors)')).toBeInTheDocument();
+      fireEvent.click(screen.getByRole('button', { name: 'Next' }));
+      expect(getVisibleMentorNames()).toEqual([
+        'Mentor I',
+        'Mentor J',
+        'Mentor K',
+        'Mentor L',
+        'Mentor M',
+        'Mentor N',
+      ]);
     });
 
     it('loads and displays the selected mentor profile details', async () => {

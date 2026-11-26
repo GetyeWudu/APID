@@ -14,7 +14,7 @@ import java.util.Optional;
 
 public interface TrainerAuthorizationRepository extends JpaRepository<TrainerAuthorization, Long> {
 
-    @EntityGraph(attributePaths = {"employee", "skills"})
+    @EntityGraph(attributePaths = {"employee", "skills", "profilePicture"})
     List<TrainerAuthorization> findAllByOrderByUpdatedAtDescIdDesc();
 
     @EntityGraph(attributePaths = {"employee", "skills"})

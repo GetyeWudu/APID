@@ -197,7 +197,7 @@ describe('MentoringHomePage Find a Mentor', () => {
     });
   });
 
-  it('lets the trainee ask HR to find a mentor', async () => {
+  it('opens the HR matching form in a modal and submits the request', async () => {
     vi.spyOn(mentorDirectoryApi, 'listMentors').mockResolvedValue([]);
     vi.spyOn(mentoringMatchApi, 'submit').mockResolvedValue({
       id: 41,
@@ -217,7 +217,8 @@ describe('MentoringHomePage Find a Mentor', () => {
 
     renderFindMentorPage();
 
-    expect(await screen.findByText('Ask HR to find a mentor')).toBeInTheDocument();
+    fireEvent.click(await screen.findByRole('button', { name: 'Ask HR to find a mentor' }));
+    expect(await screen.findByRole('dialog', { name: 'Ask HR to find a mentor' })).toBeInTheDocument();
 
     fireEvent.change(screen.getByLabelText('Skill you want to learn'), {
       target: { value: String(skill.id) },
@@ -249,7 +250,7 @@ describe('MentoringHomePage Find a Mentor', () => {
     expect(screen.getByText('No Mentors Found')).toBeInTheDocument();
   });
 
-  it('defaults the directory to the user branch and lets them browse all locations', async () => {
+  it('shows mentors from all locations by default and supports location filtering', async () => {
     const userBranch = [
       { id: 'department:1', name: 'North District' },
       { id: 'department:2', name: 'Central Branch' },
@@ -269,13 +270,14 @@ describe('MentoringHomePage Find a Mentor', () => {
     renderFindMentorPage();
 
     expect(await screen.findByText('Mentor 20')).toBeInTheDocument();
-    expect(screen.queryByText('Mentor 30')).not.toBeInTheDocument();
+    expect(screen.getByText('Mentor 30')).toBeInTheDocument();
     const districtFilter = screen.getByLabelText('Filter by district');
     const branchFilter = screen.getByLabelText('Filter by branch');
-    expect(districtFilter).toHaveValue('department:1');
-    expect(branchFilter).toHaveValue('department:2');
-    fireEvent.change(districtFilter, { target: { value: '' } });
-    expect(screen.getByText('Mentor 30')).toBeInTheDocument();
+    expect(districtFilter).toHaveValue('');
+    expect(branchFilter).toHaveValue('');
+    fireEvent.change(districtFilter, { target: { value: 'department:1' } });
+    expect(screen.getByText('Mentor 20')).toBeInTheDocument();
+    expect(screen.queryByText('Mentor 30')).not.toBeInTheDocument();
   });
 
   it('shows a mentor list and all pairings when a trainee is selected', async () => {

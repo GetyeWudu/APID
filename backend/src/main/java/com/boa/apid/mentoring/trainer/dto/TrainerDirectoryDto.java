@@ -20,8 +20,48 @@ public record TrainerDirectoryDto(
         Integer sessionsPerWeek,
         List<EducationProfile> education,
         List<ProfessionalCertificate> professionalCertificates,
-        List<OrganizationLocationDto> organizationPath
+        List<OrganizationLocationDto> organizationPath,
+        Long profilePictureFileId
 ) {
+    public TrainerDirectoryDto(
+            Long userId,
+            String username,
+            String employeeNumber,
+            String fullName,
+            String departmentName,
+            String bio,
+            int activeTrainees,
+            int remainingCapacity,
+            Double averageRating,
+            List<TrainerSkillDto> skills,
+            Integer experienceYears,
+            String mentoringApproach,
+            Integer sessionsPerWeek,
+            List<EducationProfile> education,
+            List<ProfessionalCertificate> professionalCertificates,
+            List<OrganizationLocationDto> organizationPath
+    ) {
+        this(
+                userId,
+                username,
+                employeeNumber,
+                fullName,
+                departmentName,
+                bio,
+                activeTrainees,
+                remainingCapacity,
+                averageRating,
+                skills,
+                experienceYears,
+                mentoringApproach,
+                sessionsPerWeek,
+                education,
+                professionalCertificates,
+                organizationPath,
+                null
+        );
+    }
+
     public record EducationProfile(
             String educationLevel,
             String fieldOfStudy,

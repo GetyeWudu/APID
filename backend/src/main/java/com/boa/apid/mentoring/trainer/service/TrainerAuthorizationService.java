@@ -1369,7 +1369,10 @@ public class TrainerAuthorizationService {
                 authorization.getSessionsPerWeek(),
                 profileDetails.education(),
                 profileDetails.professionalCertificates(),
-                OrganizationLocationDto.path(employee)
+                OrganizationLocationDto.path(employee),
+                authorization.getProfilePicture() == null
+                        ? null
+                        : authorization.getProfilePicture().getId()
         );
     }
 

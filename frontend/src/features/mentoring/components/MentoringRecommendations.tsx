@@ -19,6 +19,7 @@ import {
 } from '../api/mentorDirectoryApi';
 import { mentoringPairingApi, type MentoringPairing } from '../api/mentoringPairingApi';
 import { MentorProfileModal } from './MentorProfileModal';
+import { MentorProfilePhoto } from './MentorProfilePhoto';
 import './MentoringRecommendations.css';
 
 const LEARNING_GOAL_EXAMPLES = [
@@ -246,10 +247,14 @@ export function MentoringRecommendations({
                 return (
                   <article className="ai-mentor-card" key={mentor.userId}>
                     <div className="ai-mentor-card-top">
-                      <span className="ai-mentor-rank">Recommendation #{recommendation.rank}</span>
-                      {mentor.averageRating != null && mentor.averageRating > 0 && (
-                        <span className="ai-mentor-rating"><Star size={14} /> {mentor.averageRating.toFixed(1)}</span>
-                      )}
+                      <MentorProfilePhoto mentor={mentor} />
+                      <div className="ai-mentor-card-ranking">
+                        <span className="ai-mentor-rank">Recommendation #{recommendation.rank}</span>
+                        <span className="ai-mentor-rating">
+                          <Star size={14} aria-hidden="true" />
+                          {mentor.averageRating != null ? mentor.averageRating.toFixed(1) : 'Not rated'}
+                        </span>
+                      </div>
                     </div>
                     <h3>{mentor.fullName}</h3>
                     {mentor.departmentName && <p className="ai-mentor-department">{mentor.departmentName}</p>}

@@ -1,8 +1,14 @@
 import { useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { organizationApi } from '../../admin/organization/api/organizationApi';
-import type { DepartmentDto } from '../../admin/organization/types/organization.types';
+import { isDistrictDepartment } from '../../admin/organization/organizationUnits';
+import type { DepartmentItem } from '../../admin/organization/types/organization.types';
 import type { OrganizationLocation, OrganizationLocated } from '../api/organizationLocation';
+
+type LocationFilterDepartment = Pick<
+  DepartmentItem,
+  'id' | 'code' | 'name' | 'parentDepartmentId'
+>;
 
 export function filterByOrganizationLocation<T extends OrganizationLocated>(
   rows: T[],
@@ -15,6 +21,79 @@ export function filterByOrganizationLocation<T extends OrganizationLocated>(
   return rows.filter((row) =>
     row.organizationPath?.some((location) => location.id === selectedLocationId)
   );
+}
+
+export function buildOrganizationLocationOptions(
+  departments: LocationFilterDepartment[],
+  paths: OrganizationLocation[][]
+) {
+  const districtMap = new Map<string, string>();
+  const branchMap = new Map<string, { name: string; districtId: string | null }>();
+  const departmentById = new Map<number, LocationFilterDepartment>(
+    departments.map((department) => [department.id, department])
+  );
+  const districtIds = new Set(
+    departments.filter(isDistrictDepartment).map((department) => department.id)
+  );
+
+  departments.forEach((department) => {
+    if (districtIds.has(department.id)) {
+      districtMap.set(`department:${department.id}`, department.name);
+      return;
+    }
+
+    let parentId = department.parentDepartmentId;
+    let districtId: string | null = null;
+    const visited = new Set([department.id]);
+    while (parentId != null && !visited.has(parentId)) {
+      visited.add(parentId);
+      const parent = departmentById.get(parentId);
+      if (!parent) break;
+      if (districtIds.has(parent.id)) {
+        districtId = `department:${parent.id}`;
+        break;
+      }
+      parentId = parent.parentDepartmentId;
+    }
+
+    branchMap.set(`department:${department.id}`, {
+      name: department.name,
+      districtId,
+    });
+  });
+
+  let hasUnassigned = false;
+  paths.forEach((path) => {
+    if (path.length === 0) {
+      hasUnassigned = true;
+      return;
+    }
+    if (path.length >= 2) {
+      const district = path[0];
+      districtMap.set(district.id, district.name);
+      for (let index = 1; index < path.length; index += 1) {
+        const branch = path[index];
+        if (!branchMap.has(branch.id)) {
+          branchMap.set(branch.id, { name: branch.name, districtId: district.id });
+        }
+      }
+    } else {
+      const location = path[0];
+      if (!districtMap.has(location.id) && !branchMap.has(location.id)) {
+        branchMap.set(location.id, { name: location.name, districtId: null });
+      }
+    }
+  });
+
+  return {
+    districts: [...districtMap.entries()].sort((first, second) =>
+      first[1].localeCompare(second[1])
+    ),
+    branches: [...branchMap.entries()].sort((first, second) =>
+      first[1].name.localeCompare(second[1].name)
+    ),
+    hasUnassigned,
+  };
 }
 
 export function OrganizationLocationFilter({
@@ -32,86 +111,16 @@ export function OrganizationLocationFilter({
   branchLabel?: string;
 }) {
   const departmentsQuery = useQuery({
-    queryKey: ['core', 'organization', 'departments', 'active'],
-    queryFn: () => organizationApi.listDepartments(true),
+    queryKey: ['core', 'organization', 'departments', 'all'],
+    queryFn: () => organizationApi.listDepartments(false),
     staleTime: 5 * 60 * 1000,
     retry: false,
   });
 
-  const { districts, branches, hasUnassigned } = useMemo(() => {
-    const districtMap = new Map<string, string>();
-    const branchMap = new Map<string, { name: string; districtId: string | null }>();
-    let unassigned = false;
-
-    const departments = departmentsQuery.data ?? [];
-    if (departments.length > 0) {
-      const deptById = new Map<number, DepartmentDto>(departments.map((d) => [d.id, d]));
-      const parentIds = new Set<number>(
-        departments
-          .map((d) => d.parentDepartmentId)
-          .filter((id): id is number => id !== null && id !== undefined)
-      );
-
-      const findRoot = (dept: DepartmentDto): DepartmentDto => {
-        let current = dept;
-        const visited = new Set<number>([current.id]);
-        while (current.parentDepartmentId != null) {
-          const parent = deptById.get(current.parentDepartmentId);
-          if (!parent || !visited.add(parent.id)) break;
-          current = parent;
-        }
-        return current;
-      };
-
-      departments.forEach((dept) => {
-        if (dept.parentDepartmentId == null) {
-          if (parentIds.has(dept.id)) {
-            districtMap.set(`department:${dept.id}`, dept.name);
-          } else {
-            branchMap.set(`department:${dept.id}`, { name: dept.name, districtId: null });
-          }
-        } else {
-          const root = findRoot(dept);
-          const rootId = `department:${root.id}`;
-          districtMap.set(rootId, root.name);
-          branchMap.set(`department:${dept.id}`, {
-            name: dept.name,
-            districtId: rootId,
-          });
-        }
-      });
-    }
-
-    paths.forEach((path) => {
-      if (path.length === 0) {
-        unassigned = true;
-        return;
-      }
-      if (path.length >= 2) {
-        const district = path[0];
-        if (!districtMap.has(district.id)) {
-          districtMap.set(district.id, district.name);
-        }
-        for (let i = 1; i < path.length; i += 1) {
-          const branch = path[i];
-          if (!branchMap.has(branch.id)) {
-            branchMap.set(branch.id, { name: branch.name, districtId: district.id });
-          }
-        }
-      } else {
-        const single = path[0];
-        if (!districtMap.has(single.id) && !branchMap.has(single.id)) {
-          branchMap.set(single.id, { name: single.name, districtId: null });
-        }
-      }
-    });
-
-    return {
-      districts: [...districtMap.entries()].sort((a, b) => a[1].localeCompare(b[1])),
-      branches: [...branchMap.entries()].sort((a, b) => a[1].name.localeCompare(b[1].name)),
-      hasUnassigned: unassigned,
-    };
-  }, [departmentsQuery.data, paths]);
+  const { districts, branches, hasUnassigned } = useMemo(
+    () => buildOrganizationLocationOptions(departmentsQuery.data ?? [], paths),
+    [departmentsQuery.data, paths]
+  );
 
   const branchById = useMemo(() => new Map(branches), [branches]);
   const districtIds = useMemo(() => new Set(districts.map(([id]) => id)), [districts]);
@@ -169,6 +178,11 @@ export function OrganizationLocationFilter({
           {hasUnassigned && <option value="__unassigned__">Unassigned location</option>}
         </select>
       </label>
+      {departmentsQuery.isError && (
+        <p className="apid-alert apid-alert-danger" role="alert" style={{ margin: 0 }}>
+          Organization locations could not be loaded.
+        </p>
+      )}
     </div>
   );
 }

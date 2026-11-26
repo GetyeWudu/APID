@@ -1,195 +1,283 @@
-/* ============================================================
-   MentorDirectory.css — Professional Modern Redesign
-   ============================================================ */
-
-/* ---- Local design tokens ---- */
-.mentor-directory-table {
-  --m-ink:         #1A1C1E;
-  --m-ink-2:       #2C3036;
-  --m-muted:       #5C626A;
-  --m-soft:        #9CA3AF;
-  --m-accent:      #C59B27;
-  --m-accent-2:    #D4AF37;
-  --m-accent-glow: rgba(197, 155, 39, 0.18);
-  --m-line:        #E5E7EB;
-  --m-line-2:      #F0F2F5;
-  --m-bg:          #F7F7F7;
-  --m-surface:     #ffffff;
-  --m-surface-2:   #f8fbfa;
-  --m-shadow-card: 0 1px 4px rgba(13, 43, 43, 0.06), 0 4px 16px rgba(13, 43, 43, 0.04);
-  --m-shadow-elevated: 0 4px 20px rgba(13, 43, 43, 0.10);
-  --m-shadow-modal: 0 20px 60px rgba(13, 43, 43, 0.20);
+.mentor-directory {
+  --mentor-accent: var(--primary, #286451);
+  --mentor-border: var(--border, #e5e7eb);
+  --mentor-muted: var(--muted, #667085);
 }
 
-/* ============================================================
-   Directory Table Wrapper
-   ============================================================ */
-
-.mentor-directory-table {
-  margin-bottom: 0.75rem;
-  border-radius: 12px;
-  border: 1px solid var(--m-line, var(--border));
-  overflow: hidden;
-  box-shadow: var(--m-shadow-card);
+.mentor-directory-header {
+  align-items: flex-start;
+  gap: 1rem;
+  flex-wrap: wrap;
 }
 
-.mentor-directory-table .apid-table {
-  min-width: 980px;
-  border-collapse: collapse;
+.mentor-directory-view-switch {
+  display: inline-flex;
+  gap: 0.25rem;
+  padding: 0.25rem;
+  border: 1px solid var(--mentor-border);
+  border-radius: 0.7rem;
+  background: var(--surface, #f8fafc);
+}
+
+.mentor-directory-view-switch button {
+  border: 0;
+  border-radius: 0.5rem;
+  padding: 0.55rem 0.8rem;
+  background: transparent;
+  color: var(--mentor-muted);
+  font: inherit;
+  font-size: 0.82rem;
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.mentor-directory-view-switch button.is-selected {
+  background: var(--mentor-accent);
+  color: #fff;
+}
+
+.mentor-directory-filters {
+  display: flex;
+  align-items: flex-end;
+  flex-wrap: wrap;
+  gap: 0.8rem;
+  padding: 1rem 0;
+  border-bottom: 1px solid var(--mentor-border);
+}
+
+.mentor-directory-search,
+.mentor-directory-filter-field {
+  display: grid;
+  flex: 1 1 11rem;
+  gap: 0.35rem;
+  color: var(--text, #344054);
+  font-size: 0.78rem;
+  font-weight: 600;
+}
+
+.mentor-directory-search-field {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.mentor-directory-search-field > svg {
+  position: absolute;
+  left: 0.65rem;
+  color: var(--mentor-muted);
+  pointer-events: none;
+}
+
+.mentor-directory-search-field .apid-input {
+  padding-left: 2rem;
+}
+
+.mentor-directory-filters > div {
+  flex: 1 1 15rem;
+}
+
+.mentor-directory-filters > div label {
+  font-size: 0.78rem;
+  font-weight: 600;
+}
+
+.mentor-directory-filters .apid-input {
   width: 100%;
 }
 
-/* Table header */
-.mentor-directory-table .apid-table th {
-  background: color-mix(in srgb, var(--m-accent) 7%, var(--m-surface));
-  color: var(--m-muted, var(--muted));
-  font-size: 0.68rem;
-  font-weight: 700;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  padding: 0.65rem 1rem;
-  text-align: left;
-  white-space: nowrap;
-  border-bottom: 1px solid var(--m-line);
-}
-
-/* Table body rows */
-.mentor-directory-table .apid-table td {
-  padding: 0.78rem 1rem;
-  border-top: 1px solid var(--m-line-2);
-  color: var(--m-ink);
-  font-size: 0.875rem;
-  vertical-align: middle;
-}
-
-.mentor-directory-table .apid-table tbody tr {
-  transition: background 150ms ease;
-}
-
-.mentor-directory-table .apid-table tbody tr:nth-child(even) {
-  background: color-mix(in srgb, var(--m-accent) 3%, transparent);
-}
-
-.mentor-directory-table .apid-table tbody tr:hover {
-  background: color-mix(in srgb, var(--m-accent) 8%, var(--m-surface));
-}
-
-/* ============================================================
-   Capacity Column
-   ============================================================ */
-
-.mentor-directory-capacity {
-  display: grid;
-  min-width: 150px;
-  max-width: 230px;
-  gap: 0.3rem;
-}
-
-.mentor-directory-capacity strong {
-  color: var(--m-ink, var(--text));
+.mentor-directory-available-filter {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  min-height: 2.5rem;
+  color: var(--mentor-muted);
   font-size: 0.8rem;
+}
+
+.mentor-directory-results-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.9rem 0;
+}
+
+.mentor-directory-results-header p {
+  margin: 0;
+  font-size: 0.82rem;
+}
+
+.mentor-directory-live-badge {
+  padding: 0.25rem 0.55rem;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--mentor-accent) 10%, transparent);
+  color: var(--mentor-accent);
+  font-size: 0.7rem;
   font-weight: 700;
 }
 
-.mentor-directory-capacity span {
-  color: var(--m-muted, var(--muted));
-  font-size: 0.72rem;
-  line-height: 1.4;
-  overflow-wrap: anywhere;
+.mentor-directory-modal-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1.25rem;
 }
 
-/* Capacity progress bar */
-.mentor-directory-capacity-bar {
-  height: 5px;
-  border-radius: 999px;
-  background: var(--m-line);
-  overflow: hidden;
-  margin-top: 0.2rem;
+.mentor-directory-modal-heading .boa-card-title,
+.mentor-directory-modal-heading .boa-card-subtitle {
+  margin-top: 0;
 }
 
-.mentor-directory-capacity-bar-fill {
-  height: 100%;
-  border-radius: 999px;
-  background: var(--m-accent);
-  transition: width 300ms ease;
-}
-
-/* ============================================================
-   Actions Column
-   ============================================================ */
-
-.mentor-directory-actions {
+.mentor-directory-grid {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.4rem;
-  min-width: 190px;
+  align-items: stretch;
+  justify-content: flex-start;
+  gap: 1rem;
 }
 
-/* Primary action button */
-.mentor-directory-actions .btn-primary,
-.mentor-directory-actions [data-variant="primary"] {
+.mentor-directory-card {
+  display: flex;
+  box-sizing: border-box;
+  flex: 0 0 15rem;
+  width: 15rem;
+  height: 28rem;
+  min-width: 15rem;
+  flex-direction: column;
+  overflow: hidden;
+  border: 1px solid var(--mentor-border);
+  border-radius: 0.9rem;
+  background: var(--surface, #fff);
+  box-shadow: 0 2px 8px rgba(16, 24, 40, 0.04);
+  transition: box-shadow 150ms ease, transform 150ms ease;
+}
+
+.mentor-directory-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 20px rgba(16, 24, 40, 0.1);
+}
+
+.mentor-directory-card-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  padding: 1rem 1rem 0;
+}
+
+.mentor-directory-rating {
   display: inline-flex;
   align-items: center;
-  gap: 0.35rem;
-  padding: 0.5rem 0.9rem;
-  border: none;
-  border-radius: 9px;
-  background: var(--m-accent);
-  color: #fff;
-  font-size: 0.75rem;
+  gap: 0.3rem;
+  color: #a87500;
+  font-size: 0.82rem;
   font-weight: 700;
-  cursor: pointer;
-  transition: background 150ms ease, transform 150ms ease;
 }
 
-.mentor-directory-actions .btn-primary:hover,
-.mentor-directory-actions [data-variant="primary"]:hover {
-  background: var(--m-accent-2);
-  transform: translateY(-1px);
+.mentor-directory-card-content {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+  gap: 0.75rem;
+  padding: 0.8rem 1rem 1rem;
 }
 
-/* Outline action button */
-.mentor-directory-actions .btn-outline,
-.mentor-directory-actions [data-variant="outline"] {
-  display: inline-flex;
+.mentor-directory-card-content h4 {
+  display: -webkit-box;
+  overflow: hidden;
+  margin: 0;
+  color: var(--text, #101828);
+  font-size: 1rem;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.mentor-directory-location,
+.mentor-directory-card-facts span {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.35rem;
+  color: var(--mentor-muted);
+  font-size: 0.77rem;
+  line-height: 1.4;
+}
+
+.mentor-directory-location {
+  margin: 0.35rem 0 0;
+}
+
+.mentor-directory-location span {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.mentor-directory-location svg,
+.mentor-directory-card-facts svg {
+  flex: 0 0 auto;
+  margin-top: 0.1rem;
+}
+
+.mentor-directory-card-facts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem 0.8rem;
+}
+
+.mentor-directory-card-skills {
+  display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 0.35rem;
-  padding: 0.5rem 0.9rem;
-  border: 1.5px solid var(--m-accent);
-  border-radius: 9px;
-  background: transparent;
-  color: var(--m-accent);
+}
+
+.mentor-directory-approach {
+  display: -webkit-box;
+  overflow: hidden;
+  margin: 0;
+  color: var(--text, #344054);
+  font-size: 0.8rem;
+  line-height: 1.5;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+}
+
+.mentor-directory-weekly-sessions {
+  margin: auto 0 0;
+  color: var(--mentor-muted);
   font-size: 0.75rem;
-  font-weight: 700;
-  cursor: pointer;
-  transition: background 150ms ease, transform 150ms ease;
 }
 
-.mentor-directory-actions .btn-outline:hover,
-.mentor-directory-actions [data-variant="outline"]:hover {
-  background: color-mix(in srgb, var(--m-accent) 8%, transparent);
-  transform: translateY(-1px);
+.mentor-directory-card-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  padding: 0.8rem 1rem;
+  border-top: 1px solid var(--mentor-border);
 }
 
-/* Ghost action button */
-.mentor-directory-actions .btn-ghost,
-.mentor-directory-actions [data-variant="ghost"] {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.35rem;
-  padding: 0.5rem 0.9rem;
-  border: none;
-  border-radius: 9px;
-  background: transparent;
-  color: var(--m-muted);
-  font-size: 0.75rem;
-  font-weight: 600;
-  cursor: pointer;
-  transition: background 150ms ease;
+.mentor-directory-card-actions .apid-btn {
+  flex: 1 1 auto;
 }
 
-.mentor-directory-actions .btn-ghost:hover,
-.mentor-directory-actions [data-variant="ghost"]:hover {
-  background: var(--m-line-2);
-  color: var(--m-ink);
+@media (max-width: 600px) {
+  .mentor-directory-view-switch {
+    width: 100%;
+  }
+
+  .mentor-directory-view-switch button {
+    flex: 1;
+  }
+
+  .mentor-directory-results-header {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .mentor-directory-card-actions {
+    flex-direction: column;
+  }
 }

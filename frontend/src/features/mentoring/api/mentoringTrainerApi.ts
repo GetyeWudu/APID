@@ -60,6 +60,7 @@ export interface TrainerDirectoryItem {
   experienceYears?: number | null;
   mentoringApproach?: string | null;
   sessionsPerWeek?: number | null;
+  profilePictureFileId?: number | null;
   activeTrainees: number;
   remainingCapacity: number;
   averageRating: number | null;

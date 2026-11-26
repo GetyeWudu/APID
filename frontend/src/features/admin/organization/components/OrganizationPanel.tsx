@@ -9,6 +9,7 @@ import type {
   EmployeePage,
   EmploymentStatus,
 } from '../types/organization.types';
+import { isDistrictDepartment } from '../organizationUnits';
 import { EmployeeTeamModal } from './EmployeeTeamModal';
 
 type SubView = 'employees' | 'departments';
@@ -43,6 +44,7 @@ export function OrganizationPanel() {
         type: 'ok',
         text: `Active Directory sync completed in ${res.durationMs}ms: ${res.usersScanned} accounts scanned, ${res.managersLinked} managers linked, ${res.rolesAssigned} roles reconciled.`,
       });
+      await loadDepartments();
       await loadEmployees();
     } catch (err) {
       const ax = err as AxiosError<ApiErrorPayload>;
@@ -63,9 +65,7 @@ export function OrganizationPanel() {
 
   // Derive Organizational Units
   const districtDepts = useMemo(() => {
-    return departments.filter(
-      (d) => (d.code && d.code.endsWith('-DISTRICT')) || d.name.toLowerCase().includes('district')
-    );
+    return departments.filter(isDistrictDepartment);
   }, [departments]);
 
   const districtIds = useMemo(() => new Set(districtDepts.map((d) => d.id)), [districtDepts]);
@@ -275,28 +275,28 @@ export function OrganizationPanel() {
               className={`apid-btn apid-btn-sm ${scopeFilter === 'ALL' && !districtFilter ? 'apid-btn-primary' : 'apid-btn-outline'}`}
               onClick={() => handleScopeChange('ALL')}
             >
-              All Employees (150)
+              All Employees
             </button>
             <button
               type="button"
               className={`apid-btn apid-btn-sm ${scopeFilter === 'HEAD_OFFICE' ? 'apid-btn-primary' : 'apid-btn-outline'}`}
               onClick={() => handleScopeChange('HEAD_OFFICE')}
             >
-              🏛️ Head Office (25)
+              🏛️ Head Office
             </button>
             <button
               type="button"
               className={`apid-btn apid-btn-sm ${scopeFilter === 'DISTRICTS' ? 'apid-btn-primary' : 'apid-btn-outline'}`}
               onClick={() => handleScopeChange('DISTRICTS')}
             >
-              📍 District Directors (5)
+              📍 Districts ({districtDepts.length})
             </button>
             <button
               type="button"
               className={`apid-btn apid-btn-sm ${scopeFilter === 'BRANCHES' ? 'apid-btn-primary' : 'apid-btn-outline'}`}
               onClick={() => handleScopeChange('BRANCHES')}
             >
-              🏦 All 20 Branches (120)
+              🏦 Branches ({allBranchDepts.length})
             </button>
           </div>
 
@@ -331,11 +331,11 @@ export function OrganizationPanel() {
               onChange={(e) => handleDistrictChange(e.target.value)}
             >
               <option value="">All Regions & Divisions</option>
-              <option value="HEAD_OFFICE">🏛️ Head Office (25 Staff)</option>
+              <option value="HEAD_OFFICE">🏛️ Head Office</option>
               <optgroup label="Bank of Abyssinia Districts">
                 {districtDepts.map((d) => (
                   <option key={d.id} value={d.id}>
-                    📍 {d.name} (25 Staff)
+                    📍 {d.name}
                   </option>
                 ))}
               </optgroup>
