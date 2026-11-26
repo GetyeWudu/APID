@@ -228,21 +228,28 @@ public class PmsCoachingAiService {
                 String cachedJson = redisTemplate.opsForValue().get(cacheKey);
                 if (cachedJson != null && !cachedJson.isBlank()) {
                     AiCopilotResponseDto cachedDto = objectMapper.readValue(cachedJson, AiCopilotResponseDto.class);
-                    long duration = System.currentTimeMillis() - start;
-                    log.info("Redis cache HIT for query '{}' in {}ms [key: {}]", cleanQuery, duration, cacheKey);
-                    String cachedOrigin = cachedDto.model();
-                    if (cachedOrigin == null || cachedOrigin.isBlank()) {
-                        cachedOrigin = "APID Cache";
-                    } else if (!cachedOrigin.contains("Cache")) {
-                        cachedOrigin = cachedOrigin + " (Cache)";
+                    // Self-healing cache eviction: If a previously cached entry contains an emergency offline fallback,
+                    // evict it immediately so fresh live inference or directory gatekeeping runs!
+                    if (cachedDto.model() != null && (cachedDto.model().contains("Offline") || cachedDto.model().contains("Queue Limit"))) {
+                        log.info("Evicting stale degraded fallback from Redis cache for key '{}' to allow fresh inference", cacheKey);
+                        redisTemplate.delete(cacheKey);
+                    } else {
+                        long duration = System.currentTimeMillis() - start;
+                        log.info("Redis cache HIT for query '{}' in {}ms [key: {}]", cleanQuery, duration, cacheKey);
+                        String cachedOrigin = cachedDto.model();
+                        if (cachedOrigin == null || cachedOrigin.isBlank()) {
+                            cachedOrigin = "APID Cache";
+                        } else if (!cachedOrigin.contains("Cache")) {
+                            cachedOrigin = cachedOrigin + " (Cache)";
+                        }
+                        return new AiCopilotResponseDto(
+                                cachedDto.query(),
+                                cachedDto.answer(),
+                                cachedDto.actionLinks(),
+                                cachedOrigin,
+                                duration
+                        );
                     }
-                    return new AiCopilotResponseDto(
-                            cachedDto.query(),
-                            cachedDto.answer(),
-                            cachedDto.actionLinks(),
-                            cachedOrigin,
-                            duration
-                    );
                 }
             } catch (Exception ex) {
                 log.warn("Redis cache read failed, falling back to direct computation: {}", ex.getMessage());
@@ -330,16 +337,30 @@ public class PmsCoachingAiService {
                                     ? emp.getDepartmentName()
                                     : (emp.getParentDepartmentName() != null && !emp.getParentDepartmentName().isBlank() ? emp.getParentDepartmentName() : "Office of the Chief Executive");
 
-                            String answer = String.format(
-                                    "Coach: Unassigned (Not in Remediation)\n\n" +
-                                            "• **Staff Profile:** %s (Staff ID: %s)\n" +
-                                            "• **Position & Department:** %s [%s]\n" +
-                                            "• **Employment Status:** %s\n" +
-                                            "• **Coaching & Remediation Status:** Not enrolled in remedial coaching. In Bank of Abyssinia's Performance Management System (PMS), remediation coaching is assigned exclusively to staff with quarterly ratings below the 3.0 threshold. Executive leadership, managers, and staff meeting performance standards are not tracked under active remediation plans.\n\n" +
-                                            "**Executive Takeaway:** %s is in active, good organizational standing as %s and does not require coaching intervention or remediation tracking.",
-                                    emp.getFullName(), emp.getEmployeeNumber(), pos, dept,
-                                    emp.getEmploymentStatus(), emp.getFullName(), pos
-                            );
+                            String answer;
+                            if (qLower.contains("coach") || qLower.contains("coachee")) {
+                                answer = String.format(
+                                        "Coach: %s (0 Assigned Remedial Coachees)\n\n" +
+                                                "• **Staff Profile:** %s (Staff ID: %s)\n" +
+                                                "• **Position & Department:** %s [%s]\n" +
+                                                "• **Coaching Roster Status:** %s has **0 assigned remedial coachees** in FY 2026/27 · Q2.\n" +
+                                                "• **Organizational Role:** Under Bank of Abyssinia PMS policy, mandatory 1-on-1 coaching for staff with appraisal scores < 3.0 is managed by designated branch managers and unit heads. Executive and senior leadership oversee platform governance rather than coaching remedial caseloads.\n\n" +
+                                                "**Executive Takeaway:** %s is not an assigned remedial coach for low-performing staff. He/she serves as %s and does not hold an active remedial coaching caseload.",
+                                        emp.getFullName(), emp.getFullName(), emp.getEmployeeNumber(), pos, dept,
+                                        emp.getFullName(), emp.getFullName(), pos
+                                );
+                            } else {
+                                answer = String.format(
+                                        "Coach: Unassigned (Not in Remediation)\n\n" +
+                                                "• **Staff Profile:** %s (Staff ID: %s)\n" +
+                                                "• **Position & Department:** %s [%s]\n" +
+                                                "• **Employment Status:** %s\n" +
+                                                "• **Coaching & Remediation Status:** Not enrolled in remedial coaching. In Bank of Abyssinia's Performance Management System (PMS), remediation coaching is assigned exclusively to staff with quarterly ratings below the 3.0 threshold. Executive leadership, managers, and staff meeting performance standards are not tracked under active remediation plans.\n\n" +
+                                                "**Executive Takeaway:** %s is in active, good organizational standing as %s and does not require coaching intervention or remediation tracking.",
+                                        emp.getFullName(), emp.getEmployeeNumber(), pos, dept,
+                                        emp.getEmploymentStatus(), emp.getFullName(), pos
+                                );
+                            }
                             AiCopilotResponseDto empDto = new AiCopilotResponseDto(cleanQuery, answer, List.of(), "bank-directory-gatekeeper", duration);
                             saveToRedisCache(cacheKey, empDto);
                             log.info("Bank Employee Directory fast-hit for '{}' ({}) in {}ms", emp.getFullName(), emp.getEmployeeNumber(), duration);
@@ -629,6 +650,16 @@ public class PmsCoachingAiService {
     }
 
     private void saveToRedisCache(String cacheKey, AiCopilotResponseDto dto) {
+        if (dto == null) {
+            return;
+        }
+        // CRITICAL RESILIENCE: NEVER poison Redis cache with emergency offline fallbacks or queue limits!
+        // When Ollama is offline or congested, degraded answers must expire immediately so that
+        // the very moment Ollama comes online, subsequent requests immediately hit the neural model.
+        if (dto.model() != null && (dto.model().contains("Offline") || dto.model().contains("Queue Limit"))) {
+            log.warn("Bypassing Redis cache save for emergency degraded fallback [model: {}, key: {}]", dto.model(), cacheKey);
+            return;
+        }
         if (redisTemplate != null) {
             try {
                 String json = objectMapper.writeValueAsString(dto);
@@ -641,8 +672,8 @@ public class PmsCoachingAiService {
     }
 
     private String extractUnknownPersonQuery(String queryLower) {
-        // Pattern 0: "give me the coaching report of <name>" or "report of <name>" or "coaching report of <name>"
-        Matcher m0 = Pattern.compile("(?:give me the |what is the |show me the |provide the )?(?:coaching report of|coaching summary of|coaching status of|report of|report for|status of|profile of|overview of|summarize|who is|tell me about)\\s+([a-zA-Z\\s]{3,35}?)(?:'s|\\s+current|\\s+coaching|\\s+status|\\s+gaps|\\?|$)").matcher(queryLower);
+        // Pattern 0: "give me the coaching report of <name>", "detailed summary of coach <name>", "coachees of coach <name>", etc.
+        Matcher m0 = Pattern.compile("(?:give me the |give me a |what is the |show me the |provide the |provide a |can you give me the |can you give me a |tell me about the |tell me about )?(?:detailed summary of coach |detailed summary of |summary of coach |summary of |coaching report of |coaching summary of |coaching status of |report of |report for |status of coach |status of |profile of |overview of |coachees of coach |coachees of |coachee progress of coach |coachee progress of |progress of coach |progress of |summarize |who is coach |who is |tell me about coach |tell me about )\\s*([a-zA-Z\\s]{3,35}?)(?:'s|\\s+coachees|\\s+progress|\\s+current|\\s+coaching|\\s+status|\\s+gaps|\\s+for all|\\?|$)").matcher(queryLower);
         if (m0.find()) {
             String candidate = m0.group(1).trim();
             if (!candidate.isBlank() && !isSystemKeyword(candidate)) {
@@ -657,7 +688,7 @@ public class PmsCoachingAiService {
                 return candidate;
             }
         }
-        // Pattern 2: direct 2-word person name (e.g., "selam kebede")
+        // Pattern 2: direct 2-word person name (e.g., "selam kebede" or "solomon tekle")
         if (queryLower.matches("^[a-z]{2,20}\\s+[a-z]{2,20}$") && !isSystemKeyword(queryLower)) {
             return queryLower.trim();
         }
@@ -732,6 +763,10 @@ public class PmsCoachingAiService {
             Map<String, List<PmsTalentProgressItemDto>> byCoach = new LinkedHashMap<>();
             for (PmsTalentProgressItemDto t : matchedTalents) {
                 byCoach.computeIfAbsent(t.coachName() != null ? t.coachName() : "Unassigned Coach", k -> new ArrayList<>()).add(t);
+            }
+            if (byCoach.isEmpty()) {
+                return "No remedial coachees are currently assigned under this coach profile in FY 2026/27 · Q2.\n\n" +
+                        "**Executive Takeaway:** Remedial coaching is assigned to designated branch and departmental leaders for staff with appraisal scores < 3.0. Please verify the coach name or check the Coach Quality & CSAT roster.";
             }
             StringBuilder sb = new StringBuilder();
             for (Map.Entry<String, List<PmsTalentProgressItemDto>> entry : byCoach.entrySet()) {
