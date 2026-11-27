@@ -1,0 +1,454 @@
+.mentoring-calendar__card {
+  display: grid;
+  gap: 0.9rem;
+  min-width: 0;
+}
+
+.mentoring-calendar__toolbar,
+.mentoring-calendar__month-controls,
+.mentoring-calendar__summary {
+  display: flex;
+  align-items: center;
+}
+
+.mentoring-calendar__toolbar {
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.mentoring-calendar__month-controls {
+  gap: 0.55rem;
+}
+
+.mentoring-calendar__month-controls h2 {
+  min-width: 10rem;
+  margin: 0;
+  color: var(--text, #1A1C1E);
+  font-size: 1.15rem;
+  text-align: center;
+}
+
+.mentoring-calendar__icon-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.25rem;
+  height: 2.25rem;
+  flex: 0 0 auto;
+  border: 1px solid var(--border, #E5E7EB);
+  border-radius: 8px;
+  background: var(--surface, #fff);
+  color: var(--text, #1A1C1E);
+  cursor: pointer;
+}
+
+.mentoring-calendar__icon-button:hover {
+  border-color: var(--mentoring-accent, #C59B27);
+  color: var(--mentoring-accent, #C59B27);
+}
+
+.mentoring-calendar__summary {
+  gap: 0.55rem;
+  color: var(--muted, #5C626A);
+  font-size: 0.8rem;
+}
+
+.mentoring-calendar__legend {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  flex-wrap: wrap;
+  padding: 0.6rem 0.75rem;
+  border: 1px solid var(--border, #E5E7EB);
+  border-radius: 9px;
+  color: var(--muted, #5C626A);
+  font-size: 0.76rem;
+}
+
+.mentoring-calendar__legend > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.mentoring-calendar__dot {
+  width: 0.6rem;
+  height: 0.6rem;
+  border-radius: 50%;
+}
+
+.mentoring-calendar__dot--scheduled {
+  background: #0f766e;
+}
+
+.mentoring-calendar__dot--completed {
+  background: #047857;
+}
+
+.mentoring-calendar__dot--cancelled {
+  background: #9ca3af;
+}
+
+.mentoring-calendar__grid {
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid var(--border, #E5E7EB);
+  border-radius: 11px;
+}
+
+.mentoring-calendar__weekdays,
+.mentoring-calendar__days {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+}
+
+.mentoring-calendar__weekdays {
+  background: var(--bg, #F7F7F7);
+}
+
+.mentoring-calendar__weekdays > span {
+  padding: 0.65rem 0.35rem;
+  color: var(--muted, #5C626A);
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-align: center;
+  text-transform: uppercase;
+}
+
+.mentoring-calendar__days {
+  border-top: 1px solid var(--border, #E5E7EB);
+}
+
+.mentoring-calendar__day {
+  display: flex;
+  min-width: 0;
+  min-height: 7.2rem;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0.35rem;
+  padding: 0.45rem;
+  border: 0;
+  border-right: 1px solid var(--border, #E5E7EB);
+  border-bottom: 1px solid var(--border, #E5E7EB);
+  background: var(--surface, #fff);
+  color: var(--text, #1A1C1E);
+  text-align: left;
+  cursor: pointer;
+}
+
+.mentoring-calendar__day:nth-child(7n) {
+  border-right: 0;
+}
+
+.mentoring-calendar__day:hover {
+  background: color-mix(in srgb, var(--mentoring-accent, #C59B27) 6%, var(--surface, #fff));
+}
+
+.mentoring-calendar__day--outside {
+  background: color-mix(in srgb, var(--bg, #F7F7F7) 70%, var(--surface, #fff));
+  color: var(--muted, #5C626A);
+}
+
+.mentoring-calendar__day--today {
+  background: color-mix(in srgb, #0f766e 5%, var(--surface, #fff));
+}
+
+.mentoring-calendar__day--today .mentoring-calendar__day-number {
+  color: #0f766e;
+  font-weight: 800;
+}
+
+.mentoring-calendar__day-number {
+  align-self: flex-end;
+  font-size: 0.75rem;
+}
+
+.mentoring-calendar__day-sessions {
+  display: grid;
+  align-content: start;
+  gap: 0.2rem;
+  min-width: 0;
+}
+
+.mentoring-calendar__event {
+  display: flex;
+  min-width: 0;
+  gap: 0.25rem;
+  overflow: hidden;
+  padding: 0.2rem 0.3rem;
+  border-radius: 4px;
+  font-size: 0.65rem;
+  line-height: 1.3;
+}
+
+.mentoring-calendar__event time {
+  flex: 0 0 auto;
+  font-weight: 700;
+}
+
+.mentoring-calendar__event > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mentoring-calendar__event--scheduled {
+  background: #e6f4f1;
+  color: #0f625c;
+}
+
+.mentoring-calendar__event--completed {
+  background: #e7f5ec;
+  color: #166534;
+}
+
+.mentoring-calendar__event--pending {
+  background: #fff5dd;
+  color: #8a5a00;
+}
+
+.mentoring-calendar__event--cancelled {
+  background: #f1f2f4;
+  color: #68707a;
+  text-decoration: line-through;
+}
+
+.mentoring-calendar__more {
+  color: var(--muted, #5C626A);
+  font-size: 0.66rem;
+}
+
+.mentoring-calendar__overlay {
+  position: fixed;
+  z-index: 1200;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow-y: auto;
+  padding: 1rem;
+  background: rgba(15, 23, 42, 0.52);
+}
+
+.mentoring-calendar__modal {
+  display: grid;
+  width: min(100%, 720px);
+  max-height: calc(100vh - 2rem);
+  gap: 1rem;
+  overflow-y: auto;
+  padding: 1.25rem;
+  border: 1px solid var(--border, #E5E7EB);
+  border-radius: 14px;
+  background: var(--surface, #fff);
+  box-shadow: 0 20px 55px rgba(15, 23, 42, 0.24);
+}
+
+.mentoring-calendar__modal-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  padding-bottom: 0.8rem;
+  border-bottom: 1px solid var(--border, #E5E7EB);
+}
+
+.mentoring-calendar__modal-header h2 {
+  margin: 0.15rem 0 0;
+  color: var(--text, #1A1C1E);
+  font-size: 1.15rem;
+}
+
+.mentoring-calendar__eyebrow {
+  color: var(--muted, #5C626A);
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.mentoring-calendar__day-details,
+.mentoring-calendar__form {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.mentoring-calendar__day-details h3,
+.mentoring-calendar__form-heading h3 {
+  margin: 0;
+  color: var(--text, #1A1C1E);
+  font-size: 0.95rem;
+}
+
+.mentoring-calendar__day-details > .boa-muted {
+  margin: 0;
+  font-size: 0.84rem;
+}
+
+.mentoring-calendar__session-list {
+  display: grid;
+  gap: 0.5rem;
+}
+
+.mentoring-calendar__session {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.7rem 0.8rem;
+  border: 1px solid var(--border, #E5E7EB);
+  border-radius: 9px;
+  background: var(--bg, #F7F7F7);
+}
+
+.mentoring-calendar__session > div {
+  display: grid;
+  gap: 0.3rem;
+  min-width: 0;
+}
+
+.mentoring-calendar__session > div > span {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  color: var(--muted, #5C626A);
+  font-size: 0.78rem;
+}
+
+.mentoring-calendar__status {
+  flex: 0 0 auto;
+  padding: 0.2rem 0.45rem;
+  border-radius: 999px;
+  font-size: 0.67rem;
+  font-weight: 700;
+}
+
+.mentoring-calendar__status--scheduled {
+  background: #e6f4f1;
+  color: #0f625c;
+}
+
+.mentoring-calendar__status--completed {
+  background: #e7f5ec;
+  color: #166534;
+}
+
+.mentoring-calendar__status--pending {
+  background: #fff5dd;
+  color: #8a5a00;
+}
+
+.mentoring-calendar__status--cancelled {
+  background: #f1f2f4;
+  color: #68707a;
+}
+
+.mentoring-calendar__form {
+  padding-top: 0.95rem;
+  border-top: 1px solid var(--border, #E5E7EB);
+}
+
+.mentoring-calendar__form-heading {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.6rem;
+  color: var(--mentoring-accent, #C59B27);
+}
+
+.mentoring-calendar__form-heading > div {
+  display: grid;
+  gap: 0.2rem;
+}
+
+.mentoring-calendar__form-heading p {
+  margin: 0;
+  color: var(--muted, #5C626A);
+  font-size: 0.78rem;
+}
+
+.mentoring-calendar__form label {
+  display: grid;
+  gap: 0.3rem;
+  color: var(--text, #1A1C1E);
+  font-size: 0.78rem;
+  font-weight: 600;
+}
+
+.mentoring-calendar__form-row {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.75rem;
+}
+
+.mentoring-calendar__error,
+.mentoring-calendar__notice {
+  margin: 0;
+  padding: 0.7rem 0.8rem;
+  border-radius: 8px;
+  font-size: 0.8rem;
+}
+
+.mentoring-calendar__error {
+  border: 1px solid #f5c6c6;
+  background: #fff5f5;
+  color: #991b1b;
+}
+
+.mentoring-calendar__notice {
+  background: var(--bg, #F7F7F7);
+  color: var(--muted, #5C626A);
+}
+
+.mentoring-calendar__modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.55rem;
+  padding-top: 0.25rem;
+}
+
+@media (max-width: 700px) {
+  .mentoring-calendar__day {
+    min-height: 6rem;
+    padding: 0.3rem;
+  }
+
+  .mentoring-calendar__event {
+    display: block;
+  }
+
+  .mentoring-calendar__event time {
+    display: none;
+  }
+}
+
+@media (max-width: 480px) {
+  .mentoring-calendar__month-controls {
+    flex-wrap: wrap;
+  }
+
+  .mentoring-calendar__month-controls h2 {
+    min-width: 8rem;
+    font-size: 1rem;
+  }
+
+  .mentoring-calendar__weekdays > span {
+    font-size: 0.62rem;
+  }
+
+  .mentoring-calendar__day {
+    min-height: 4.5rem;
+  }
+
+  .mentoring-calendar__event {
+    padding: 0.15rem;
+    font-size: 0.57rem;
+  }
+
+  .mentoring-calendar__modal {
+    padding: 1rem;
+  }
+
+  .mentoring-calendar__form-row {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

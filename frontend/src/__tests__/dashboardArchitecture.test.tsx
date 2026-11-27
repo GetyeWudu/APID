@@ -379,6 +379,7 @@ describe('Portal Home module cards & scoped sidebar isolation', () => {
     const linkLabels = navigation.getAllByRole('link').map((link) => link.textContent?.trim() ?? '');
     const expectedOrder = [
       'Dashboard',
+      'Calendar',
       'My Mentors',
       'My Trainees',
       'My Requests',
@@ -393,6 +394,9 @@ describe('Portal Home module cards & scoped sidebar isolation', () => {
     const positions = expectedOrder.map((label) => linkLabels.findIndex((link) => link.includes(label)));
     expect(positions.every((position) => position >= 0)).toBe(true);
     expect(positions).toEqual([...positions].sort((first, second) => first - second));
+    const dashboardPosition = linkLabels.findIndex((link) => link.includes('Dashboard'));
+    const calendarPosition = linkLabels.findIndex((link) => link.includes('Calendar'));
+    expect(calendarPosition).toBe(dashboardPosition + 1);
   });
 
   it('hides mentor navigation after authorization is revoked even if the user still has the Mentor role', async () => {
@@ -422,7 +426,7 @@ describe('Portal Home module cards & scoped sidebar isolation', () => {
     expect(screen.queryByRole('link', { name: 'Mentor Profile' })).not.toBeInTheDocument();
   });
 
-  it('shows the employee Dashboard, Chat, and Resources in the workspace sidebar', () => {
+  it('shows the employee Dashboard, Calendar, Chat, and Resources in the workspace sidebar', () => {
     vi.spyOn(AuthContextModule, 'useAuth').mockReturnValue(
       buildAuthMock({
         id: 21,
@@ -442,6 +446,10 @@ describe('Portal Home module cards & scoped sidebar isolation', () => {
 
     expect(screen.getByRole('navigation', { name: 'Module navigation' })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Dashboard' })).toHaveAttribute('href', '/workspace');
+    expect(screen.getByRole('link', { name: 'Calendar' })).toHaveAttribute(
+      'href',
+      '/mentoring?view=calendar'
+    );
     expect(screen.queryByRole('link', { name: 'My Coaching' })).not.toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Chat' })).toHaveAttribute('href', '/mentoring/chat');
     expect(screen.getByRole('link', { name: 'Resources' })).toHaveAttribute(

@@ -19,6 +19,7 @@ import { MentoringMatchRequestForm } from '../components/MentoringMatchRequestFo
 import { MentoringRecommendations } from '../components/MentoringRecommendations';
 import { MentorProfileForm } from '../components/MentorProfileForm';
 import { MentoringConnectionsPanel } from '../components/MentoringConnectionsPanel';
+import { MentoringCalendarPage } from './MentoringCalendarPage';
 import { MentoringSessionsPage } from './MentoringSessionsPage';
 import './MentoringDashboard.css';
 
@@ -27,6 +28,7 @@ type MentoringViewKey =
   | 'directory'
   | 'trainee'
   | 'requests'
+  | 'calendar'
   | 'sessions'
   | 'trainee-sessions'
   | 'trainer'
@@ -53,6 +55,7 @@ export function MentoringHomePage() {
     requestedView === 'directory' ||
     requestedView === 'trainee' ||
     requestedView === 'requests' ||
+    requestedView === 'calendar' ||
     requestedView === 'sessions' ||
     requestedView === 'trainee-sessions' ||
     requestedView === 'trainer' ||
@@ -364,6 +367,10 @@ export function MentoringHomePage() {
         />
       </div>
     );
+  }
+
+  if (activeView === 'calendar') {
+    return <MentoringCalendarPage />;
   }
 
   const sessionView = activeView === 'trainer-sessions'

@@ -504,13 +504,23 @@ export function AppLayout({ children }: { children: ReactNode }) {
 
   const visibleGroups = useMemo(() => {
     const showEmployeeNavigation = activeModule === 'mentoring' || isWorkspacePath;
+    const employeeItems = EMPLOYEE_NAV_GROUP.items.filter((item) =>
+      hasAnyPermission(item.requiredAnyPermissions)
+    );
+    if (activeModule === 'mentoring') {
+      employeeItems.push({
+        to: '/mentoring?view=calendar',
+        label: 'Calendar',
+        icon: <Calendar size={17} />,
+        requiredAnyPermissions: EMPLOYEE_WORKSPACE_PERMISSIONS,
+        matchSearch: '?view=calendar',
+      });
+    }
     const employeeGroup =
       showEmployeeNavigation && hasAnyPermission(EMPLOYEE_WORKSPACE_PERMISSIONS)
         ? {
             ...EMPLOYEE_NAV_GROUP,
-            items: EMPLOYEE_NAV_GROUP.items.filter((item) =>
-              hasAnyPermission(item.requiredAnyPermissions)
-            ),
+            items: employeeItems,
           }
         : null;
     const moduleGroups = activeModule ? moduleNavGroups[activeModule] : [];
