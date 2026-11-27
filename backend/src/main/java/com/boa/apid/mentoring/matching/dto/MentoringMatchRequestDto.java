@@ -24,6 +24,18 @@ public record MentoringMatchRequestDto(
         List<OrganizationLocationDto> organizationPath
 ) {
     public static MentoringMatchRequestDto from(MentoringMatchRequest request, Long relationshipId) {
+        return from(
+                request,
+                relationshipId,
+                request.getMatchedTrainer() == null ? null : request.getMatchedTrainer().getUsername()
+        );
+    }
+
+    public static MentoringMatchRequestDto from(
+            MentoringMatchRequest request,
+            Long relationshipId,
+            String matchedTrainerName
+    ) {
         return new MentoringMatchRequestDto(
                 request.getId(),
                 request.getTraineeEmployee().getUserId(),
@@ -35,7 +47,7 @@ public record MentoringMatchRequestDto(
                 request.getMessage(),
                 request.getStatus(),
                 request.getMatchedTrainer() == null ? null : request.getMatchedTrainer().getId(),
-                request.getMatchedTrainer() == null ? null : request.getMatchedTrainer().getUsername(),
+                matchedTrainerName,
                 relationshipId,
                 request.getCreatedAt(),
                 OrganizationLocationDto.path(request.getTraineeEmployee())

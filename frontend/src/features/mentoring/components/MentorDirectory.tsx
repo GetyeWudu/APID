@@ -158,7 +158,6 @@ export function MentorDirectory({
   const [viewMode, setViewMode] = useState<'TOP_RATED' | 'ALL'>('TOP_RATED');
   const [nameFilter, setNameFilter] = useState('');
   const [skillFilter, setSkillFilter] = useState('ALL');
-  const [departmentFilter, setDepartmentFilter] = useState('');
   const [selectedLocationId, setSelectedLocationId] = useState('');
   const [availableOnly, setAvailableOnly] = useState(false);
   const [page, setPage] = useState(0);
@@ -219,12 +218,10 @@ export function MentorDirectory({
 
   const filteredMentors = useMemo(() => {
     const name = nameFilter.trim().toLowerCase();
-    const department = departmentFilter.trim().toLowerCase();
     const results = locatedMentors.filter(
       (mentor) =>
         (!name || mentor.fullName.toLowerCase().includes(name)) &&
         (skillFilter === 'ALL' || mentor.skills.some((skill) => String(skill.id) === skillFilter)) &&
-        (!department || mentor.departmentName?.toLowerCase().includes(department)) &&
         (!availableOnly || mentor.remainingCapacity > 0)
     );
     results.sort((first, second) =>
@@ -238,7 +235,6 @@ export function MentorDirectory({
       : results;
   }, [
     availableOnly,
-    departmentFilter,
     locatedMentors,
     nameFilter,
     skillFilter,
@@ -338,7 +334,6 @@ export function MentorDirectory({
             setSelectedLocationId(value);
             setPage(0);
           }}
-          label="Filter mentors by district, branch, or department"
         />
         <label className="mentor-directory-filter-field">
           Skill
@@ -356,19 +351,6 @@ export function MentorDirectory({
               <option key={skill.id} value={skill.id}>{skill.name}</option>
             ))}
           </select>
-        </label>
-        <label className="mentor-directory-filter-field">
-          Department
-          <input
-            className="apid-input"
-            aria-label="Filter mentors by department"
-            placeholder="Search department"
-            value={departmentFilter}
-            onChange={(event) => {
-              setDepartmentFilter(event.target.value);
-              setPage(0);
-            }}
-          />
         </label>
         <label className="mentor-directory-available-filter">
           <input
@@ -400,7 +382,7 @@ export function MentorDirectory({
               : otherMentors.length === 0
                 ? 'No Mentors Found'
                 : viewMode === 'TOP_RATED' && !nameFilter && skillFilter === 'ALL' &&
-                  !departmentFilter && !selectedLocationId && !availableOnly
+                  !selectedLocationId && !availableOnly
                   ? 'No Rated Mentors Yet'
                   : 'No Matching Mentors'
           }

@@ -97,8 +97,10 @@ describe('HrMatchingTab reassignment', () => {
         overrideReason: 'Temporary coverage approved by HR.',
         skillOverrideReason: 'Temporary coverage approved by HR.',
       });
+    });
+  });
 
-      it('only shows exact-skill suggestions and renders stars from the mentor rating', async () => {
+  it('only shows exact-skill suggestions and renders stars from the mentor rating', async () => {
         vi.spyOn(mentoringMatchApi, 'listReassignmentQueue').mockResolvedValue([]);
         const requestId = 21;
         const skillId = 7;
@@ -196,9 +198,109 @@ describe('HrMatchingTab reassignment', () => {
         expect(await screen.findByText('Exact Mentor')).toBeInTheDocument();
         expect(screen.queryByText('Related Mentor')).not.toBeInTheDocument();
         expect(screen.getByRole('img', { name: 'Average mentor rating 4.3 out of 5' })).toBeInTheDocument();
-        expect(recommend).toHaveBeenCalledWith('Cybersecurity', skillId);
-      });
+        expect(recommend).toHaveBeenCalledWith(requestId);
+  });
+
+  it('shows request date, branch, skill, trainee, and matched mentor for both request states', async () => {
+    vi.spyOn(mentoringMatchApi, 'listReassignmentQueue').mockResolvedValue([]);
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
     });
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <ToastProvider>
+          <MemoryRouter>
+            <HrMatchingTab
+              requests={[
+                {
+                  id: 50,
+                  traineeUserId: 40,
+                  traineeName: 'Open Trainee',
+                  traineeEmployeeNumber: 'EMP-40',
+                  departmentName: 'Engineering',
+                  skillId: 7,
+                  skillName: 'Cybersecurity',
+                  message: null,
+                  status: 'OPEN',
+                  matchedTrainerUserId: null,
+                  matchedTrainerName: null,
+                  mentoringRelationshipId: null,
+                  createdAt: '2026-11-01T08:00:00Z',
+                  organizationPath: [
+                    { id: 'district:1', name: 'North District' },
+                    { id: 'branch:2', name: 'North Branch' },
+                  ],
+                },
+                {
+                  id: 51,
+                  traineeUserId: 41,
+                  traineeName: 'Matched Trainee',
+                  traineeEmployeeNumber: 'EMP-41',
+                  departmentName: 'Operations',
+                  skillId: 8,
+                  skillName: 'Project Management',
+                  message: null,
+                  status: 'MATCHED',
+                  matchedTrainerUserId: 30,
+                  matchedTrainerName: 'Mentor Full Name',
+                  mentoringRelationshipId: 13,
+                  createdAt: '2026-11-02T09:30:00Z',
+                  organizationPath: [
+                    { id: 'district:3', name: 'Central District' },
+                    { id: 'branch:4', name: 'Central Branch' },
+                  ],
+                },
+              ]}
+              trainers={[]}
+            />
+          </MemoryRouter>
+        </ToastProvider>
+      </QueryClientProvider>
+    );
+
+    expect(screen.getByText('Open Trainee')).toBeInTheDocument();
+    expect(screen.getByText('Employee #EMP-40')).toBeInTheDocument();
+    expect(screen.getByText('North District / North Branch')).toBeInTheDocument();
+    expect(screen.getByText('Central District / Central Branch')).toBeInTheDocument();
+    expect(screen.getByText('Mentor Full Name')).toBeInTheDocument();
+    expect(screen.getAllByText('Request received')).toHaveLength(2);
+    expect(screen.getAllByText('Requested skill')).toHaveLength(2);
+    expect(screen.getByText(
+      new Date('2026-11-01T08:00:00Z').toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' })
+    )).toBeInTheDocument();
+    expect(screen.getByText(
+      new Date('2026-11-02T09:30:00Z').toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' })
+    )).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /View relationship/ })).toHaveAttribute(
+      'href',
+      '/mentoring/pairing/13'
+    );
+    expect(screen.getByRole('tabpanel')).toHaveClass('hr-match-list');
+    expect(screen.getByRole('tab', { name: /No available mentor/ })).toHaveTextContent('1');
+
+    fireEvent.click(screen.getByRole('tab', { name: /Requested/ }));
+    expect(screen.getByText('Open Trainee')).toBeInTheDocument();
+    expect(screen.queryByText('Matched Trainee')).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('tab', { name: /Completed/ }));
+    expect(screen.getByText('Matched Trainee')).toBeInTheDocument();
+    expect(screen.queryByText('Open Trainee')).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('tab', { name: /No available mentor/ }));
+    expect(screen.getByText('Open Trainee')).toBeInTheDocument();
+    expect(screen.queryByText('Matched Trainee')).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('tab', { name: /All/ }));
+    expect(screen.getByText('Open Trainee')).toBeInTheDocument();
+    expect(screen.getByText('Matched Trainee')).toBeInTheDocument();
+
+    fireEvent.change(screen.getByRole('searchbox', { name: 'Search requests by trainee name' }), {
+      target: { value: 'matched tra' },
+    });
+    expect(screen.getByText('Matched Trainee')).toBeInTheDocument();
+    expect(screen.queryByText('Open Trainee')).not.toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /View relationship/ })).toBeInTheDocument();
   });
 });
 

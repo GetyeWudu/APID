@@ -135,7 +135,6 @@ export function HrDirectMatchingTab({
                 setMentorUserId('');
               }
             }}
-            label="Filter mentors by district, branch, or department"
           />
           <div style={{
             display: 'grid',

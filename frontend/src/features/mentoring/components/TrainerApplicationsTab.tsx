@@ -764,7 +764,6 @@ export function TrainerApplicationsTab({
               paths={visibleApplications.map((application) => application.organizationPath ?? [])}
               value={locationFilter}
               onChange={setLocationFilter}
-              label="Filter applications by district, branch, or department"
             />
             <div className="mentor-application-filters" aria-label="Filter applications by status">
               {(['ALL', 'PENDING', 'APPROVED', 'DECLINED'] as const).map((filter) => (

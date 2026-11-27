@@ -69,10 +69,9 @@ public class TrainerAuthorizationController {
     @GetMapping("/directory")
     @PreAuthorize("isAuthenticated() and !principal.mustChangePassword and hasAuthority('EMPLOYEE_PORTAL_ACCESS')")
     public ApiResponse<List<TrainerDirectoryDto>> listDirectory(
-            @RequestParam(required = false) Long skillId,
-            @RequestParam(required = false) String department
+            @RequestParam(required = false) Long skillId
     ) {
-        return ApiResponse.ok(authorizationService.listDirectory(skillId, department));
+        return ApiResponse.ok(authorizationService.listDirectory(skillId));
     }
 
     @GetMapping("/directory/location-context")

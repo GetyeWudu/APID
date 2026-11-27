@@ -37,15 +37,6 @@ public class Employee {
     @Column(name = "department_name", length = 150)
     private String departmentName;
 
-    @Column(name = "district_id", length = 60)
-    private String districtId;
-
-    @Column(name = "branch_id", length = 60)
-    private String branchId;
-
-    @Column(name = "office_location", length = 150)
-    private String officeLocation;
-
     @Column(length = 150)
     private String job;
 
@@ -148,30 +139,6 @@ public class Employee {
 
     public void setDepartmentName(String departmentName) {
         this.departmentName = departmentName;
-    }
-
-    public String getDistrictId() {
-        return districtId;
-    }
-
-    public void setDistrictId(String districtId) {
-        this.districtId = districtId;
-    }
-
-    public String getBranchId() {
-        return branchId;
-    }
-
-    public void setBranchId(String branchId) {
-        this.branchId = branchId;
-    }
-
-    public String getOfficeLocation() {
-        return officeLocation;
-    }
-
-    public void setOfficeLocation(String officeLocation) {
-        this.officeLocation = officeLocation;
     }
 
     public String getJob() {

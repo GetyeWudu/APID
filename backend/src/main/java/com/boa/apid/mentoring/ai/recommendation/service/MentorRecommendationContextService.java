@@ -65,7 +65,7 @@ public class MentorRecommendationContextService {
 
     private List<MentorCandidateContext> loadCandidates(Long requestingUserId, Long skillId) {
         Map<Long, TrainerDirectoryDto> candidates = new LinkedHashMap<>();
-        for (TrainerDirectoryDto mentor : authorizationService.listDirectory(skillId, null)) {
+        for (TrainerDirectoryDto mentor : authorizationService.listDirectory(skillId)) {
             if (!mentor.userId().equals(requestingUserId) && mentor.remainingCapacity() > 0) {
                 candidates.putIfAbsent(mentor.userId(), mentor);
             }

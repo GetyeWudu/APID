@@ -32,7 +32,7 @@ export interface MentorRecommendationResult {
 }
 
 export const mentorDirectoryApi = {
-  async listMentors(filters: { skillId?: number; department?: string } = {}): Promise<MentorDirectoryItem[]> {
+  async listMentors(filters: { skillId?: number } = {}): Promise<MentorDirectoryItem[]> {
     const response = await apiClient.get<ApiResponse<MentorDirectoryItem[]>>('/mentoring/directory', {
       params: filters,
     });
@@ -62,12 +62,11 @@ export const mentorDirectoryApi = {
   },
 
   async recommendExactSkillMentorsForHr(
-    learningGoal: string,
-    skillId: number
+    matchRequestId: number
   ): Promise<MentorRecommendationResult> {
     const response = await apiClient.post<ApiResponse<MentorRecommendationResult>>(
       '/mentoring/recommendations/hr-match',
-      { learningGoal, skillId }
+      { matchRequestId }
     );
     return response.data.data;
   },

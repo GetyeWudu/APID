@@ -3,6 +3,11 @@ package com.boa.apid.mentoring.ai.recommendation.service;
 import com.boa.apid.mentoring.ai.client.MentoringAiClient;
 import com.boa.apid.mentoring.ai.recommendation.dto.HrMentorRecommendationRequest;
 import com.boa.apid.mentoring.ai.recommendation.dto.MentorRecommendationRequest;
+import com.boa.apid.common.exception.BusinessException;
+import com.boa.apid.core.skills.entity.Skill;
+import com.boa.apid.mentoring.matching.entity.MentoringMatchRequest;
+import com.boa.apid.mentoring.matching.entity.MentoringMatchRequestStatus;
+import com.boa.apid.mentoring.matching.repository.MentoringMatchRequestRepository;
 import com.boa.apid.mentoring.trainer.dto.TrainerDirectoryDto;
 import com.boa.apid.mentoring.trainer.dto.TrainerSkillDto;
 import com.boa.apid.mentoring.trainer.entity.TrainerAuthorizationStatus;
@@ -16,13 +21,16 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.util.List;
+import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -34,11 +42,19 @@ class MentorRecommendationServiceTest {
     @Mock
     private MentoringAiClient ollamaClient;
 
+    @Mock
+    private MentoringMatchRequestRepository matchRequestRepository;
+
     private MentorRecommendationService service;
 
     @BeforeEach
     void setUp() {
-        service = new MentorRecommendationService(contextService, ollamaClient, new ObjectMapper());
+        service = new MentorRecommendationService(
+                contextService,
+                ollamaClient,
+                new ObjectMapper(),
+                matchRequestRepository
+        );
     }
 
     @Test
@@ -269,6 +285,13 @@ class MentorRecommendationServiceTest {
 
     @Test
     void hrRecommendationsOnlyPassMentorsWithTheExactRequestedSkillToTheModel() {
+        MentoringMatchRequest matchRequest = org.mockito.Mockito.mock(MentoringMatchRequest.class);
+        Skill skill = org.mockito.Mockito.mock(Skill.class);
+        when(matchRequestRepository.findById(101L)).thenReturn(Optional.of(matchRequest));
+        when(matchRequest.getStatus()).thenReturn(MentoringMatchRequestStatus.OPEN);
+        when(matchRequest.getSkill()).thenReturn(skill);
+        when(skill.getId()).thenReturn(4L);
+        when(skill.getName()).thenReturn("API Development");
         when(contextService.loadCandidatesForSkill(7L, 4L)).thenReturn(List.of(
                 new MentorRecommendationContextService.MentorCandidateContext(
                         mentor(), List.of(), List.of(), List.of()
@@ -282,13 +305,26 @@ class MentorRecommendationServiceTest {
                 """);
 
         var result = service.recommendForHrMatch(
-                new HrMentorRecommendationRequest("Learn APIs", 4L),
+                new HrMentorRecommendationRequest(101L),
                 7L
         );
 
         assertEquals(1, result.recommendations().size());
         assertEquals(20L, result.recommendations().get(0).mentor().userId());
         verify(ollamaClient).recommendExactSkill(anyString(), eq(List.of(20L)), eq(List.of(4L)));
+    }
+
+    @Test
+    void doesNotGenerateRecommendationsForAHandledHrRequest() {
+        MentoringMatchRequest matchRequest = org.mockito.Mockito.mock(MentoringMatchRequest.class);
+        when(matchRequestRepository.findById(101L)).thenReturn(Optional.of(matchRequest));
+        when(matchRequest.getStatus()).thenReturn(MentoringMatchRequestStatus.MATCHED);
+
+        assertThrows(
+                BusinessException.class,
+                () -> service.recommendForHrMatch(new HrMentorRecommendationRequest(101L), 7L)
+        );
+        verifyNoInteractions(contextService, ollamaClient);
     }
 
     private TrainerDirectoryDto mentor() {

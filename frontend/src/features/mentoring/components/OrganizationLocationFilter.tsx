@@ -106,7 +106,6 @@ export function OrganizationLocationFilter({
   paths: OrganizationLocation[][];
   value: string;
   onChange: (value: string) => void;
-  label?: string;
   districtLabel?: string;
   branchLabel?: string;
 }) {

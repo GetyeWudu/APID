@@ -168,13 +168,13 @@ export function MentoringHomePage() {
           currentUserId={user?.id}
           requests={pairingRequestsQuery.data ?? []}
         />
-        <MentoringMatchRequestForm skills={activeSkills} />
         <MentorDirectory
           mentors={mentorsQuery.data ?? []}
           currentUserId={user?.id}
           currentUserOrganizationPath={directoryLocationQuery.data ?? []}
           requests={pairingRequestsQuery.data ?? []}
         />
+        <MentoringMatchRequestForm skills={activeSkills} />
       </div>
     );
   }

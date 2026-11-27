@@ -197,15 +197,6 @@ public class ActiveDirectorySyncService {
                 employee.setJob(adUser.title() != null && !adUser.title().isBlank() ? adUser.title().trim() : null);
                 employee.setPosition(adUser.title() != null && !adUser.title().isBlank() ? adUser.title().trim() : null);
                 if (dept != null) employee.setDepartment(dept);
-                if (adUser.districtId() != null && !adUser.districtId().isBlank()) {
-                    employee.setDistrictId(adUser.districtId().trim());
-                }
-                if (adUser.branchId() != null && !adUser.branchId().isBlank()) {
-                    employee.setBranchId(adUser.branchId().trim());
-                }
-                if (adUser.physicalDeliveryOfficeName() != null && !adUser.physicalDeliveryOfficeName().isBlank()) {
-                    employee.setOfficeLocation(adUser.physicalDeliveryOfficeName().trim());
-                }
                 employee.setUserId(user.getId());
                 employee.setEmploymentStatus(isAdDisabled ? EmploymentStatus.INACTIVE : EmploymentStatus.ACTIVE);
 

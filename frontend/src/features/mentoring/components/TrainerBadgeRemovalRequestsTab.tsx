@@ -68,7 +68,6 @@ export function TrainerBadgeRemovalRequestsTab({
           paths={requests.map((request) => request.organizationPath ?? [])}
           value={locationFilter}
           onChange={setLocationFilter}
-          label="Filter requests by district, branch, or department"
         />
       )}
       {requests.length === 0 ? (
@@ -80,7 +79,7 @@ export function TrainerBadgeRemovalRequestsTab({
         </div>
       ) : filteredRequests.length === 0 ? (
         <div className="apid-card">
-          <EmptyState title="No requests in this location" description="Choose another district, branch, or department." />
+          <EmptyState title="No requests in this location" description="Choose another district or branch." />
         </div>
       ) : filteredRequests.map((request) => (
         <article className="apid-card boa-stack" key={request.id}>

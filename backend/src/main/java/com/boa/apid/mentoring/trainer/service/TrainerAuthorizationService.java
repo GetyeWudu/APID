@@ -189,17 +189,11 @@ public class TrainerAuthorizationService {
     }
 
     @Transactional(readOnly = true)
-    public List<TrainerDirectoryDto> listDirectory(Long skillId, String department) {
-        String normalizedDepartment = department == null || department.isBlank()
-                ? null
-                : department.trim().toLowerCase();
+    public List<TrainerDirectoryDto> listDirectory(Long skillId) {
         List<TrainerAuthorization> eligible = authorizationRepository.findAllByOrderByUpdatedAtDescIdDesc().stream()
                 .filter(authorization -> authorization.getStatus() == TrainerAuthorizationStatus.ACTIVE)
                 .filter(authorization -> authorization.getEmployee().getEmploymentStatus() == EmploymentStatus.ACTIVE)
                 .filter(authorization -> authorization.getEmployee().getUserId() != null)
-                .filter(authorization -> normalizedDepartment == null
-                        || (authorization.getEmployee().getDepartmentName() != null
-                        && authorization.getEmployee().getDepartmentName().toLowerCase().contains(normalizedDepartment)))
                 .filter(authorization -> hasActiveSkill(authorization, skillId))
                 .toList();
         Set<Long> activeUserIds = userRepository.findAllById(

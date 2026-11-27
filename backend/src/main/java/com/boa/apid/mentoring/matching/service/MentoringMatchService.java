@@ -42,6 +42,7 @@ import com.boa.apid.mentoring.trainer.entity.TrainerAuthorizationStatus;
 import com.boa.apid.mentoring.trainer.repository.TrainerAuthorizationRepository;
 import com.boa.apid.mentoring.trainer.repository.TrainerAuthorizationSkillStatusRepository;
 import com.boa.apid.mentoring.trainer.service.MentorAvailabilityService;
+import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
@@ -185,6 +186,7 @@ public class MentoringMatchService {
     }
 
     @Transactional
+    @CacheEvict(cacheNames = "hr_mentor_recommendations_v2", key = "#p0")
     public MentoringMatchRequestDto match(
             Long matchRequestId,
             MentoringMatchAssignmentInput input,
@@ -343,7 +345,7 @@ public class MentoringMatchService {
                 null,
                 null
         ));
-        return MentoringMatchRequestDto.from(saved, savedRelationship.getId());
+        return toDto(saved);
     }
 
     @Transactional
@@ -762,7 +764,12 @@ public class MentoringMatchService {
                 : relationshipRepository.findByRequest_Id(request.getMentoringRequest().getId())
                 .map(MentoringRelationship::getId)
                 .orElse(null);
-        return MentoringMatchRequestDto.from(request, relationshipId);
+        String matchedTrainerName = request.getMatchedTrainer() == null
+                ? null
+                : employeeRepository.findDetailedByUserId(request.getMatchedTrainer().getId())
+                        .map(Employee::getFullName)
+                        .orElse(request.getMatchedTrainer().getUsername());
+        return MentoringMatchRequestDto.from(request, relationshipId, matchedTrainerName);
     }
 
     private void notify(Long userId, String event, String title, String message, String deepLink) {

@@ -68,7 +68,7 @@ class MentorRecommendationContextServiceTest {
                 """);
         TrainerAuthorization authorization = new TrainerAuthorization();
         authorization.setSourceApplication(application);
-        when(authorizationService.listDirectory(null, null)).thenReturn(List.of(mentor));
+        when(authorizationService.listDirectory(null)).thenReturn(List.of(mentor));
         when(authorizationRepository.findByUserIdAndStatus(20L, TrainerAuthorizationStatus.ACTIVE))
                 .thenReturn(List.of(authorization));
 

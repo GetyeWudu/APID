@@ -172,11 +172,18 @@ describe('MentoringHomePage Find a Mentor', () => {
       Promise.resolve(filters.skillId ? matchingMentors : [...matchingMentors, buildMentor(30, 2, otherSkill)])
     );
 
-    renderFindMentorPage();
+    const { container } = renderFindMentorPage();
 
     expect(await screen.findByText('Mentor 30')).toBeInTheDocument();
+    expect(screen.queryByLabelText('Filter mentors by department')).not.toBeInTheDocument();
     const recommendations = screen.getByRole('heading', { name: 'Find a mentor with AI' }).closest('section');
     if (!recommendations) throw new Error('AI mentor prompt was not rendered.');
+    const directory = screen.getByText('Mentor Directory').closest('section');
+    const askHr = screen.getByText('Need help finding a mentor?').closest('section');
+    if (!directory || !askHr) throw new Error('Find mentor sections were not rendered.');
+    const sections = Array.from(container.querySelectorAll('section'));
+    expect(sections.indexOf(recommendations)).toBeLessThan(sections.indexOf(directory));
+    expect(sections.indexOf(directory)).toBeLessThan(sections.indexOf(askHr));
     expect(within(recommendations).getByLabelText('What would you like to learn?')).toBeInTheDocument();
     expect(within(recommendations).queryByText('Mentor 30')).not.toBeInTheDocument();
     expect(screen.getByText('Mentor Directory')).toBeInTheDocument();

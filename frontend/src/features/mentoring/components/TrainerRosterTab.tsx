@@ -216,7 +216,6 @@ export function TrainerRosterTab({
               paths={trainers.map((trainer) => trainer.organizationPath ?? [])}
               value={locationFilter}
               onChange={setLocationFilter}
-              label="Filter mentors by district, branch, or department"
             />
             <div className="trainer-roster-filters" aria-label="Filter trainer availability">
               {([

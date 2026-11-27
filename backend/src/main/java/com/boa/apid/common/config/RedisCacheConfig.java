@@ -1,5 +1,6 @@
 package com.boa.apid.common.config;
 
+import com.boa.apid.mentoring.ai.recommendation.dto.MentorRecommendationResponse;
 import com.fasterxml.jackson.annotation.JsonTypeInfo;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
@@ -12,6 +13,7 @@ import org.springframework.cache.annotation.CachingConfigurer;
 import org.springframework.cache.interceptor.CacheErrorHandler;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.data.redis.serializer.Jackson2JsonRedisSerializer;
 import org.springframework.data.redis.cache.RedisCacheConfiguration;
 import org.springframework.data.redis.cache.RedisCacheManager;
 import org.springframework.data.redis.connection.RedisConnectionFactory;
@@ -53,6 +55,17 @@ public class RedisCacheConfig implements CachingConfigurer {
 
     @Bean
     public RedisCacheManager cacheManager(RedisConnectionFactory factory, RedisCacheConfiguration baseConfig) {
+        ObjectMapper recommendationMapper = new ObjectMapper();
+        recommendationMapper.registerModule(new JavaTimeModule());
+        recommendationMapper.disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
+        Jackson2JsonRedisSerializer<MentorRecommendationResponse> recommendationSerializer =
+                new Jackson2JsonRedisSerializer<>(recommendationMapper, MentorRecommendationResponse.class);
+        RedisCacheConfiguration recommendationCache = baseConfig
+                .entryTtl(Duration.ofHours(1))
+                .serializeValuesWith(
+                        RedisSerializationContext.SerializationPair.fromSerializer(recommendationSerializer)
+                );
+
         return RedisCacheManager.builder(factory)
                 .cacheDefaults(baseConfig)
                 .withInitialCacheConfigurations(Map.of(
@@ -61,7 +74,8 @@ public class RedisCacheConfig implements CachingConfigurer {
                         "org_departments", baseConfig.entryTtl(Duration.ofMinutes(30)),
                         "fiscal_quarters", baseConfig.entryTtl(Duration.ofMinutes(30)),
                         "system_configs", baseConfig.entryTtl(Duration.ofMinutes(30)),
-                        "mentor_application_document_summaries", baseConfig.entryTtl(Duration.ofHours(1))
+                        "mentor_application_document_summaries", baseConfig.entryTtl(Duration.ofHours(1)),
+                        "hr_mentor_recommendations_v2", recommendationCache
                 ))
                 .build();
     }

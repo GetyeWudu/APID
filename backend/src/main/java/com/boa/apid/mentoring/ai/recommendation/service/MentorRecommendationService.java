@@ -1,6 +1,10 @@
 package com.boa.apid.mentoring.ai.recommendation.service;
 
+import com.boa.apid.common.exception.BusinessException;
+import com.boa.apid.common.exception.ResourceNotFoundException;
 import com.boa.apid.mentoring.ai.client.MentoringAiClient;
+import com.boa.apid.mentoring.matching.entity.MentoringMatchRequestStatus;
+import com.boa.apid.mentoring.matching.repository.MentoringMatchRequestRepository;
 import com.boa.apid.mentoring.ai.recommendation.dto.MentorRecommendationDto;
 import com.boa.apid.mentoring.ai.recommendation.dto.HrMentorRecommendationRequest;
 import com.boa.apid.mentoring.ai.recommendation.dto.MentorRecommendationRequest;
@@ -9,19 +13,22 @@ import com.boa.apid.mentoring.ai.recommendation.service.MentorRecommendationCont
 import com.boa.apid.mentoring.trainer.dto.TrainerDirectoryDto;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import org.springframework.cache.annotation.Cacheable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 import java.util.Set;
 import java.util.UUID;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 @Service
@@ -31,23 +38,42 @@ public class MentorRecommendationService {
     private final MentorRecommendationContextService contextService;
     private final MentoringAiClient ollamaClient;
     private final ObjectMapper objectMapper;
+    private final MentoringMatchRequestRepository matchRequestRepository;
 
     public MentorRecommendationService(
             MentorRecommendationContextService contextService,
             MentoringAiClient ollamaClient,
-            ObjectMapper objectMapper
+            ObjectMapper objectMapper,
+            MentoringMatchRequestRepository matchRequestRepository
     ) {
         this.contextService = contextService;
         this.ollamaClient = ollamaClient;
         this.objectMapper = objectMapper;
+        this.matchRequestRepository = matchRequestRepository;
     }
 
     public MentorRecommendationResponse recommend(MentorRecommendationRequest request, Long userId) {
         return recommend(request.learningGoal(), null, userId, false);
     }
 
+    @Transactional(readOnly = true)
+    @Cacheable(
+            cacheNames = "hr_mentor_recommendations_v2",
+            key = "#p0.matchRequestId",
+            unless = "#result == null || #result.recommendations().isEmpty()"
+    )
     public MentorRecommendationResponse recommendForHrMatch(HrMentorRecommendationRequest request, Long userId) {
-        return recommend(request.learningGoal(), request.skillId(), userId, true);
+        var matchRequest = matchRequestRepository.findById(request.matchRequestId())
+                .orElseThrow(() -> new ResourceNotFoundException("HR mentoring request not found"));
+        if (matchRequest.getStatus() != MentoringMatchRequestStatus.OPEN) {
+            throw new BusinessException(
+                    "MENTORING_MATCH_REQUEST_ALREADY_HANDLED",
+                    "This HR mentoring request is no longer open.",
+                    HttpStatus.CONFLICT
+            );
+        }
+        Long skillId = matchRequest.getSkill().getId();
+        return recommend(matchRequest.getSkill().getName(), skillId, userId, true);
     }
 
     private MentorRecommendationResponse recommend(

@@ -1,7 +1,8 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import axios from 'axios';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Link, Link2, Sparkles, X, Star, Users, Zap, ChevronDown, ChevronUp } from 'lucide-react';
+import { Link2, Search, Sparkles, X, Star, Users, Zap, ChevronDown, ChevronUp } from 'lucide-react';
+import { Link } from 'react-router-dom';
 import type { ApiErrorPayload } from '../../../shared/api/apiClient';
 import { EmptyState, StatusPill, useToast } from '../../../shared/components/ui';
 import type { MentoringMatchRequest } from '../api/mentoringMatchApi';
@@ -13,6 +14,63 @@ import {
   OrganizationLocationFilter,
 } from './OrganizationLocationFilter';
 import './HrMatchingTab.css';
+
+function formatRequestDate(value: string) {
+  const date = new Date(value);
+  return Number.isNaN(date.getTime())
+    ? 'Date unavailable'
+    : date.toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' });
+}
+
+function MatchRequestDetails({
+  request,
+  matchedTrainerName,
+}: {
+  request: MentoringMatchRequest;
+  matchedTrainerName?: string | null;
+}) {
+  const location = request.organizationPath?.map((item) => item.name).join(' / ')
+    || request.departmentName
+    || 'Location not provided';
+
+  return (
+    <dl className="hr-match-detail-grid">
+      <div className="hr-match-detail">
+        <dt>Request received</dt>
+        <dd>{formatRequestDate(request.createdAt)}</dd>
+      </div>
+      <div className="hr-match-detail">
+        <dt>Branch / location</dt>
+        <dd>{location}</dd>
+      </div>
+      <div className="hr-match-detail">
+        <dt>Requested skill</dt>
+        <dd>{request.skillName}</dd>
+      </div>
+      {matchedTrainerName !== undefined && (
+        <div className="hr-match-detail hr-match-detail--mentor">
+          <dt>Matched mentor</dt>
+          <dd>{matchedTrainerName || 'Mentor name unavailable'}</dd>
+        </div>
+      )}
+    </dl>
+  );
+}
+
+function getEligibleTrainers(request: MentoringMatchRequest, trainers: TrainerRosterItem[]) {
+  return trainers.filter((trainer) =>
+    trainer.userId !== null &&
+    trainer.status === 'ACTIVE' &&
+    trainer.acceptingNewPairings !== false &&
+    trainer.employmentStatus === 'ACTIVE' &&
+    trainer.skills.some((skill) =>
+      skill.id === request.skillId
+      && (skill.status === undefined ? trainer.status === 'ACTIVE' : skill.status === 'ACTIVE')
+    )
+  );
+}
+
+type MatchRequestTab = 'all' | 'requested' | 'completed' | 'no-available-mentor';
 
 export function HrMatchingTab({
   requests,
@@ -33,6 +91,9 @@ export function HrMatchingTab({
 
   const [selectedReassignmentTrainers, setSelectedReassignmentTrainers] = useState<Record<number, string>>({});
   const [locationFilter, setLocationFilter] = useState('');
+  const [nameSearch, setNameSearch] = useState('');
+  const [activeRequestTab, setActiveRequestTab] = useState<MatchRequestTab>('all');
+  const requestTabRefs = useRef<Array<HTMLButtonElement | null>>([]);
   const [reassignmentReasons, setReassignmentReasons] = useState<Record<number, string>>({});
   const [reassignmentCapacityOverrides, setReassignmentCapacityOverrides] = useState<Record<number, boolean>>({});
   const [reassignmentOverrideReasons, setReassignmentOverrideReasons] = useState<Record<number, string>>({});
@@ -40,12 +101,11 @@ export function HrMatchingTab({
   const queryClient = useQueryClient();
   const { pushToast } = useToast();
 
-  const fetchAiRecs = async (requestId: number, skillName: string | null, skillId: number) => {
-    const learningGoal = skillName ?? 'mentoring';
+  const fetchAiRecs = async (requestId: number, skillId: number) => {
     setAiLoading(requestId);
     setAiError((prev) => { const n = { ...prev }; delete n[requestId]; return n; });
     try {
-      const result = await mentorDirectoryApi.recommendExactSkillMentorsForHr(learningGoal, skillId);
+      const result = await mentorDirectoryApi.recommendExactSkillMentorsForHr(requestId);
       const exactSkillRecommendations = result.recommendations.filter((recommendation) =>
         recommendation.skillId === skillId
         && recommendation.mentor.skills.some((skill) => skill.id === skillId)
@@ -74,6 +134,21 @@ export function HrMatchingTab({
       overrideReason?: string;
     }) => mentoringMatchApi.match(input.requestId, input),
     onSuccess: async (request) => {
+      setAiRecs((previous) => {
+        const next = { ...previous };
+        delete next[request.id];
+        return next;
+      });
+      setAiOpen((previous) => {
+        const next = { ...previous };
+        delete next[request.id];
+        return next;
+      });
+      setAiError((previous) => {
+        const next = { ...previous };
+        delete next[request.id];
+        return next;
+      });
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ['mentoring', 'hr-match-requests'] }),
         queryClient.invalidateQueries({ queryKey: ['mentoring', 'hr-overview'] }),
@@ -125,8 +200,36 @@ export function HrMatchingTab({
     },
   });
 
-  const allOpenRequests = requests.filter((request) => request.status === 'OPEN');
-  const openRequests = filterByOrganizationLocation(allOpenRequests, locationFilter);
+  const normalizedNameSearch = nameSearch.trim().toLocaleLowerCase();
+  const locationRequests = requests.filter((request) => request.status !== 'CANCELLED');
+  const matchingRequests = filterByOrganizationLocation(
+    locationRequests.filter((request) =>
+      request.traineeName.toLocaleLowerCase().includes(normalizedNameSearch)
+    ),
+    locationFilter
+  );
+  const requestedRequests = matchingRequests.filter((request) => request.status === 'OPEN');
+  const completedMatches = matchingRequests.filter((request) => request.status === 'MATCHED');
+  const noAvailableMentorRequests = requestedRequests.filter((request) =>
+    !getEligibleTrainers(request, trainers).some((trainer) =>
+      trainer.activeTrainees + trainer.pendingTrainees < trainer.maxConcurrentTrainees
+    )
+  );
+  const matchRequestTabs: Array<{ id: MatchRequestTab; label: string; count: number }> = [
+    { id: 'all', label: 'All', count: matchingRequests.length },
+    { id: 'requested', label: 'Requested', count: requestedRequests.length },
+    { id: 'completed', label: 'Completed', count: completedMatches.length },
+    { id: 'no-available-mentor', label: 'No available mentor', count: noAvailableMentorRequests.length },
+  ];
+  const displayedRequests = activeRequestTab === 'all'
+    ? matchingRequests
+    : activeRequestTab === 'requested'
+      ? requestedRequests
+      : activeRequestTab === 'completed'
+        ? completedMatches
+        : noAvailableMentorRequests;
+  const openRequests = displayedRequests.filter((request) => request.status === 'OPEN');
+  const completedRequests = displayedRequests.filter((request) => request.status === 'MATCHED');
 
   return (
     <div className="boa-stack">
@@ -139,34 +242,86 @@ export function HrMatchingTab({
             </p>
           </div>
         </div>
-        {allOpenRequests.length > 0 && (
-          <OrganizationLocationFilter
-            paths={allOpenRequests.map((request) => request.organizationPath ?? [])}
-            value={locationFilter}
-            onChange={setLocationFilter}
-            label="Filter match requests by trainee district, branch, or department"
-          />
-        )}
-        {openRequests.length === 0 ? (
-          <EmptyState
-            title={allOpenRequests.length === 0 ? 'No open HR matching requests' : 'No requests in this location'}
-            description={allOpenRequests.length === 0
-              ? 'New trainee requests will appear here.'
-              : 'Choose another district, branch, or department.'}
-          />
-        ) : (
-          <div className="hr-match-cards">
+        <div className="hr-match-tabs" role="tablist" aria-label="Match request status">
+          {matchRequestTabs.map((tab, index) => (
+            <button
+              key={tab.id}
+              ref={(element) => { requestTabRefs.current[index] = element; }}
+              id={`hr-match-tab-${tab.id}`}
+              type="button"
+              role="tab"
+              aria-selected={activeRequestTab === tab.id}
+              aria-controls="hr-match-results"
+              tabIndex={activeRequestTab === tab.id ? 0 : -1}
+              className="hr-match-tab"
+              onClick={() => setActiveRequestTab(tab.id)}
+              onKeyDown={(event) => {
+                let nextIndex = index;
+                if (event.key === 'ArrowRight') nextIndex = (index + 1) % matchRequestTabs.length;
+                else if (event.key === 'ArrowLeft') {
+                  nextIndex = (index - 1 + matchRequestTabs.length) % matchRequestTabs.length;
+                } else if (event.key === 'Home') nextIndex = 0;
+                else if (event.key === 'End') nextIndex = matchRequestTabs.length - 1;
+                else return;
+
+                event.preventDefault();
+                setActiveRequestTab(matchRequestTabs[nextIndex].id);
+                requestTabRefs.current[nextIndex]?.focus();
+              }}
+            >
+              <span>{tab.label}</span>
+              <span className="hr-match-tab__count">{tab.count}</span>
+            </button>
+          ))}
+        </div>
+        <div className="hr-match-filters">
+          <label className="hr-match-search">
+            <Search size={16} aria-hidden="true" />
+            <input
+              type="search"
+              className="apid-input"
+              aria-label="Search requests by trainee name"
+              placeholder="Search trainee name"
+              value={nameSearch}
+              onChange={(event) => setNameSearch(event.target.value)}
+            />
+          </label>
+          {locationRequests.length > 0 && (
+            <OrganizationLocationFilter
+              paths={locationRequests.map((request) => request.organizationPath ?? [])}
+              value={locationFilter}
+              onChange={setLocationFilter}
+            />
+          )}
+        </div>
+        <div
+          className="hr-match-list"
+          id="hr-match-results"
+          role="tabpanel"
+          aria-labelledby={`hr-match-tab-${activeRequestTab}`}
+          tabIndex={0}
+        >
+          {openRequests.length === 0 && completedRequests.length === 0 ? (
+            <EmptyState
+              title={activeRequestTab === 'requested'
+                ? 'No requested matches'
+                : activeRequestTab === 'completed'
+                  ? 'No completed matches'
+                  : activeRequestTab === 'no-available-mentor'
+                    ? 'No requests without an available mentor'
+                    : 'No match requests found'}
+              description={normalizedNameSearch || locationFilter
+                ? 'Try changing the trainee name or location filters.'
+                : activeRequestTab === 'completed'
+                  ? 'Completed matches will appear here.'
+                  : activeRequestTab === 'no-available-mentor'
+                    ? 'Requests with no active mentor available for the requested skill will appear here.'
+                    : 'Trainee match requests will appear here.'}
+            />
+          ) : openRequests.length > 0 ? (
+            <div className="hr-match-cards">
             {openRequests.map((request) => {
-              const eligible = trainers.filter((trainer) =>
-                trainer.userId !== null &&
-                trainer.status === 'ACTIVE' &&
-                trainer.acceptingNewPairings !== false &&
-                trainer.employmentStatus === 'ACTIVE' &&
-                trainer.skills.some((skill) =>
-                  skill.id === request.skillId
-                  && (skill.status === undefined ? trainer.status === 'ACTIVE' : skill.status === 'ACTIVE')
-                )
-              );
+              const eligible = getEligibleTrainers(request, trainers);
               const selectedTrainer = eligible.find(
                 (trainer) => String(trainer.userId) === selectedTrainers[request.id]
               );
@@ -180,25 +335,20 @@ export function HrMatchingTab({
 
               return (
                 <div key={request.id} className="hr-match-card">
-                  {/* Card header row */}
                   <div className="hr-match-card__header">
                     <div className="hr-match-card__trainee">
                       <span className="hr-match-card__name">{request.traineeName}</span>
                       <span className="hr-match-card__meta">
-                        {request.traineeEmployeeNumber} · {
-                          request.organizationPath?.map((location) => location.name).join(' / ')
-                          || request.departmentName
-                          || 'Unassigned department'
-                        }
+                        Employee #{request.traineeEmployeeNumber}
                       </span>
                     </div>
                     <div className="hr-match-card__badges">
-                      <StatusPill label={request.skillName} tone="neutral" />
-                      <StatusPill label={request.status} tone="info" />
+                      <StatusPill label="Open request" tone="info" />
                     </div>
                   </div>
 
-                  {/* Message row */}
+                  <MatchRequestDetails request={request} />
+
                   {request.message && (
                     <div className="hr-match-card__message">
                       <span className="hr-match-card__message-label">Request note:</span>
@@ -239,7 +389,7 @@ export function HrMatchingTab({
                             if (isAiOpen) {
                               setAiOpen((prev) => ({ ...prev, [request.id]: false }));
                             } else {
-                              void fetchAiRecs(request.id, request.skillName, request.skillId);
+                              void fetchAiRecs(request.id, request.skillId);
                             }
                           }}
                           disabled={isAiLoading}
@@ -418,26 +568,46 @@ export function HrMatchingTab({
               );
             })}
           </div>
-        )}
-        {requests.some((request) => request.status === 'MATCHED') && (
-          <div className="boa-stack" style={{ marginTop: '1rem' }}>
-            <h4 style={{ margin: 0 }}>Completed matches</h4>
-            {requests.filter((request) => request.status === 'MATCHED').map((request) => (
-              <article key={request.id} className="apid-card" style={{ border: '1px solid var(--border)' }}>
-                <strong>{request.traineeName}</strong> · {request.skillName} · {request.matchedTrainerName}
+          ) : null}
+          {completedRequests.length > 0 && (
+          <section className="hr-completed-matches">
+            <div className="hr-completed-matches__heading">
+              <div>
+                <h4>Completed matches</h4>
+                <p>Request details and the mentor assigned to each trainee.</p>
+              </div>
+              <span>{completedRequests.length} matched</span>
+            </div>
+            {completedRequests.map((request) => (
+              <article key={request.id} className="hr-completed-match-card">
+                <div className="hr-match-card__header">
+                  <div className="hr-match-card__trainee">
+                    <span className="hr-match-card__name">{request.traineeName}</span>
+                    <span className="hr-match-card__meta">
+                      Employee #{request.traineeEmployeeNumber}
+                    </span>
+                  </div>
+                  <StatusPill label="Matched" tone="ok" />
+                </div>
+                <MatchRequestDetails
+                  request={request}
+                  matchedTrainerName={request.matchedTrainerName}
+                />
                 {request.mentoringRelationshipId && (
-                  <Link
-                    to={`/mentoring/pairing/${request.mentoringRelationshipId}`}
-                    className="apid-btn apid-btn-outline apid-btn-sm"
-                    style={{ marginLeft: '0.6rem' }}
-                  >
-                    View relationship
-                  </Link>
+                  <div className="hr-completed-match-card__footer">
+                    <Link
+                      to={`/mentoring/pairing/${request.mentoringRelationshipId}`}
+                      className="apid-btn apid-btn-outline apid-btn-sm"
+                    >
+                      <Link2 size={14} /> View relationship
+                    </Link>
+                  </div>
                 )}
               </article>
             ))}
-          </div>
-        )}
+          </section>
+          )}
+        </div>
       </div>
 
       <section className="apid-card">

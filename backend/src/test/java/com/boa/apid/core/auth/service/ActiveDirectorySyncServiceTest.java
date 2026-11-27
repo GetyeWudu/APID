@@ -79,7 +79,7 @@ class ActiveDirectorySyncServiceTest {
     }
 
     @Test
-    void syncAllPersistsAdLocationIdsAndOfficeName() {
+    void syncAllAssignsEmployeeToMappedDepartmentForAdLocation() {
         Department district = department(1L, "DST-001", "Central District", null);
         Department branch = department(2L, "BR-001", "Addis Kazanchis", null);
         Employee employee = employee(department(3L, "HQ-001", "Head Office", null));
@@ -91,9 +91,6 @@ class ActiveDirectorySyncServiceTest {
         );
 
         assertThat(result.success()).isTrue();
-        assertThat(employee.getDistrictId()).isEqualTo("DST-001");
-        assertThat(employee.getBranchId()).isEqualTo("BR-001");
-        assertThat(employee.getOfficeLocation()).isEqualTo("Addis Kazanchis");
         assertThat(employee.getDepartment()).isSameAs(branch);
         assertThat(branch.getParentDepartment()).isSameAs(district);
     }
